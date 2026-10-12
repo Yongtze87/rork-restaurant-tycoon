@@ -4,6 +4,10 @@ A cozy 3D restaurant management sim that runs in your browser. Build a sunset ro
 
 Built with **React 19**, **React Three Fiber**, **Three.js**, **TypeScript** and **Vite**. No backend, no accounts. All progress is saved locally in the browser.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Kitchen Rush gameplay: an isometric rooftop restaurant with animal guests and staff, surrounded by a sunset city with traffic, milestone and daily challenge cards, and the Build, Team, Menu and Ledger dock" width="100%" />
+</p>
+
 > Every number in the game comes from a deterministic simulation: revenue, tips, wages, guest counts, ratings and offline earnings. The game never shows estimated or made-up figures.
 
 ---
