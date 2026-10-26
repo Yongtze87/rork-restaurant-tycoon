@@ -34,7 +34,7 @@ it('shows grid only while building, selecting or moving and never during service
 it('updates coordinates, rotation and non-color validity without charging until confirm', async () => {
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await screen.getByRole('button', { name: /Bistro table/ }).click();
+  await screen.getByRole('button', { name: /Coral table/ }).click();
   const readout = screen.getByTestId('placement-grid-readout');
   await expect.element(readout).toHaveTextContent('Col 1 · Row 8');
   await expect.element(readout).toHaveTextContent('Fits here');
@@ -61,7 +61,7 @@ it.each([320, 390, 768])('keeps the grid readout, preview area and placement con
   await page.viewport(width, 740);
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await screen.getByRole('button', { name: /Bistro table/ }).click();
+  await screen.getByRole('button', { name: /Coral table/ }).click();
   const region = screen.getByRole('region', { name: 'Furniture placement' }).element();
   const rect = region.getBoundingClientRect(), scene = screen.getByTestId('restaurant-scene').element().getBoundingClientRect();
   expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width);

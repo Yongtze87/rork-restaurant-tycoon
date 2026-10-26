@@ -7,8 +7,8 @@ import type { CashReceipt } from './cash-feedback';
 export const GOALS = [
   { id: 'first-service', title: 'A warm welcome', text: 'Serve your first 5 guests', target: 5, reward: 180, value: (s: RestaurantState) => s.lifetimeServed },
   { id: 'atmosphere', title: 'Make it yours', text: 'Reach 50 atmosphere', target: 50, reward: 150, value: comfort },
-  { id: 'more-tables', title: 'Room for everyone', text: 'Build 5 bistro tables', target: 5, reward: 250, value: (s: RestaurantState) => capacity(s) / 2 },
-  { id: 'three-days', title: 'The neighborhood favorite', text: 'Complete 3 service days', target: 3, reward: 300, value: (s: RestaurantState) => s.history.length },
+  { id: 'more-tables', title: 'Room for everyone', text: 'Build 5 coral tables', target: 5, reward: 250, value: (s: RestaurantState) => capacity(s) / 2 },
+  { id: 'three-days', title: 'The reef favorite', text: 'Complete 3 service days', target: 3, reward: 300, value: (s: RestaurantState) => s.history.length },
 ];
 /** Exact business results computed while the owner was away, not an idle-income estimate. */
 export interface AwaySummary { seconds: number; days: number; served: number; cashChange: number; challengeBonus: number; }
@@ -41,7 +41,7 @@ export class RestaurantEngine {
   speed: 1 | 2 | 3 = 1;
   saveFailed = false;
   loadWarning = '';
-  event = 'Your little rooftop is ready for its first chapter.';
+  event = 'Your little reef is ready for its first chapter.';
   /** Bounded, session-only receipts. Money is credited before an event is recorded. */
   incomeReceipts: CashReceipt[] = [];
   private incomeSequence = 0;
@@ -164,9 +164,9 @@ export class RestaurantEngine {
   }
   hire(role: Role): string | null {
     if (this.state.phase !== 'planning') return 'Hire before opening for the day.';
-    if (this.state.staff.length >= 6) return 'Your terrace team is limited to 6 people.';
+    if (this.state.staff.length >= 6) return 'Your crew is limited to 6 Mareen.';
     if (this.state.cash < 150) return 'Recruitment costs $150.';
-    const names = role === 'chef' ? ['Basil', 'Miso', 'Clover', 'Pepper', 'Sage', 'Olive'] : ['Pip', 'Hazel', 'Maple', 'Coco', 'Fern', 'Juniper'];
+    const names = role === 'chef' ? ['Marlo', 'Nerin', 'Coralie', 'Kai', 'Delphine', 'Ondine'] : ['Pearl', 'Tidus', 'Maris', 'Shelly', 'Reef', 'Calyx'];
     const name = names.find(n => !this.state.staff.some(s => s.name === n)) ?? names[0];
     this.state.cash -= 150; this.state.staff.push({ id: this.state.nextId++, name, role, level: 1, ...entrance, yaw: 0, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 });
     this.changed(`${name} joined your team. Welcome aboard!`); return null;
@@ -191,10 +191,10 @@ export class RestaurantEngine {
   }
   expand(): string | null {
     if (this.state.phase !== 'planning') return 'Build the extension before opening.';
-    if (this.state.expanded) return 'Your terrace is already expanded.';
-    if (this.state.history.length < 3) return 'Complete 3 service days to unlock the east terrace.';
-    if (this.state.cash < 900) return 'The east terrace costs $900.';
-    this.state.cash -= 900; this.state.expanded = true; this.changed('The east terrace is yours. Forty new tiles, endless possibilities.'); return null;
+    if (this.state.expanded) return 'Your east grotto is already open.';
+    if (this.state.history.length < 3) return 'Complete 3 service days to unlock the east grotto.';
+    if (this.state.cash < 900) return 'The east grotto costs $900.';
+    this.state.cash -= 900; this.state.expanded = true; this.changed('The east grotto is yours. Forty new tiles, endless possibilities.'); return null;
   }
   claim(id: string): string | null {
     const goal = GOALS.find(g => g.id === id);
@@ -205,14 +205,14 @@ export class RestaurantEngine {
     if (this.state.phase !== 'planning' || this.state.cash >= 200 || this.state.debt > 0) return 'A $600 recovery loan is available below $200, with no existing loan.';
     this.state.cash += 600; this.state.debt = 600; this.recordIncome(600, 'loan'); this.changed('Recovery loan received. $30 is repaid after each day, with no interest.'); return null;
   }
-  rename(name: string): void { this.state.name = name.trim().slice(0, 28) || 'Little Rooftop'; this.changed(); }
+  rename(name: string): void { this.state.name = name.trim().slice(0, 28) || 'Little Reef'; this.changed(); }
   setMusic(value: boolean): void { this.state.music = value; this.changed(); }
   welcome(): void { this.state.welcomed = true; this.changed(); }
-  reset(): void { this.rewardSavePending = false; this.pauseAfterCatchUp = null; this.catchingUp = false; this.backgrounded = false; this.awaySummary = null; this.speed = 1; this.incomeReceipts = []; this.state = createRestaurant(); this.paused = false; this.accumulator = 0; this.savedAt = 0; this.loadWarning = ''; this.changed('A fresh beginning. Make this rooftop your own.'); }
+  reset(): void { this.rewardSavePending = false; this.pauseAfterCatchUp = null; this.catchingUp = false; this.backgrounded = false; this.awaySummary = null; this.speed = 1; this.incomeReceipts = []; this.state = createRestaurant(); this.paused = false; this.accumulator = 0; this.savedAt = 0; this.loadWarning = ''; this.changed('A fresh beginning. Make this reef your own.'); }
   readiness(): string[] {
     const errors: string[] = [];
-    if (!capacity(this.state)) errors.push('Build at least one bistro table.');
-    for (const dish of ['salad', 'burger'] as const) if (this.state.menu[dish].enabled && !this.state.furniture.some(f => f.kind === DISHES[dish].station)) errors.push(`Add a ${DISHES[dish].station === 'prep' ? 'prep counter' : 'grill'} for ${DISHES[dish].name.toLowerCase()}, or remove it from the menu.`);
+    if (!capacity(this.state)) errors.push('Build at least one coral table.');
+    for (const dish of ['salad', 'burger'] as const) if (this.state.menu[dish].enabled && !this.state.furniture.some(f => f.kind === DISHES[dish].station)) errors.push(`Add a ${DISHES[dish].station === 'prep' ? 'kelp counter' : 'vent grill'} for ${DISHES[dish].name.toLowerCase()}, or remove it from the menu.`);
     if (this.state.cash < this.operatingCost() + 30) errors.push(`Keep $${this.operatingCost() + 30} for wages, rent and starting ingredients.`);
     const layout = layoutError(this.state.furniture, width(this.state)); if (layout) errors.push(layout);
     return errors;
@@ -254,7 +254,7 @@ export class RestaurantEngine {
     const route = this.route(entrance, accessPoints(selected.table)[selected.seat]); if (!route) return;
     route.push(seatPoint(selected.table, selected.seat));
     const special = isSpecialGuest(s.day, s.nextId);
-    s.guests.push({ id: s.nextId++, special, ...entrance, yaw: Math.PI, route, species: (['mouse', 'rabbit', 'bear', 'crocodile'] as const)[Math.floor(this.random() * 4)], tableId: selected.table.id, seat: selected.seat, dish, price, stage: 'arriving', waiting: 0, timer: 0, happy: false, stationId: null, paid: false });
+    s.guests.push({ id: s.nextId++, special, ...entrance, yaw: Math.PI, route, look: (['coral', 'pearl', 'lagoon', 'dusk'] as const)[Math.floor(this.random() * 4)], tableId: selected.table.id, seat: selected.seat, dish, price, stage: 'arriving', waiting: 0, timer: 0, happy: false, stationId: null, paid: false });
   }
   private leave(guest: Guest, happy: boolean): void {
     const table = this.state.furniture.find(f => f.id === guest.tableId); if (!table) return;

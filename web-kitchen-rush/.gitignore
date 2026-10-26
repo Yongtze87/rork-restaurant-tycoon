@@ -35,3 +35,7 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# test failure artifacts
+.vitest-attachments
+__screenshots__

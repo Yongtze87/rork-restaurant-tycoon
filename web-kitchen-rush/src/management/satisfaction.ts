@@ -17,7 +17,3 @@ export function guestMood(value: number, stage: Guest['stage'], happy: boolean):
   return value <= 20 ? 'unhappy' : value <= 50 ? 'uneasy' : 'content';
 }
 
-/** Anchor above each species' head/ears, in the customer rig's local coordinates. */
-export function satisfactionHeight(species: Guest['species']): number {
-  return species === 'rabbit' ? 2.9 : species === 'mouse' ? 2.65 : species === 'bear' ? 2.55 : 2.4;
-}

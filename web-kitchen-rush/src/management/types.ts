@@ -14,7 +14,7 @@ export type Role = z.infer<typeof roleSchema>;
 const agentSchema = pointSchema.extend({ yaw: z.number().finite(), route: z.array(pointSchema).max(200) });
 const staffSchema = agentSchema.extend({ id: z.number().int(), name: z.string().max(30), role: roleSchema, level: z.number().int().min(1).max(3), task: z.enum(['idle', 'toKitchen', 'cooking', 'collect', 'deliver', 'clean']), guestId: z.number().int().nullable(), stationId: z.number().int().nullable(), timer: z.number().finite().nonnegative() });
 export type Staff = Validated<z.infer<typeof staffSchema>>;
-const guestSchema = agentSchema.extend({ id: z.number().int(), species: z.enum(['mouse', 'crocodile', 'rabbit', 'bear']), tableId: z.number().int(), seat: z.number().int().min(0).max(1), dish: z.enum(['salad', 'burger']), price: z.number().min(10).max(60), stage: z.enum(['arriving', 'waiting', 'cooking', 'ready', 'delivering', 'eating', 'leaving']), waiting: z.number().nonnegative(), timer: z.number().nonnegative(), happy: z.boolean(), stationId: z.number().int().nullable(), paid: z.boolean(), special: z.boolean().default(false) });
+const guestSchema = agentSchema.extend({ id: z.number().int(), look: z.enum(['coral', 'pearl', 'lagoon', 'dusk']), tableId: z.number().int(), seat: z.number().int().min(0).max(1), dish: z.enum(['salad', 'burger']), price: z.number().min(10).max(60), stage: z.enum(['arriving', 'waiting', 'cooking', 'ready', 'delivering', 'eating', 'leaving']), waiting: z.number().nonnegative(), timer: z.number().nonnegative(), happy: z.boolean(), stationId: z.number().int().nullable(), paid: z.boolean(), special: z.boolean().default(false) });
 export type Guest = Validated<z.infer<typeof guestSchema>>;
 export type Dish = Guest['dish'];
 const totalsSchema = z.object({ revenue: z.number().nonnegative(), ingredients: z.number().nonnegative(), served: z.number().int().nonnegative(), missed: z.number().int().nonnegative(), tips: z.number().nonnegative() });
@@ -40,20 +40,19 @@ export const restaurantSchema = z.object({
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
 export const CATALOG: Record<FurnitureKind, CatalogItem> = {
-  table: { name: 'Bistro table', description: 'Two seats. A little room for good company.', price: 180, size: 2, category: 'Dining', comfort: 0 },
-  prep: { name: 'Prep counter', description: 'One chef can prepare garden salads here.', price: 240, size: 1, category: 'Kitchen', comfort: 0 },
-  grill: { name: 'Charcoal grill', description: 'One chef can cook our signature burgers.', price: 360, size: 1, category: 'Kitchen', comfort: 0 },
-  plant: { name: 'Olive planter', description: '+6 atmosphere. Happier guests leave better tips.', price: 65, size: 1, category: 'Atmosphere', comfort: 6 },
-  divider: { name: 'Garden screen', description: '+4 atmosphere. Shape a cozy dining nook.', price: 80, size: 1, category: 'Atmosphere', comfort: 4 },
-  lamp: { name: 'Warm lantern', description: '+8 atmosphere. A little golden-hour magic.', price: 110, size: 1, category: 'Atmosphere', comfort: 8 },
+  table: { name: 'Coral table', description: 'Two shell seats. A little room for good company.', price: 180, size: 2, category: 'Dining', comfort: 0 },
+  prep: { name: 'Kelp counter', description: 'One chef can prepare kelp salads here.', price: 240, size: 1, category: 'Kitchen', comfort: 0 },
+  grill: { name: 'Vent grill', description: 'One chef sears our signature fish cakes over a warm sea vent.', price: 360, size: 1, category: 'Kitchen', comfort: 0 },
+  plant: { name: 'Sea anemone', description: '+6 atmosphere. Happier guests leave better tips.', price: 65, size: 1, category: 'Atmosphere', comfort: 6 },
+  divider: { name: 'Kelp screen', description: '+4 atmosphere. Shape a cozy dining nook.', price: 80, size: 1, category: 'Atmosphere', comfort: 4 },
+  lamp: { name: 'Glow-jelly lantern', description: '+8 atmosphere. A soft light from the deep.', price: 110, size: 1, category: 'Atmosphere', comfort: 8 },
 };
 export const DISHES: Record<Dish, { name: string; cost: number; fair: number; seconds: number; station: FurnitureKind; description: string }> = {
-  salad: { name: 'Garden salad', cost: 7, fair: 24, seconds: 6, station: 'prep', description: 'Crisp greens, ripe tomatoes, rooftop sunshine.' },
-  burger: { name: 'Sunset burger', cost: 12, fair: 38, seconds: 10, station: 'grill', description: 'Charcoal-grilled, stacked high, made with love.' },
+  salad: { name: 'Kelp salad', cost: 7, fair: 24, seconds: 6, station: 'prep', description: 'Crisp ribbon kelp, sea grapes and a squeeze of brine-lime.' },
+  burger: { name: 'Vent-seared fish cake', cost: 12, fair: 38, seconds: 10, station: 'grill', description: 'Seared over a warm sea vent, golden outside, tender inside.' },
 };
 export const DAY_LENGTH = 150;
-export const SAVE_KEY = 'kitchen-rush-restaurant-v1';
-export const CELL = 1.4;
+export const SAVE_KEY = 'vast-ocean-restaurant-v1';
 export const HEIGHT = 10;
 export const width = (state: Pick<RestaurantState, 'expanded'>): number => state.expanded ? 14 : 10;
 export const entrance: Point = { x: 4, z: 9 };
@@ -65,15 +64,15 @@ export const guestPatienceSeconds = (state: RestaurantState): number => 48 + com
 export const capacity = (state: RestaurantState): number => state.furniture.filter(item => item.kind === 'table').length * 2;
 /** A playable starter business, with no fabricated revenue or customers served. */
 export function createRestaurant(): RestaurantState {
-  return { version: 1, name: 'Little Rooftop', day: 1, cash: 1250, reputation: 3.5, debt: 0, expanded: false,
+  return { version: 1, name: 'Little Reef', day: 1, cash: 1250, reputation: 3.5, debt: 0, expanded: false,
     furniture: [
       { id: 1, kind: 'prep', x: 1, z: 1, rotation: 0 }, { id: 2, kind: 'grill', x: 3, z: 1, rotation: 0 },
       { id: 3, kind: 'table', x: 1, z: 4, rotation: 0 }, { id: 4, kind: 'table', x: 5, z: 4, rotation: 0 }, { id: 5, kind: 'table', x: 7, z: 1, rotation: 0 },
       { id: 6, kind: 'plant', x: 0, z: 0, rotation: 0 }, { id: 7, kind: 'plant', x: 9, z: 7, rotation: 0 }, { id: 8, kind: 'lamp', x: 9, z: 0, rotation: 0 },
     ],
     staff: [
-      { id: 10, name: 'Basil', role: 'chef', level: 1, x: 1, z: 2, yaw: Math.PI, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
-      { id: 11, name: 'Pip', role: 'server', level: 1, x: 4, z: 7, yaw: 0, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
+      { id: 10, name: 'Marlo', role: 'chef', level: 1, x: 1, z: 2, yaw: Math.PI, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
+      { id: 11, name: 'Pearl', role: 'server', level: 1, x: 4, z: 7, yaw: 0, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
     ], guests: [], dirty: [], menu: { salad: { enabled: true, price: 24 }, burger: { enabled: true, price: 38 } },
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0,
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false,

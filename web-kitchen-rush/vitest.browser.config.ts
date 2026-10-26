@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: { include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'vitest-browser-react', 'next-themes', 'sonner', 'zod', 'react-hook-form', '@hookform/resolvers/zod', '@radix-ui/react-collapsible', '@radix-ui/react-dialog', '@radix-ui/react-switch', '@radix-ui/react-radio-group', '@react-three/fiber', 'three', 'three/addons/geometries/RoundedBoxGeometry.js', 'three/addons/utils/BufferGeometryUtils.js'] },
+  optimizeDeps: { include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'vitest-browser-react', 'next-themes', 'sonner', 'zod', 'react-hook-form', '@hookform/resolvers/zod', '@radix-ui/react-collapsible', '@radix-ui/react-dialog', '@radix-ui/react-switch', '@radix-ui/react-radio-group'] },
   test: {
     globals: true,
     include: ["src/**/*.browser.{test,spec}.{ts,tsx}"],

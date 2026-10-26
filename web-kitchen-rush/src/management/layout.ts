@@ -48,13 +48,13 @@ export function layoutError(items: Furniture[], columns: number): string | null 
   for (const item of items) {
     for (let x = 0; x < CATALOG[item.kind].size; x++) for (let z = 0; z < CATALOG[item.kind].size; z++) {
       const p = { x: item.x + x, z: item.z + z }, key = cellKey(p);
-      if (!inBounds(p, columns)) return 'Keep every tile inside your terrace.';
+      if (!inBounds(p, columns)) return 'Keep every tile inside your reef floor.';
       if (sameCell(p, entrance)) return 'Keep the entrance clear.';
       if (cells.has(key)) return 'This space is already occupied.';
       cells.add(key);
     }
   }
-  for (const item of items) for (const point of accessPoints(item)) if (findPath(items, columns, entrance, point) === null) return `Leave a clear path to every ${item.kind === 'table' ? 'chair' : 'workstation'}. Rotate it or leave an aisle.`;
+  for (const item of items) for (const point of accessPoints(item)) if (findPath(items, columns, entrance, point) === null) return `Leave a clear path to every ${item.kind === 'table' ? 'seat' : 'workstation'}. Rotate it or leave an aisle.`;
   return null;
 }
 export function placementError(state: RestaurantState, candidate: Furniture): string | null {

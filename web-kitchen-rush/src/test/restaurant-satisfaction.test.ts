@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
-import { guestMood, guestSatisfaction, satisfactionHeight } from '@/management/satisfaction';
+import { guestMood, guestSatisfaction } from '@/management/satisfaction';
 import { createRestaurant, guestPatienceSeconds, type Guest } from '@/management/types';
-import { createDinerRig } from '@/scene/diner-model';
-import { Box3 } from 'three';
 
 const waiting = { stage: 'waiting' as const, waiting: 0, happy: false };
 const tick = (engine: RestaurantEngine, seconds: number): void => { for (let i = 0; i < Math.round(seconds * 10); i++) engine.update(.1); };
@@ -65,10 +63,5 @@ describe('management customer satisfaction', () => {
     engine.pause(true); engine.save(); const reloaded = new RestaurantEngine(storage), restored = reloaded.state.guests.find(g => g.id === original.id)!;
     expect(reloaded.paused).toBe(true); expect(guestSatisfaction(restored, guestPatienceSeconds(reloaded.state))).toBe(100);
     expect(reloaded.state).toEqual(engine.state);
-  });
-  it.each(['mouse', 'rabbit', 'bear', 'crocodile'] as const)('anchors above the %s head including ears', species => {
-    const rig = createDinerRig(species, 20);
-    expect(satisfactionHeight(species) - new Box3().setFromObject(rig.head).max.y).toBeGreaterThan(.5);
-    rig.dispose();
   });
 });

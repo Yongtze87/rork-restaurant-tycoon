@@ -8,7 +8,7 @@ import { money } from '@/management/format';
 import type { Report } from '@/management/types';
 import '@/index.css';
 
-vi.mock('@/management/RestaurantScene', () => ({ default: ({ weatherMode, trafficAudio }: { weatherMode: string; trafficAudio: boolean }) => <div data-testid="mock-scene" data-weather={weatherMode} data-traffic={trafficAudio}>Restaurant world</div> }));
+vi.mock('@/management/RestaurantScene', () => ({ default: () => <div data-testid="mock-scene">Restaurant world</div> }));
 beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 afterEach(async () => { vi.restoreAllMocks(); await page.viewport(1280, 800); });
 
@@ -20,17 +20,17 @@ it('opens the management entry, with no direct character controls', async () => 
   await screen.getByRole('button', { name: 'Team', exact: true }).click();
   await screen.getByRole('button', { name: /Hire chef/ }).click();
   expect(restaurant.state.staff).toHaveLength(3);
-  await expect.element(screen.getByRole('heading', { name: 'Miso chef' })).toBeVisible();
+  await expect.element(screen.getByRole('heading', { name: 'Nerin chef' })).toBeVisible();
 });
 it('charges only confirmed placements and supports keyboard cancellation', async () => {
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await screen.getByRole('button', { name: /Olive planter/ }).click();
+  await screen.getByRole('button', { name: /Sea anemone/ }).click();
   expect(restaurant.state.cash).toBe(1250);
   await screen.getByRole('button', { name: 'Confirm', exact: true }).click();
   expect(restaurant.state.cash).toBe(1185);
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await screen.getByRole('button', { name: /Olive planter/ }).click();
+  await screen.getByRole('button', { name: /Sea anemone/ }).click();
   await userEvent.keyboard('{Escape}');
   await expect.element(screen.getByRole('region', { name: 'Furniture placement' })).not.toBeInTheDocument();
   expect(restaurant.state.cash).toBe(1185);
@@ -41,9 +41,9 @@ it('freezes business changes during service, but allows speed and pause', async 
   await screen.getByRole('button', { name: '3x speed' }).click(); expect(restaurant.speed).toBe(3);
   await screen.getByRole('button', { name: 'Pause service' }).click(); expect(restaurant.paused).toBe(true);
   await screen.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect.element(screen.getByRole('button', { name: 'Raise Garden salad price' })).toBeDisabled();
+  await expect.element(screen.getByRole('button', { name: 'Raise Kelp salad price' })).toBeDisabled();
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await expect.element(screen.getByRole('button', { name: /Bistro table/ })).toBeDisabled();
+  await expect.element(screen.getByRole('button', { name: /Coral table/ })).toBeDisabled();
 });
 it('ignores the global pause shortcut while recovering offline progress', async () => {
   const screen = await render(<ManagementGame />); restaurant.open(); restaurant.catchingUp = true; restaurant.notify();
@@ -51,21 +51,13 @@ it('ignores the global pause shortcut while recovering offline progress', async 
   await userEvent.keyboard(' '); expect(restaurant.paused).toBe(false);
   restaurant.catchingUp = false; restaurant.notify();
 });
-it('offers all city districts on a narrow phone without overflowing the page', async () => {
-  await page.viewport(320, 740); const screen = await render(<ManagementGame />);
-  await screen.getByRole('button', { name: 'Neighborhood view' }).click();
-  for (const name of ['Whole city', 'Rooftop', 'Market', 'Gardens']) { await screen.getByRole('button', { name, exact: true }).click(); await expect.element(screen.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true'); }
-  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
-  await screen.getByRole('button', { name: 'Reset view' }).click();
-  await expect.element(screen.getByRole('navigation', { name: 'City districts' })).not.toBeInTheDocument();
-});
 it('keeps every navigation control and all top metrics inside a 320px phone', async () => {
   await page.viewport(320, 740);
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
   for (const button of document.querySelectorAll('nav[aria-label="Restaurant management"] button')) { const rect = button.getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(320); }
   const cash = screen.getByTestId('cash').element().getBoundingClientRect(); expect(cash.right).toBeLessThan(320);
-  await expect.element(screen.getByRole('button', { name: /Bistro table/ })).toBeVisible();
+  await expect.element(screen.getByRole('button', { name: /Coral table/ })).toBeVisible();
 });
 it('renames with validation and requires explicit confirmation before reset', async () => {
   const screen = await render(<><ManagementGame /><Toaster /></>);
@@ -96,50 +88,16 @@ it('shows real closing numbers and pays milestones only once', async () => {
   await expect.element(screen.getByRole('button', { name: 'Collected', exact: false }).first()).toBeDisabled();
 });
 
-it.each([320, 1280])('offers session-only weather controls without changing the restaurant at %spx', async width => {
+it.each([320, 1280])('keeps the ocean soundtrack and view controls on screen without changing saves at %spx', async width => {
   await page.viewport(width, 800);
   const screen = await render(<ManagementGame />);
-  const before = JSON.stringify(restaurant.state);
+  for (const name of ['Zoom in', 'Zoom out', 'Reset view']) { const rect = screen.getByRole('button', { name }).element().getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width); }
   await screen.getByRole('button', { name: 'Restaurant settings' }).click();
-  await expect.element(screen.getByRole('radio', { name: 'Auto cycle' })).toBeChecked();
-  for (const [label, value] of [['Light rain', 'rain'], ['Bright sun', 'sun'], ['Golden hour', 'sunset'], ['Auto cycle', 'auto']]) {
-    await screen.getByRole('radio', { name: label }).click();
-    await expect.element(screen.getByRole('radio', { name: label })).toBeChecked();
-    await expect.element(screen.getByTestId('mock-scene')).toHaveAttribute('data-weather', value);
-  }
-  const radios = document.querySelectorAll('input[name="city-weather"]');
-  radios.forEach(radio => { const rect = radio.parentElement!.getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width); expect(rect.height).toBeGreaterThanOrEqual(44); });
-  expect(JSON.stringify(restaurant.state)).toBe(before);
-  await userEvent.keyboard('{Escape}');
-  const weather = screen.getByTestId('weather-readout').element().getBoundingClientRect();
-  expect(weather.left).toBeGreaterThanOrEqual(0); expect(weather.right).toBeLessThanOrEqual(width);
-});
-it('keeps service running when manually choosing weather in settings', async () => {
-  const screen = await render(<ManagementGame />);
-  await screen.getByRole('button', { name: /Open restaurant/ }).click();
-  await screen.getByRole('button', { name: 'Restaurant settings' }).click();
-  expect(restaurant.paused).toBe(false);
-  await screen.getByRole('radio', { name: 'Light rain' }).click();
-  await userEvent.keyboard('{Escape}');
-  expect(restaurant.paused).toBe(false);
-  await expect.element(screen.getByTestId('mock-scene')).toHaveAttribute('data-weather', 'rain');
-});
-
-it.each([320, 1280])('offers independent traffic audio without changing saves or resuming service at %spx', async width => {
-  await page.viewport(width, 800);
-  const screen = await render(<ManagementGame />);
-  await screen.getByRole('button', { name: /Open restaurant/ }).click();
-  await screen.getByRole('button', { name: 'Restaurant settings' }).click();
-  const soundtrack = restaurant.state.music, before = JSON.stringify(restaurant.state), toggle = screen.getByRole('switch', { name: 'City traffic', exact: true });
-  await expect.element(toggle).toBeChecked(); await toggle.click();
-  await expect.element(toggle).not.toBeChecked();
-  await expect.element(screen.getByTestId('mock-scene')).toHaveAttribute('data-traffic', 'false');
-  expect(JSON.stringify(restaurant.state)).toBe(before);
-  await expect.element(screen.getByRole('switch', { name: 'Rooftop soundtrack' })).toHaveAttribute('aria-checked', String(soundtrack));
+  const before = JSON.stringify(restaurant.state), toggle = screen.getByRole('switch', { name: 'Ocean soundtrack' });
+  await expect.element(toggle).toHaveAttribute('aria-checked', String(restaurant.state.music));
+  await expect.element(screen.getByRole('switch', { name: 'City traffic' })).not.toBeInTheDocument();
   const rect = toggle.element().getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width);
-  await toggle.click(); await userEvent.keyboard('{Escape}');
-  await expect.element(screen.getByTestId('mock-scene')).toHaveAttribute('data-traffic', 'true');
-  expect(restaurant.paused).toBe(false);
+  expect(JSON.stringify(restaurant.state)).toBe(before);
 });
 
 const sampleReport: Report = { challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, rating: 4 };

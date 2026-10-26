@@ -50,7 +50,7 @@ export function advanceDailyChallenges(challenges: DailyChallenge[], guest: Pick
 export const challengeBonus = (challenges: readonly DailyChallenge[]): number => challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0);
 
 export const challengeTitles: Record<DailyChallenge['kind'], string> = {
-  special: 'Star treatment', salad: 'Garden favorites', burger: 'Off the grill', served: 'A full house', quick: 'Hot off the pass', revenue: 'Ring it up', tips: 'A little extra love',
+  special: 'Star treatment', salad: 'Kelp lovers', burger: 'Off the vent', served: 'A full house', quick: 'Hot off the pass', revenue: 'Ring it up', tips: 'A little extra love',
 };
 
 /** Human-readable objective shared by the board, receipt and accessibility labels. */
@@ -58,8 +58,8 @@ export function challengeObjective(challenge: DailyChallenge): string {
   const n = challenge.target;
   switch (challenge.kind) {
     case 'special': return `Serve ${n} star guests`;
-    case 'salad': return `Sell ${n} garden salads`;
-    case 'burger': return `Sell ${n} sunset burgers`;
+    case 'salad': return `Sell ${n} kelp salads`;
+    case 'burger': return `Sell ${n} vent-seared fish cakes`;
     case 'served': return `Serve ${n} guests`;
     case 'quick': return `Serve ${n} meals within 25s of seating`;
     case 'revenue': return `Earn $${n} in sales + tips`;
