@@ -18,7 +18,7 @@ export function RestaurantLabels({ state, labels, receipts = [], paused = false,
       const receipt = receipts.find(item => item.guestId === guest.id && item.source === 'service' && state.clock >= item.clock && state.clock - item.clock < RECEIPT_SECONDS);
       return <div key={id} ref={element => { if (element) labels.current.set(id, element); else labels.current.delete(id); }}
         className="pointer-events-none invisible absolute left-0 top-0 z-[2] flex w-max flex-col items-center">
-        <span aria-hidden="true" data-label-line className="pointer-events-none absolute left-1/2 top-1/2 -z-10 w-px origin-top bg-paper/60" />
+        <span aria-hidden="true" data-label-line className="pointer-events-none absolute left-1/2 top-1/2 -z-10 w-px origin-top bg-teal/60" />
         {receipt && <GuestPayment key={receipt.id} receipt={receipt} age={state.clock - receipt.clock} paused={paused} speed={speed} />}
         <GuestSatisfactionBar special={guest.special} id={guest.id} value={value} mood={guestMood(value, guest.stage, guest.happy)} stage={guest.stage} />
       </div>;

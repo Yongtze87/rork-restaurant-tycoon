@@ -17,7 +17,7 @@ export const CapitalWarningBanner = memo(function CapitalWarningBanner({ warning
   const instruction = closing
     ? paused ? 'Service paused. Resume to finish closing; closing bills still apply.' : 'No new arrivals. Finishing guests; closing bills still apply.'
     : closed ? 'Already closed. Review costs before reopening.' : 'Close for renovation to review costs. Closing bills still apply.';
-  return <section aria-label="Cash safety warning" data-testid="capital-warning" className="pointer-events-auto mx-auto mt-2 max-w-[1600px] rounded-2xl border border-ink/15 bg-tomato p-2 shadow-md sm:flex sm:items-center sm:gap-3 sm:px-4 sm:py-2">
+  return <section aria-label="Cash safety warning" data-testid="capital-warning" className="pointer-events-auto mx-auto mt-2 max-w-[1600px] rounded-2xl border border-ink/15 bg-danger p-2 shadow-md sm:flex sm:items-center sm:gap-3 sm:px-4 sm:py-2">
     <div className="flex shrink-0 items-center gap-2 px-1 pb-1.5 text-paper sm:max-w-[210px] sm:px-0 sm:pb-0">
       {closing ? <DoorClosed size={22} className="shrink-0" aria-hidden="true" /> : <CircleAlert size={22} className="shrink-0" aria-hidden="true" />}
       <h2 className="font-display text-xl font-semibold leading-tight">{title}</h2>

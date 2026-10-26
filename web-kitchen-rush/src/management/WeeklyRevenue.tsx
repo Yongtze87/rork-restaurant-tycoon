@@ -21,8 +21,8 @@ export const WeeklyRevenue = memo(function WeeklyRevenue({ history, onReport }: 
     <div className="flex items-center justify-between gap-2">
       <div><h3 className="text-xl">Weekly revenue</h3><p className="text-[11px] text-ink/60">A little growth, day by day.</p></div>
       <div className="flex shrink-0 gap-1">
-        <button type="button" aria-label="Previous revenue week" disabled={index === 0} onClick={() => changeWeek(index - 1)} className="grid size-11 place-items-center rounded-xl border border-ink/10 bg-white/40 transition hover:bg-white/70 disabled:opacity-30 motion-reduce:transition-none"><ChevronLeft size={18} /></button>
-        <button type="button" aria-label="Next revenue week" disabled={index === weeks.length - 1} onClick={() => changeWeek(index + 1)} className="grid size-11 place-items-center rounded-xl border border-ink/10 bg-white/40 transition hover:bg-white/70 disabled:opacity-30 motion-reduce:transition-none"><ChevronRight size={18} /></button>
+        <button type="button" aria-label="Previous revenue week" disabled={index === 0} onClick={() => changeWeek(index - 1)} className="grid size-11 place-items-center rounded-xl border border-ink/10 bg-ink/[.06] transition hover:bg-ink/10 disabled:opacity-30 motion-reduce:transition-none"><ChevronLeft size={18} /></button>
+        <button type="button" aria-label="Next revenue week" disabled={index === weeks.length - 1} onClick={() => changeWeek(index + 1)} className="grid size-11 place-items-center rounded-xl border border-ink/10 bg-ink/[.06] transition hover:bg-ink/10 disabled:opacity-30 motion-reduce:transition-none"><ChevronRight size={18} /></button>
       </div>
     </div>
     <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
@@ -36,7 +36,7 @@ export const WeeklyRevenue = memo(function WeeklyRevenue({ history, onReport }: 
     <p className="mt-1 text-[10px] leading-relaxed text-ink/60">Closed days only · 1 week = 7 game days. Bonuses excluded.</p>
     {!week.count ? <div className="mt-3 rounded-xl border border-dashed border-teal/25 bg-teal/5 p-3 text-xs leading-relaxed text-ink/70">Your story starts with the first closing receipt. Finish a service day to see revenue here.</div> : <>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-1 rounded-xl bg-teal/5 px-3 py-2 text-[11px] font-bold text-teal"><span>Sales {money(week.sales)}</span><span>Tips {money(week.tips)}</span></div>
-      <div className="mt-3 rounded-xl border border-ink/10 bg-white/40 p-3">
+      <div className="mt-3 rounded-xl border border-ink/10 bg-ink/[.06] p-3">
         <label htmlFor={selectId} className="text-[10px] font-extrabold uppercase tracking-widest text-ink/60">Explore a day</label>
         <div className="mt-1 flex items-center gap-2">
           <select id={selectId} value={detail.day} onChange={event => setSelectedDay(Number(event.target.value))} className="min-h-11 min-w-0 flex-1 rounded-lg border border-ink/15 bg-paper px-2 text-sm font-extrabold focus-visible:outline focus-visible:outline-4 focus-visible:outline-gold">

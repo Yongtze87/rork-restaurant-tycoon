@@ -21,7 +21,7 @@ it.each([[320, 568], [390, 844], [768, 800], [1280, 800]])('keeps the red alert,
   const alert = screen.getByRole('region', { name: 'Cash safety warning' });
   await expect.element(alert).toBeVisible();
   const bounds = alert.element().getBoundingClientRect();
-  expect(getComputedStyle(alert.element()).backgroundColor).toBe('rgb(220, 83, 60)');
+  expect(getComputedStyle(alert.element()).backgroundColor).toBe('rgb(255, 84, 104)');
   expect(bounds.top).toBeGreaterThan(screen.getByTestId('cash-register').element().getBoundingClientRect().bottom);
   expect(screen.getByTestId('restaurant-scene').element().getBoundingClientRect().top).toBeGreaterThanOrEqual(bounds.bottom);
   reachable(alert.getByRole('button', { name: 'Close for renovation' }).element());

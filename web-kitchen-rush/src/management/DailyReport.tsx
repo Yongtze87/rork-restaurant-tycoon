@@ -36,7 +36,7 @@ export function DailyReport({ report, previous, restaurantName, closing, onConti
     <DialogContent
       onEscapeKeyDown={event => { if (closing) event.preventDefault(); }}
       onPointerDownOutside={event => { if (closing) event.preventDefault(); }}
-      className="flex max-h-[90svh] w-[calc(100%-24px)] max-w-[580px] flex-col gap-0 overflow-hidden rounded-3xl border-paper bg-paper p-0 text-ink shadow-[0_6px_0_#73513d55,0_24px_60px_#1b252355] sm:rounded-3xl [&>button:last-child]:hidden"
+      className="flex max-h-[90svh] w-[calc(100%-24px)] max-w-[580px] flex-col gap-0 overflow-hidden rounded-3xl border-paper bg-paper p-0 text-ink shadow-[0_0_0_1px_#A57BFF40,0_24px_60px_#00000080] sm:rounded-3xl [&>button:last-child]:hidden"
     >
       <div className="shrink-0 border-b border-dashed border-ink/20 px-5 py-4 sm:px-7">
         <div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.18em] text-teal"><ReceiptText size={16} aria-hidden="true" />Daily business summary <span className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-gold/25 px-2 py-1 tracking-normal">Day {report.day}</span></div>
@@ -45,15 +45,15 @@ export function DailyReport({ report, previous, restaurantName, closing, onConti
       </div>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold sm:px-7" role="region" aria-label="Daily report details" tabIndex={0} data-testid="report-scroll">
         <dl className="grid grid-cols-2 gap-3">
-          <div className="min-w-0 rounded-2xl bg-white/50 p-3"><dt className="text-xs font-bold text-ink/65">Total revenue</dt><dd data-testid="report-revenue" className="mt-1 break-words font-display text-2xl tabular-nums sm:text-3xl">{money(summary.totalRevenue)}</dd><p className="mt-1 text-[10px] text-ink/60">Food sales + tips</p></div>
-          <div className="min-w-0 rounded-2xl bg-white/50 p-3"><dt className="text-xs font-bold text-ink/65">Labor costs</dt><dd data-testid="report-labor" className="mt-1 break-words font-display text-2xl tabular-nums sm:text-3xl">{money(report.wages)}</dd><p className="mt-1 text-[10px] text-ink/60">All staff wages</p></div>
-          <div className={cn('col-span-2 rounded-2xl p-4', report.profit < 0 ? 'bg-tomato/10' : 'bg-teal text-paper')}>
-            <div className="flex flex-wrap items-center justify-between gap-2"><dt className="font-bold">Net profit</dt><span className={cn('rounded-full px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide', report.profit < 0 ? 'bg-tomato/15 text-tomato' : 'bg-paper/15')}>{report.profit < 0 ? 'Loss' : report.profit > 0 ? 'Profitable day' : 'Break-even'}</span></div>
-            <dd data-testid="report-profit" className={cn('mt-1 break-words font-display text-4xl tabular-nums', report.profit < 0 && 'text-tomato')}>{report.profit > 0 ? '+' : ''}{money(report.profit)}</dd>
+          <div className="min-w-0 rounded-2xl bg-ink/[.06] p-3"><dt className="text-xs font-bold text-ink/65">Total revenue</dt><dd data-testid="report-revenue" className="mt-1 break-words font-display text-2xl tabular-nums sm:text-3xl">{money(summary.totalRevenue)}</dd><p className="mt-1 text-[10px] text-ink/60">Food sales + tips</p></div>
+          <div className="min-w-0 rounded-2xl bg-ink/[.06] p-3"><dt className="text-xs font-bold text-ink/65">Labor costs</dt><dd data-testid="report-labor" className="mt-1 break-words font-display text-2xl tabular-nums sm:text-3xl">{money(report.wages)}</dd><p className="mt-1 text-[10px] text-ink/60">All staff wages</p></div>
+          <div className={cn('col-span-2 rounded-2xl p-4', report.profit < 0 ? 'bg-danger/10' : 'bg-teal text-paper')}>
+            <div className="flex flex-wrap items-center justify-between gap-2"><dt className="font-bold">Net profit</dt><span className={cn('rounded-full px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide', report.profit < 0 ? 'bg-danger/15 text-danger' : 'bg-paper/15')}>{report.profit < 0 ? 'Loss' : report.profit > 0 ? 'Profitable day' : 'Break-even'}</span></div>
+            <dd data-testid="report-profit" className={cn('mt-1 break-words font-display text-4xl tabular-nums', report.profit < 0 && 'text-danger')}>{report.profit > 0 ? '+' : ''}{money(report.profit)}</dd>
             <p className="mt-2 text-xs opacity-80">{summary.margin === null ? 'No sales today · margin unavailable' : `${summary.margin.toFixed(1)}% net margin`}{report.debtPayment > 0 ? ' · after loan repayment' : ''}</p>
           </div>
         </dl>
-        <div className={cn('my-3 flex items-start gap-2 rounded-xl p-3 text-xs', change === null || change === 0 ? 'bg-ink/5 text-ink/65' : change > 0 ? 'bg-teal/10 text-teal' : 'bg-tomato/10 text-tomato')} data-testid="report-comparison">
+        <div className={cn('my-3 flex items-start gap-2 rounded-xl p-3 text-xs', change === null || change === 0 ? 'bg-ink/5 text-ink/65' : change > 0 ? 'bg-teal/10 text-teal' : 'bg-danger/10 text-danger')} data-testid="report-comparison">
           <ChangeIcon size={18} className="shrink-0" aria-hidden="true" />
           <p>{change === null ? report.day === 1 ? 'Your first service day. Tomorrow’s results will compare with today.' : 'No earlier summary retained for comparison.' : change === 0 ? `Net profit is unchanged from Day ${previous!.day}.` : `Net profit is ${money(Math.abs(change))} ${change > 0 ? 'higher' : 'lower'} than Day ${previous!.day}.`}</p>
         </div>
@@ -61,7 +61,7 @@ export function DailyReport({ report, previous, restaurantName, closing, onConti
           <caption className="pb-2 text-left font-display text-lg">Every dollar, accounted for</caption>
           <thead><tr className="text-[10px] uppercase tracking-wider text-ink/60"><th scope="col" className="pb-2 text-left font-extrabold">Income & expenses</th><th scope="col" className="pb-2 text-right font-extrabold">Amount</th></tr></thead>
           <tbody>{rows.map(row => <tr key={row.label} className={cn('border-t border-ink/10', row.total && 'bg-teal/5')}><th scope="row" className={cn('py-2 pl-2 text-left font-semibold', row.total && 'font-extrabold')}>{row.label}</th><td className="py-2 pr-2 text-right font-extrabold tabular-nums">{money(row.value)}</td></tr>)}</tbody>
-          <tfoot><tr className="border-t-2 border-dashed border-ink/25"><th scope="row" className="py-3 pl-2 text-left font-display text-lg">Net profit</th><td className={cn('py-3 pr-2 text-right font-display text-xl tabular-nums', report.profit < 0 ? 'text-tomato' : 'text-teal')}>{money(report.profit)}</td></tr></tfoot>
+          <tfoot><tr className="border-t-2 border-dashed border-ink/25"><th scope="row" className="py-3 pl-2 text-left font-display text-lg">Net profit</th><td className={cn('py-3 pr-2 text-right font-display text-xl tabular-nums', report.profit < 0 ? 'text-danger' : 'text-teal')}>{money(report.profit)}</td></tr></tfoot>
         </table>
         <p className="text-[11px] leading-relaxed text-ink/60">Daily result = food sales + tips − ingredients − wages − rent{report.debtPayment > 0 ? ' − loan repayment' : ''}. Building, hiring, training and all challenge/milestone rewards are separate from service-day results.</p>
         {report.challenges.length > 0 && <div className="mt-4"><div data-testid="report-challenge-bonus" className="mb-3 rounded-xl bg-gold/20 p-3 text-xs"><p className="flex justify-between gap-2 font-extrabold"><span>Challenge bonus · paid separately</span><span className="text-teal">+{money(challengeBonus(report.challenges))}</span></p><p className="mt-1 text-ink/65">Added to your cash when earned. Not included in revenue or net profit above.</p></div><DailyChallenges challenges={report.challenges} day={report.day} archived /></div>}

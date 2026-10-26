@@ -1,52 +1,34 @@
-@import '@fontsource/fredoka/500.css';
-@import '@fontsource/fredoka/600.css';
-@import '@fontsource/fredoka/700.css';
-@import '@fontsource/nunito/600.css';
-@import '@fontsource/nunito/700.css';
-@import '@fontsource/nunito/800.css';
+@import '@fontsource/baloo-2/500.css';
+@import '@fontsource/baloo-2/600.css';
+@import '@fontsource/baloo-2/700.css';
+@import '@fontsource/baloo-2/800.css';
+@import '@fontsource/quicksand/500.css';
+@import '@fontsource/quicksand/600.css';
+@import '@fontsource/quicksand/700.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root { --background: 42 100% 92%; --foreground: 175 27% 19%; --card: 42 100% 92%; --card-foreground: 175 27% 19%; --popover: 42 100% 92%; --popover-foreground: 175 27% 19%; --primary: 9 70% 55%; --primary-foreground: 42 100% 96%; --secondary: 173 40% 22%; --secondary-foreground: 42 100% 92%; --muted: 42 25% 80%; --muted-foreground: 150 12% 38%; --accent: 42 87% 61%; --accent-foreground: 175 27% 19%; --destructive: 9 70% 55%; --destructive-foreground: 0 0% 100%; --border: 40 30% 77%; --input: 40 30% 77%; --ring: 42 87% 61%; --radius: 1rem; }
+  :root { color-scheme: dark; --background: 245 51% 12%; --foreground: 248 100% 95%; --card: 245 51% 12%; --card-foreground: 248 100% 95%; --popover: 245 51% 12%; --popover-foreground: 248 100% 95%; --primary: 330 100% 72%; --primary-foreground: 318 57% 7%; --secondary: 186 100% 65%; --secondary-foreground: 243 57% 9%; --muted: 245 35% 20%; --muted-foreground: 248 35% 75%; --accent: 260 100% 74%; --accent-foreground: 243 57% 9%; --destructive: 330 100% 72%; --destructive-foreground: 318 57% 7%; --border: 186 100% 65% / .25; --input: 248 40% 30%; --ring: 186 100% 65%; --radius: 1rem; }
   * { @apply border-border; }
   html, body, #root { @apply m-0 min-h-full w-full; }
-  body { @apply bg-ink font-body text-ink antialiased; }
+  body { @apply bg-abyss font-body font-medium text-ink antialiased; }
   button, a, input { -webkit-tap-highlight-color: transparent; }
   button { @apply cursor-pointer; }
   button:disabled { @apply cursor-not-allowed; }
-  button:focus-visible, a:focus-visible { @apply outline outline-4 outline-offset-4 outline-gold; }
-  h1, h2, h3 { @apply font-display font-semibold; }
-  ::selection { @apply bg-gold text-ink; }
+  button:focus-visible, a:focus-visible { @apply outline outline-4 outline-offset-4 outline-teal; }
+  h1, h2, h3 { @apply font-display font-bold tracking-[-.01em]; }
+  ::selection { @apply bg-teal text-abyss; }
 }
 @layer components {
-  .paper { @apply rounded-2xl border-2 border-[#fff8e9] bg-paper text-ink shadow-[0_5px_0_#73513d55,0_12px_28px_#1b252333]; background-image: linear-gradient(120deg, #fff8e8, #fff2d7 65%, #f5e3bf); }
-  .game-button { @apply flex min-h-12 items-center justify-center gap-3 rounded-xl border-2 border-[#fff6da] bg-paper px-6 py-3 font-display text-xl font-semibold text-ink shadow-[0_4px_0_#aa9277,0_7px_15px_#202f2930] transition duration-150 hover:brightness-105 active:translate-y-1 active:shadow-none disabled:opacity-50; }
-  .game-button-primary { @apply border-[#ffab7e] bg-tomato text-white shadow-[0_5px_0_#9e362b,0_8px_18px_#321c2340]; background-image: linear-gradient(#f27a4d,#dc533c); text-shadow: 0 2px #873b33; }
-  .icon-button { @apply flex size-12 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-ink/80 text-paper shadow-lg backdrop-blur-md transition hover:bg-teal active:scale-95; }
-  .keycap { @apply inline-flex min-h-8 min-w-8 items-center justify-center rounded-md border border-white/20 bg-ink px-2 py-1 font-body text-sm font-extrabold text-paper shadow-[0_3px_0_#101e23]; }
-  .wordmark { @apply relative w-fit font-display text-[clamp(3.7rem,6.3vw,6.3rem)] font-bold leading-[.79] tracking-[-.035em] text-paper; transform: rotate(-4deg); -webkit-text-stroke: 2px #233d3b; paint-order: stroke fill; filter: drop-shadow(0 6px 0 #233d3b) drop-shadow(0 5px 8px #182c2960); text-shadow: 3px 0 #233d3b,-3px 0 #233d3b,0 -3px #233d3b,0 4px #233d3b; }
-  .wordmark > span:nth-of-type(2) { @apply mt-2 text-[1.18em]; }
-  .wordmark-hat { @apply absolute -top-[.61em] left-[.27em] size-[.65em] fill-paper text-ink; }
-  .logo-tomato { @apply relative -top-2 ml-1 inline-block text-[.45em] text-tomato; }
-  .logo-tomato::before { content: '✦'; @apply absolute -top-[.44em] left-[.2em] text-[.7em] text-[#64a546]; }
-  .wordmark-small { @apply text-[30px]; -webkit-text-stroke: 0; }
-  .wordmark-small > span { @apply inline; }
-  .wordmark-small > span:nth-of-type(2) { @apply ml-1 text-[1em]; }
-  .wordmark-small .wordmark-hat { @apply -top-4 size-7; }
-  .mode-option { @apply flex min-h-14 w-full items-center gap-4 rounded-xl border-2 border-transparent bg-paper px-5 py-3 text-left font-display text-2xl font-semibold shadow-[0_4px_0_#725c4b50] transition hover:bg-[#fff9e9]; }
-  .mode-option[aria-checked=true] { @apply border-tomato; }
-  .mode-option[aria-checked=true] .radio-dot { @apply border-tomato; }
-  .mode-option[aria-checked=true] .radio-dot::after { content:''; @apply absolute inset-1 rounded-full bg-tomato; }
-  .radio-dot { @apply relative ml-auto size-7 rounded-full border-2 border-[#99998b]; }
-  .station-label { @apply pointer-events-none whitespace-nowrap rounded-md border border-white/60 bg-paper/95 px-2 py-1 font-body text-[11px] font-extrabold text-ink shadow-sm; }
-  .receipt { clip-path: polygon(0 1%,2% 0,4% 1%,6% 0,8% 1%,10% 0,12% 1%,14% 0,16% 1%,18% 0,20% 1%,22% 0,24% 1%,26% 0,28% 1%,30% 0,32% 1%,34% 0,36% 1%,38% 0,40% 1%,42% 0,44% 1%,46% 0,48% 1%,50% 0,52% 1%,54% 0,56% 1%,58% 0,60% 1%,62% 0,64% 1%,66% 0,68% 1%,70% 0,72% 1%,74% 0,76% 1%,78% 0,80% 1%,82% 0,84% 1%,86% 0,88% 1%,90% 0,92% 1%,94% 0,96% 1%,98% 0,100% 1%,100% 99%,98% 100%,96% 99%,94% 100%,92% 99%,90% 100%,88% 99%,86% 100%,84% 99%,82% 100%,80% 99%,78% 100%,76% 99%,74% 100%,72% 99%,70% 100%,68% 99%,66% 100%,64% 99%,62% 100%,60% 99%,58% 100%,56% 99%,54% 100%,52% 99%,50% 100%,48% 99%,46% 100%,44% 99%,42% 100%,40% 99%,38% 100%,36% 99%,34% 100%,32% 99%,30% 100%,28% 99%,26% 100%,24% 99%,22% 100%,20% 99%,18% 100%,16% 99%,14% 100%,12% 99%,10% 100%,8% 99%,6% 100%,4% 99%,2% 100%,0 99%); }
+  /* Night-water glass: translucent indigo with a faint bioluminescent rim and glow. */
+  .paper { @apply rounded-2xl border border-teal/35 bg-paper/[.88] text-ink shadow-[0_0_0_1px_#A57BFF33,0_10px_32px_#4DF0FF24] backdrop-blur-md; }
+  .game-button { @apply flex min-h-12 items-center justify-center gap-3 rounded-xl border border-teal/40 bg-paper px-6 py-3 font-display text-xl font-bold text-ink shadow-[0_4px_0_#0B0A24,0_0_16px_#4DF0FF30] transition duration-150 hover:brightness-110 active:translate-y-1 active:shadow-none disabled:opacity-50; }
+  .game-button-primary { @apply border-[#FF9FCD] bg-tomato text-[#1A0716] shadow-[0_5px_0_#A63A74,0_0_22px_#FF6FB58C]; background-image: linear-gradient(#FF8CC4,#FF6FB5); }
 }
 progress { @apply h-2.5 w-full overflow-hidden rounded-full border border-ink/20 bg-ink/15; }
 progress::-webkit-progress-bar { @apply rounded-full bg-ink/15; }
 progress::-webkit-progress-value { @apply rounded-full bg-gold; transition: width .2s; }
 progress::-moz-progress-bar { @apply rounded-full bg-gold; }
-.order-patience::-webkit-progress-value { background: #7faa42; }
-.order-urgent::-webkit-progress-value { background: #dc533c; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

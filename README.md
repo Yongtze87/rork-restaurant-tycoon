@@ -146,4 +146,4 @@ web-kitchen-rush/
 
 ## License
 
-No license has been chosen yet. Add a `LICENSE` file before publishing. Fonts (Fredoka, Nunito; SIL OFL) and icons (Lucide; ISC) keep their own licenses.
+No license has been chosen yet. Add a `LICENSE` file before publishing. Fonts (Baloo 2, Quicksand; SIL OFL) and icons (Lucide; ISC) keep their own licenses.

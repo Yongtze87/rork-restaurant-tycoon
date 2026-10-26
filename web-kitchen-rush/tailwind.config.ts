@@ -14,9 +14,10 @@ export default {
       },
     },
     extend: {
-      fontFamily: { display: ['Fredoka', 'sans-serif'], body: ['Nunito', 'sans-serif'] },
+      fontFamily: { display: ['"Baloo 2"', 'Trebuchet MS', 'sans-serif'], body: ['Quicksand', 'Segoe UI', 'sans-serif'] },
       colors: {
-        paper: '#FFF2D7', ink: '#233D3B', teal: '#224F4A', tomato: '#DC533C', gold: '#F2B743',
+        // Bioluminescent night: paper = panel surface, ink = text, teal = glow accent, tomato = main action.
+        paper: '#120F2E', ink: '#E9E6FF', teal: '#4DF0FF', violet: '#A57BFF', tomato: '#FF6FB5', danger: '#FF5468', gold: '#FFE27A', abyss: '#0B0A24',
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

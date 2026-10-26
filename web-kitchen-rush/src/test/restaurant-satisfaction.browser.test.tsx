@@ -16,7 +16,7 @@ it('shows an accessible current-value meter and changes face, color and fill tog
   await expect.element(meter).toHaveAttribute('aria-valuetext', '45% — Getting impatient. Meal being prepared.');
   expect(meter.element().querySelector('.lucide-meh')).not.toBeNull();
   await screen.rerender(<GuestSatisfactionBar id={21} value={10} mood="unhappy" stage="ready" />);
-  await expect.element(screen.getByTestId('satisfaction-fill')).toHaveClass('fill-tomato');
+  await expect.element(screen.getByTestId('satisfaction-fill')).toHaveClass('fill-danger');
   expect(meter.element().querySelector('.lucide-frown')).not.toBeNull();
   await screen.rerender(<GuestSatisfactionBar id={21} value={100} mood="served" stage="eating" />);
   await expect.element(meter).toHaveAttribute('aria-valuenow', '100');
