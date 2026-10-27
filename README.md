@@ -30,6 +30,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Menu:** toggle dishes and set prices. Charging more than the fair price drives some guests away.
 - **Continuous days:** service rolls into the next day automatically, and each day saves an immutable receipt.
 - **Ledger:** a weekly revenue chart, growth against the previous week, and the last 20 daily receipts.
+- **Daily tides:** each service day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
 - **Daily challenges**, **milestones**, an interest-free **recovery loan** and a **low-capital warning** with one-click **Close for renovation**.
 
 ### Offline progress you can trust
@@ -50,6 +51,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 ### Underwater atmosphere
 - Sun shafts from the surface, drifting caustics on the floor, rising bubbles, marine snow and distant fish schools.
 - Swaying kelp and anemones, a glowing jelly lantern, and a vent grill that glows while a chef cooks.
+- **Evening glow:** the reef darkens from 19:00 to 21:30 in both views; lanterns, the vent grill, glow gardens and top-tier buildings shine brighter, and bioluminescent plankton drifts by. Visual only.
 - Everything ambient respects `prefers-reduced-motion`.
 
 ---

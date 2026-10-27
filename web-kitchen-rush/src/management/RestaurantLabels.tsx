@@ -5,13 +5,14 @@ import { GuestPayment } from './GuestPayment';
 import { RECEIPT_SECONDS, type CashReceipt } from './cash-feedback';
 import { guestMood, guestSatisfaction } from './satisfaction';
 import { guestPatienceSeconds, type RestaurantState } from './types';
+import { TIDES } from './tides';
 
 /** A shared registry keeps labels in the main DOM tree; the scene positions them every frame. */
 export type LabelRegistry = RefObject<Map<string, HTMLDivElement>>;
 
 /** DOM-owned labels clean up safely when guests leave, service closes, or the restaurant resets. */
 export function RestaurantLabels({ state, labels, receipts = [], paused = false, speed = 1 }: { state: RestaurantState; labels: LabelRegistry; receipts?: readonly CashReceipt[]; paused?: boolean; speed?: number }) {
-  const patience = guestPatienceSeconds(state);
+  const patience = guestPatienceSeconds(state, TIDES[state.tide].effects.patience);
   return <div className="pointer-events-none absolute inset-0 overflow-hidden" data-testid="restaurant-labels">
     {state.guests.map(guest => {
       const value = guestSatisfaction(guest, patience), id = `customer-${guest.id}`;

@@ -1,5 +1,6 @@
 import { accessPoints, localPoint, seatPoint } from '../layout';
 import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type RestaurantState } from '../types';
+import { sceneNight } from '../light';
 import type { Ambience } from './ambience';
 import { diamondPath, drawFurniture, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
 import { depthOf, facing, toScreen, TILE_H, TILE_W, type ScreenPoint, type View } from './projection';
@@ -159,9 +160,12 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   let decor = decorCache.get(columns); if (!decor) { decor = seabedDecor(columns); decorCache.set(columns, decor); }
   for (const d of decor) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t)) });
   const working = new Set(state.staff.filter(s => s.task === 'cooking').map(s => s.stationId));
+  const night = sceneNight(state), glows: Glow[] = [];
   for (const item of state.furniture) {
     if (item.id === draft?.id) continue;
     const n = CATALOG[item.kind].size, cx = item.x + (n - 1) / 2, cz = item.z + (n - 1) / 2, slot = SPRITES[`furniture.${item.kind}`];
+    if (night > 0 && item.kind === 'lamp') glows.push({ ...toScreen(view, cx, cz, 72), r: 74 * view.scale, color: '150, 230, 255', strength: .55 });
+    if (night > 0 && item.kind === 'grill') glows.push({ ...toScreen(view, cx, cz, 22), r: 44 * view.scale, color: '255, 170, 90', strength: working.has(item.id) ? .6 : .32 });
     items.push({ depth: depthOf(cx, cz), draw: () => at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, `furniture.${item.kind}`)) drawFurniture(ctx, item.kind, t, working.has(item.id)); }) });
     const p = toScreen(view, cx, cz);
     hits.push({ id: item.id, left: p.x - n * TILE_W / 2 * view.scale, right: p.x + n * TILE_W / 2 * view.scale, top: p.y - slot.ay * view.scale, bottom: p.y + n * TILE_H / 2 * view.scale });
@@ -195,6 +199,7 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   items.push({ depth: depthOf(entrance.x, entrance.z + .62), draw: () => at(ctx, view, entrance.x, entrance.z + .62, 0, () => drawArch(ctx, t)) });
   items.push({ depth: depthOf(1.2, HEIGHT - .5 + .9), draw: () => at(ctx, view, 1.2, HEIGHT - .5 + .9, 0, () => drawSign(ctx, state.name)) });
   items.sort((a, b) => a.depth - b.depth).forEach(item => item.draw());
+  if (night > 0) { glows.push({ ...toScreen(view, entrance.x, entrance.z + .62, 56), r: 34 * view.scale, color: '255, 226, 150', strength: .35 }); drawNight(ctx, f, night, glows); }
   if (draft) { const n = CATALOG[draft.kind].size, cx = draft.x + (n - 1) / 2, cz = draft.z + (n - 1) / 2; at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, `furniture.${draft.kind}`)) drawFurniture(ctx, draft.kind, t); }, .72); }
   drawParticles(ctx, f);
   return { anchors, hits };
@@ -211,6 +216,33 @@ function drawSign(ctx: Ctx, name: string): void {
   ctx.font = '700 11px Fredoka, sans-serif'; const w = Math.min(150, ctx.measureText(name).width + 20);
   ctx.fillStyle = '#8C6447'; ctx.beginPath(); ctx.roundRect(-w / 2, -44, w, 20, 6); ctx.fill();
   ctx.fillStyle = '#FFF2D7'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(name, 0, -34, w - 12);
+}
+/** A light source that shines through the evening dark, in CSS pixels; `color` is "r, g, b". */
+export interface Glow { x: number; y: number; r: number; color: string; strength: number; }
+const NIGHT_MOTES = 18;
+/**
+ * Evening glow, visual only: darken everything drawn so far, then let lights and plankton shine through.
+ * One multiply fill plus a gradient per light; reduced motion keeps every glow steady.
+ */
+export function drawNight(ctx: Ctx, f: Pick<FrameInput, 'width' | 'height' | 'time' | 'reduced' | 'ambience'>, level: number, glows: readonly Glow[]): void {
+  if (level <= 0) return;
+  const { width, height, reduced, ambience } = f, t = reduced ? 0 : f.time;
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(34, 40, 104, ${level * .6})`; ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = 'lighter';
+  for (const g of glows) {
+    const a = g.strength * level * (reduced ? 1 : .9 + Math.sin(t * 1.3 + g.x * .05) * .1);
+    const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r); grad.addColorStop(0, `rgba(${g.color}, ${a})`); grad.addColorStop(1, `rgba(${g.color}, 0)`);
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2); ctx.fill();
+  }
+  // Bioluminescent plankton: more of the drifting motes light up as it gets darker.
+  for (let i = 0; i < Math.round(NIGHT_MOTES * level) && i < ambience.motes.length; i++) {
+    const m = ambience.motes[(i * 7) % ambience.motes.length], glow = (reduced ? .8 : .55 + Math.sin(t * 1.7 + i * 2.3) * .35) * level;
+    const x = m.x * width + Math.sin(t * .4 + i) * 8, y = (m.y * height + Math.cos(t * .3 + i) * 6);
+    ctx.fillStyle = `rgba(110, 240, 255, ${.2 * glow})`; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(210, 255, 250, ${.85 * glow})`; ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 export function drawParticles(ctx: Ctx, f: Pick<FrameInput, 'width' | 'height' | 'ambience'>): void {
   const { width, height, ambience } = f;
