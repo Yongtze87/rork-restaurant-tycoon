@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RestaurantEngine } from '@/management/engine';
+import { OFFLINE_SERVICE_HOURS, RestaurantEngine } from '@/management/engine';
 import { SAVE_KEY, createRestaurant, restaurantSchema } from '@/management/types';
 
 function harness() {
@@ -75,10 +75,13 @@ describe('continuous local restaurant', () => {
     expect(e.state.clock).toBeCloseTo(960); expect(h.read().lastActiveAt).toBe(h.now());
     const restored = new RestaurantEngine(h.storage, h.now); await restored.resume(); expect(restored.state.clock).toBeCloseTo(960);
   });
-  it('replays a full eight-hour absence with bounded history and valid checkpoints', async () => {
+  it('replays at most the offline cap of an eight-hour absence, with bounded history and valid checkpoints', async () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(8 * 3600); await e.resume();
-    expect(e.state.clock).toBeCloseTo(8 * 3600); expect(e.state.day).toBeGreaterThan(100); expect(e.state.history).toHaveLength(20);
+    expect(e.state.clock).toBeCloseTo(OFFLINE_SERVICE_HOURS * 3600); expect(e.state.day).toBeGreaterThan(50); expect(e.state.history).toHaveLength(20);
+    expect(e.awaySummary?.capped).toBe(true); expect(e.state.lastActiveAt).toBe(h.now());
     expect(restaurantSchema.safeParse(h.read()).success).toBe(true); expect(e.state.history[19].day).toBe(e.state.day - 1); expect(e.incomeReceipts).toEqual([]);
+    // Coming back again doesn't replay the skipped hours.
+    const clock = e.state.clock; await e.resume(); expect(e.state.clock).toBe(clock);
   });
   it('checkpoints long catch-up and yields, with reset cancelling the old session', async () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(10000);

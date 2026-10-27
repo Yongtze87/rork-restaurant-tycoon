@@ -99,7 +99,7 @@ const levelsOf = (town: Town, kind: BuildingKind): Plot[] => town.plots.filter(p
 const nextTo = (town: Town, plot: Plot, kind: BuildingKind): boolean => neighbours(town, plot).some(p => p.building === kind && activeLevel(p) > 0);
 
 /** Balance knobs for building upgrades and producers; see docs/BALANCE.md for the reasoning. */
-export const TOWN_BALANCE = { restaurantUpgradeBase: 600, upgradeExponent: 1.6, producerPerLevel: .06, producerCap: .6 } as const;
+export const TOWN_BALANCE = { restaurantUpgradeBase: 600, upgradeExponent: 1.6, producerPerLevel: .06, producerCap: .6, gardenPerLevel: .03, gardenCap: .5 } as const;
 export function upgradeCost(kind: BuildingKind, nextLevel: number): number {
   const base = kind === 'restaurant' ? TOWN_BALANCE.restaurantUpgradeBase : BUILDINGS[kind].buildCost;
   return Math.round(base * .6 * nextLevel ** TOWN_BALANCE.upgradeExponent / 10) * 10;
@@ -122,7 +122,7 @@ export function townEffects(town: Town): TownEffects {
   return {
     kelpCost: producer('kelpFarm'), fishCost: producer('fishery'),
     extraCrew: Math.min(6, levelsOf(town, 'homes').reduce((sum, p) => sum + 1 + Math.floor(activeLevel(p) / LEVELS_PER_LOOK), 0)),
-    arrivalBonus: (activeLevel(restaurantPlot) - 1) * .03 + gardens.reduce((sum, p) => sum + activeLevel(p) * .03 * boost(p), 0) + zoneArrivalBonus(town),
+    arrivalBonus: (activeLevel(restaurantPlot) - 1) * .03 + Math.min(TOWN_BALANCE.gardenCap, gardens.reduce((sum, p) => sum + activeLevel(p) * TOWN_BALANCE.gardenPerLevel * boost(p), 0)) + zoneArrivalBonus(town),
     crewSpeed: 1 + Math.min(.15, gardens.filter(p => nextTo(town, p, 'homes')).reduce((sum, p) => sum + activeLevel(p) * .01, 0)),
   };
 }
@@ -137,7 +137,7 @@ export function effectText(town: Town, plot: Pick<Plot, 'x' | 'z'>, kind: Buildi
   if (kind === 'kelpFarm') return `Kelp dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
   if (kind === 'fishery') return `Fish dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
   if (kind === 'homes') return `+${1 + Math.floor(level / 5)} crew slot${level >= 5 ? 's' : ''}`;
-  if (kind === 'garden') return `Guests arrive ${percent(level * .03 * boost)} more often${nextToKind(town, plot, 'homes') ? ` · crew ${percent(Math.min(.15, level * .01))} faster` : ''}`;
+  if (kind === 'garden') return `Guests arrive ${percent(level * TOWN_BALANCE.gardenPerLevel * boost)} more often (all gardens: up to ${percent(TOWN_BALANCE.gardenCap)})${nextToKind(town, plot, 'homes') ? ` · crew ${percent(Math.min(.15, level * .01))} faster` : ''}`;
   return `All building finishes ${percent(Math.min(.45, level * .03))} faster`;
 }
 /** Finish every job whose end time has passed. Returns the plots that just completed. */

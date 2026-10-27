@@ -16,7 +16,9 @@ export const GOALS = [
   { id: 'three-days', title: 'The reef favorite', text: 'Complete 3 service days', target: 3, reward: 300, value: (s: RestaurantState) => s.history.length },
 ];
 /** Exact business results computed while the owner was away, not an idle-income estimate. */
-export interface AwaySummary { seconds: number; days: number; served: number; cashChange: number; challengeBonus: number; }
+export interface AwaySummary { seconds: number; days: number; served: number; cashChange: number; challengeBonus: number; capped: boolean; }
+/** Offline service stops after this much time away; construction timers keep running regardless. */
+export const OFFLINE_SERVICE_HOURS = 4;
 export interface StorageAdapter { getItem(key: string): string | null; setItem(key: string, value: string): void; }
 const resetStaff = (staff: Staff): void => { staff.task = 'idle'; staff.guestId = null; staff.stationId = null; staff.timer = 0; staff.route = []; };
 const seatKey = (g: Pick<Guest, 'tableId' | 'seat'>): string => `${g.tableId}:${g.seat}`;
@@ -99,7 +101,7 @@ export class RestaurantEngine {
   /** Save once when leaving; subsequent pagehide/unmount events must not move the offline checkpoint. */
   suspend(): void { if (!this.backgrounded) this.save(); this.backgrounded = true; this.accumulator = 0; }
   dismissAway(): void { this.awaySummary = null; this.notify(); }
-  /** Replay all elapsed wall time at 1× using the same fixed simulation step, yielding between chunks. */
+  /** Replay elapsed wall time (up to the offline cap) at 1× using the same fixed simulation step, yielding between chunks. */
   async resume(): Promise<void> {
     this.backgrounded = false;
     if (this.catchingUp) return;
@@ -107,7 +109,8 @@ export class RestaurantEngine {
     let target = this.now();
     this.dailyGift(target);
     if (!start || target <= start || this.paused || s.phase !== 'service') { this.tickTown(target); this.save(); this.notify(); return; }
-    let steps = Math.floor((target - start) / 100);
+    const limit = start + OFFLINE_SERVICE_HOURS * 3_600_000;
+    let steps = Math.floor((Math.min(target, limit) - start) / 100);
     if (!steps) return;
     const before = { day: s.day, cash: s.cash, served: s.lifetimeServed, clock: s.clock, challengeBonus: s.lifetimeChallengeBonus };
     this.catchingUp = true; this.catchUpProgress = 0; this.incomeReceipts = []; this.notify();
@@ -115,7 +118,7 @@ export class RestaurantEngine {
     // Save partial checkpoints so closing the page during recovery never duplicates completed business.
     while (this.state === s && !this.paused && s.phase === 'service') {
       // Include time spent replaying/throttled in the background instead of silently discarding it.
-      target = Math.max(target, this.now()); steps = Math.floor((target - start) / 100);
+      target = Math.max(target, this.now()); steps = Math.floor((Math.min(target, limit) - start) / 100);
       if (done >= steps) break;
       const end = Math.min(steps, done + 1000);
       for (; done < end && s.phase === 'service' && !this.paused; done++) { this.tickTown(start + done * 100); this.step(.1); }
@@ -127,7 +130,7 @@ export class RestaurantEngine {
     if (this.state !== s) return;
     this.tickTown(target);
     s.lastActiveAt = Math.max(s.lastActiveAt, target);
-    this.awaySummary = s.clock - before.clock >= 1 ? { seconds: Math.round(s.clock - before.clock), days: s.day - before.day, served: s.lifetimeServed - before.served, cashChange: s.cash - before.cash, challengeBonus: s.lifetimeChallengeBonus - before.challengeBonus } : null;
+    this.awaySummary = s.clock - before.clock >= 1 ? { seconds: Math.round(s.clock - before.clock), days: s.day - before.day, served: s.lifetimeServed - before.served, cashChange: s.cash - before.cash, challengeBonus: s.lifetimeChallengeBonus - before.challengeBonus, capped: target > limit } : null;
     if (this.pauseAfterCatchUp !== null) { this.paused = this.pauseAfterCatchUp; this.pauseAfterCatchUp = null; }
     this.catchUpProgress = 1; this.save(); this.catchingUp = false; this.savedAt = s.clock; this.notify();
   }

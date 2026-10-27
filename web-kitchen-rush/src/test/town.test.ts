@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
-import { BUILDINGS, MAX_LEVEL, TOWN_SIZE, baseSeconds, createTown, finishCost, jobSeconds, lookFor, plotAt, townEffects, unlockCost, upgradeCost } from '@/management/town';
+import { BUILDINGS, MAX_LEVEL, TOWN_BALANCE, TOWN_SIZE, baseSeconds, createTown, finishCost, jobSeconds, lookFor, plotAt, townEffects, unlockCost, upgradeCost } from '@/management/town';
 import { restaurantSchema } from '@/management/types';
 
 function harness() {
@@ -121,5 +121,13 @@ describe('town effects on the restaurant', () => {
     expect(perMeal(farmed)).toBeLessThan(perMeal(plain));
     Object.assign(plotAt(farmed.state.town, C, C + 1)!, { owned: true, building: 'homes', level: 1 });
     expect(farmed.crewLimit()).toBe(7);
+  });
+});
+
+describe('garden cap', () => {
+  it('limits the combined guest bonus from glow gardens', () => {
+    const town = createTown();
+    for (const [x, z] of [[0, 0], [8, 8], [0, 8], [8, 0]]) Object.assign(plotAt(town, x, z)!, { owned: true, building: 'garden', level: 15 });
+    expect(townEffects(town).arrivalBonus).toBeCloseTo(TOWN_BALANCE.gardenCap);
   });
 });
