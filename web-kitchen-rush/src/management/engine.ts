@@ -6,6 +6,7 @@ import type { CashReceipt } from './cash-feedback';
 import { LAST_TUTORIAL_STEP } from './tutorial';
 import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
+import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
 import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, completeJobs, dayKey, finishCost, jobSeconds, lookFor, plotAt, plotLockReason, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 
 export const GOALS = [
@@ -63,9 +64,10 @@ export class RestaurantEngine {
     try {
       const raw = storage?.getItem(SAVE_KEY);
       if (raw) {
-        const result = restaurantSchema.safeParse(JSON.parse(raw));
+        const parsed = JSON.parse(raw), result = restaurantSchema.safeParse(parsed);
         if (!result.success) throw new Error('Invalid save');
         const restored = result.data as RestaurantState;
+        if (!parsed.collections) seedCollections(restored);
         if (layoutError(restored.furniture, width(restored))) throw new Error('Invalid layout');
         if (restored.dailyChallenges.some(c => c.day !== restored.day)) throw new Error('Invalid challenge day');
         this.state = restored;
@@ -181,7 +183,7 @@ export class RestaurantEngine {
     const item = this.state.furniture.find(f => f.id === id); if (!item) return 'Select a piece of furniture first.';
     if (item.level >= FURNITURE_MAX_LEVEL) return 'Already at the highest level.';
     const cost = furnitureUpgradeCost(item.kind, item.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
-    this.state.cash -= cost; item.level++;
+    this.state.cash -= cost; item.level++; this.state.collections.bestFurniture = Math.max(this.state.collections.bestFurniture, item.level);
     this.changed(`${CATALOG[item.kind].name} is now level ${item.level}.${lookFor(item.level) > lookFor(item.level - 1) ? ' A whole new look!' : ''}`); return null;
   }
   hire(role: Role): string | null {
@@ -226,6 +228,16 @@ export class RestaurantEngine {
     this.state.claimed.push(id); this.state.cash += goal.reward; this.state.town.charms.tide++; this.state.town.pearls += 5;
     this.recordIncome(goal.reward, 'milestone'); this.changed(`Milestone complete: ${goal.title}. +$${goal.reward}, a Tide charm and 5 pearls.`); return null;
   }
+  /** Collect a finished achievement's pearls (and charms). Each pays out once. */
+  claimAchievement(id: string): string | null {
+    const goal = achievement(id); if (!goal) return 'Choose an achievement first.';
+    if (this.state.collections.claimed.includes(id)) return 'You already collected this reward.';
+    if (!isClaimable(this.state, goal)) return 'Complete this achievement first.';
+    this.state.collections.claimed.push(id); this.state.town.pearls += goal.reward.pearls; this.state.town.charms.tide += goal.reward.tideCharms;
+    this.changed(`Achievement: ${goal.title}. +${rewardText(goal.reward)}.`); return null;
+  }
+  /** Milestones and achievements ready to collect, for the Ledger badge. */
+  rewardsReady(): number { return GOALS.filter(g => !this.state.claimed.includes(g.id) && g.value(this.state) >= g.target).length + claimableAchievements(this.state).length; }
   loan(): string | null {
     if (this.state.phase !== 'planning' || this.state.cash >= 200 || this.state.debt > 0) return 'A $600 recovery loan is available below $200, with no existing loan.';
     this.state.cash += 600; this.state.debt = 600; this.recordIncome(600, 'loan'); this.changed('Recovery loan received. $30 is repaid after each day, with no interest.'); return null;
@@ -369,7 +381,7 @@ export class RestaurantEngine {
         if (!guest.paid) {
           const table = s.furniture.find(f => f.id === guest.tableId);
           const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1)) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips));
-          const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; guest.paid = true;
+          const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; recordServed(s.collections, guest.dish); guest.paid = true;
           this.recordIncome(earned, 'service', guest.id, tip);
           this.event = `${DISHES[guest.dish].name} served. +$${earned}${tip ? ` including $${tip} tip` : ''}`;
           for (const challenge of advanceDailyChallenges(s.dailyChallenges, guest, tip)) {
@@ -466,6 +478,7 @@ export class RestaurantEngine {
     s.cash -= wages + rent + debtPayment; s.debt -= debtPayment;
     const rating = Math.max(1, Math.min(5, 3 + (s.totals.served / Math.max(1, s.totals.served + s.totals.missed)) * 1.5 + comfort(s) * .005 - s.totals.missed * .06));
     s.reputation = Math.round((s.reputation * .65 + rating * .35) * 100) / 100;
+    recordDay(s.collections, { ...s.totals, rating, tide: s.tide });
     s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips - s.totals.ingredients - wages - rent - debtPayment, rating, tide: s.tide }); s.history = s.history.slice(-20);
     this.beginNextDay(); this.changed();
   }

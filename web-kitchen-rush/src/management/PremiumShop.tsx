@@ -24,6 +24,6 @@ export function PremiumShop({ open, onOpenChange }: { open: boolean; onOpenChang
     </div>
     <h3 className="text-lg">Get pearls</h3>
     <div className="grid grid-cols-3 gap-2">{PEARL_PACKS.map(pack => <div key={pack.pearls} className="rounded-2xl border border-violet/30 bg-violet/10 p-3 text-center"><p className="font-display text-xl tabular-nums">{pack.pearls}</p><p className="text-[11px] text-ink/60">pearls</p><p className="mt-1 text-xs font-extrabold">{pack.price}</p></div>)}</div>
-    <p className="rounded-xl bg-gold/10 p-3 text-xs leading-relaxed text-ink/75">Pearl packs can’t be bought yet. They open once the game launches in a store. Until then, earn pearls from milestones and by finishing all three daily challenges. You also get a free Current charm every day.</p>
+    <p className="rounded-xl bg-gold/10 p-3 text-xs leading-relaxed text-ink/75">Pearl packs can’t be bought yet. They open once the game launches in a store. Until then, earn pearls from milestones, Ledger → Collection achievements and by finishing all three daily challenges. You also get a free Current charm every day.</p>
   </DialogContent></Dialog>;
 }
