@@ -42,8 +42,8 @@ describe('construction time', () => {
     const reloaded = new RestaurantEngine(h.storage, h.now); expect(reloaded.state.town).toEqual(e.state.town);
     h.advance(1); reloaded.update(.1);
     expect(plotAt(reloaded.state.town, C + 1, C)!.job).toBeNull(); expect(reloaded.lastCompletion?.text).toBe('Kelp farm is built.');
-    // Level 1 next to the restaurant: 6% × 1.5 = 9% cheaper ($7 → $6.37, rounded to $6).
-    expect(reloaded.townEffects().kelpCost).toBeCloseTo(.91); expect(reloaded.dishCost('salad')).toBe(6);
+    // Level 1 next to the restaurant: 6% × 1.5 = 9% cheaper ($7 → $6.37; the cents carry between dishes).
+    expect(reloaded.townEffects().kelpCost).toBeCloseTo(.91); expect(reloaded.dishCost('salad')).toBeCloseTo(6.37);
     expect(restaurantSchema.safeParse(reloaded.state).success).toBe(true);
   });
   it('finishes construction while the owner is away, even with the restaurant closed', async () => {
@@ -129,5 +129,24 @@ describe('garden cap', () => {
     const town = createTown();
     for (const [x, z] of [[0, 0], [8, 8], [0, 8], [8, 0]]) Object.assign(plotAt(town, x, z)!, { owned: true, building: 'garden', level: 15 });
     expect(townEffects(town).arrivalBonus).toBeCloseTo(TOWN_BALANCE.gardenCap);
+  });
+});
+
+describe('exact ingredient costs and the closing reserve', () => {
+  it('carries fractions of a dollar so a small discount adds up over many dishes', () => {
+    const plain = new RestaurantEngine(), farmed = new RestaurantEngine();
+    Object.assign(plotAt(farmed.state.town, 0, 0)!, { owned: true, building: 'kelpFarm', level: 1 }); // not next to the restaurant: 6%
+    expect(farmed.dishCost('salad')).toBeCloseTo(6.58);
+    for (const e of [plain, farmed]) { e.state.menu.burger.enabled = false; e.open(); for (let i = 0; i < 3000; i++) e.update(.1); }
+    const perSalad = (e: RestaurantEngine) => (e.state.history.reduce((s, r) => s + r.ingredients, 0) + e.state.totals.ingredients) / e.state.lifetimeServed;
+    // Ingredients are paid when cooking starts (some guests leave before being served), so compare the two reefs.
+    const ratio = perSalad(farmed) / perSalad(plain); expect(ratio).toBeLessThan(.98); expect(ratio).toBeGreaterThan(.88);
+    expect(Number.isInteger(farmed.state.cash)).toBe(true); expect(farmed.state.ingredientCarry).toBeGreaterThanOrEqual(0); expect(farmed.state.ingredientCarry).toBeLessThan(1);
+  });
+  it("keeps tonight's wages and rent when buying in town during service", () => {
+    const e = new RestaurantEngine(); e.open();
+    const price = unlockCost(e.state.town); e.state.cash = price + e.operatingCost() - 1;
+    expect(e.unlockPlot(C + 1, C)).toMatch(/for tonight's wages and rent/); expect(e.state.cash).toBe(price + e.operatingCost() - 1);
+    e.state.cash += 1; expect(e.unlockPlot(C + 1, C)).toBeNull();
   });
 });

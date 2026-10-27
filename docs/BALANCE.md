@@ -164,4 +164,5 @@ lives in one place (DESIGN.md: one place per system). Formula shapes are unchang
 ## Follow-up fixes (after the tuning pass)
 - **Offline service is capped at 4 hours** (`OFFLINE_SERVICE_HOURS` in `engine.ts`). Leaving the restaurant open while away used to replay every hour at 1× (about 400 service days per real day), which overrode the pacing above. Construction timers still run in real time; the "While you were away" card says when the cap was reached. A longer cap is a natural future pearl-shop item.
 - **Glow gardens' combined guest bonus is capped at +50%** (`TOWN_BALANCE.gardenCap`), in line with every other town effect.
-- Still open: whole-dollar rounding of ingredient costs (small effects can round to $0), and town purchases during service can spend the ingredient money.
+- **Ingredient costs are exact to the cent** (`dishCost`), and the unpaid fraction carries between dishes (`ingredientCarry`), so cash stays in whole dollars while every discount counts.
+- **Town purchases during service keep tonight's wages, rent and loan repayment** in the register (`reserveError` in `engine.ts`).

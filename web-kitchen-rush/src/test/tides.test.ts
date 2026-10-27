@@ -57,8 +57,8 @@ describe('daily tides', () => {
     });
     it('strong current slows the crew', () => { expect(serviceDays('current').served).toBeLessThan(calm.served); });
     it('plankton bloom and shoal run make kelp and fish cheaper', () => {
-      const e = new RestaurantEngine(); e.state.tide = 'plankton'; expect(e.dishCost('salad')).toBe(5); expect(e.dishCost('burger')).toBe(12);
-      e.state.tide = 'shoal'; expect(e.dishCost('salad')).toBe(7); expect(e.dishCost('burger')).toBe(8);
+      const e = new RestaurantEngine(); e.state.tide = 'plankton'; expect(e.dishCost('salad')).toBeCloseTo(4.9); expect(e.dishCost('burger')).toBe(12);
+      e.state.tide = 'shoal'; expect(e.dishCost('salad')).toBe(7); expect(e.dishCost('burger')).toBeCloseTo(8.4);
       const plankton = serviceDays('plankton'), shoal = serviceDays('shoal');
       expect(plankton.served).toBe(calm.served); expect(plankton.ingredients).toBeLessThan(calm.ingredients);
       expect(shoal.served).toBe(calm.served); expect(shoal.ingredients).toBeLessThan(plankton.ingredients);

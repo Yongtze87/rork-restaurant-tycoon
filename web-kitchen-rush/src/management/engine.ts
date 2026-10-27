@@ -323,11 +323,11 @@ export class RestaurantEngine {
       if (member.role === 'chef') {
         for (const guest of s.guests.filter(g => g.stage === 'waiting')) {
           const station = s.furniture.find(f => f.kind === DISHES[guest.dish].station && !s.staff.some(worker => worker.stationId === f.id && worker.role === 'chef' && worker.task !== 'idle'));
-          const cost = this.dishCost(guest.dish);
+          const due = s.ingredientCarry + this.dishCost(guest.dish), cost = Math.floor(due + 1e-9);
           if (!station || s.cash < cost) continue;
           const route = this.route(member, accessPoints(station)[0]); if (!route) continue;
           guest.stage = 'cooking'; guest.stationId = station.id; member.guestId = guest.id; member.stationId = station.id; member.task = 'toKitchen'; member.route = route;
-          s.cash -= cost; s.totals.ingredients += cost; break;
+          s.cash -= cost; s.totals.ingredients += cost; s.ingredientCarry = Math.max(0, Math.min(1, due - cost)); break;
         }
       } else {
         const guest = s.guests.find(g => g.stage === 'ready');
@@ -407,7 +407,8 @@ export class RestaurantEngine {
     return this.effects;
   }
   crewLimit(): number { return 6 + this.townEffects().extraCrew; }
-  dishCost(dish: Dish): number { const kelp = DISHES[dish].ingredient === 'kelp', town = this.townEffects(), tide = this.tideEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (kelp ? town.kelpCost * tide.kelpCost : town.fishCost * tide.fishCost))); }
+  /** Exact ingredient cost per dish, to the cent; charges carry the fraction so every discount counts. */
+  dishCost(dish: Dish): number { const kelp = DISHES[dish].ingredient === 'kelp', town = this.townEffects(), tide = this.tideEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (kelp ? town.kelpCost * tide.kelpCost : town.fishCost * tide.fishCost) * 100) / 100); }
   /** Finish construction whose end time has passed (wall-clock time, also while away). */
   private tickTown(at: number): void {
     const done = completeJobs(this.state.town, at); if (!done.length) return;
@@ -420,10 +421,16 @@ export class RestaurantEngine {
     town.lastGiftDay = day; town.charms.current++; this.event = 'Daily gift: a Current charm. It skips 15 minutes of building.';
   }
   private plot(x: number, z: number) { return plotAt(this.state.town, x, z); }
+  /** During service tonight's wages and rent come out of the register at closing, so town spending can't use that money. */
+  private reserveError(cost: number): string | null {
+    const bills = this.operatingCost() + Math.min(30, this.state.debt);
+    return this.state.phase === 'service' && this.state.cash - cost < bills ? `Keep $${bills} for tonight's wages and rent. Try again after closing, or earn a little more first.` : null;
+  }
   unlockPlot(x: number, z: number): string | null {
     const town = this.state.town, plot = this.plot(x, z); if (!plot) return 'Choose a plot first.';
     const locked = plotLockReason(town, plot); if (locked) return locked;
     const cost = unlockCost(town); if (this.state.cash < cost) return `Unlocking costs ${cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.`;
+    const reserve = this.reserveError(cost); if (reserve) return reserve;
     this.state.cash -= cost; plot.owned = true; this.changed('New plot unlocked. Choose what to build.'); return null;
   }
   /** Reach a deeper zone: opens its ring of plots and its dishes once every requirement is met. */
@@ -440,6 +447,7 @@ export class RestaurantEngine {
     if (kind === 'restaurant') return 'You already have a restaurant.';
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
     const info = BUILDINGS[kind]; if (this.state.cash < info.buildCost) return `${info.name} costs $${info.buildCost}.`;
+    const reserve = this.reserveError(info.buildCost); if (reserve) return reserve;
     const now = this.now(), seconds = jobSeconds(town, kind, 1);
     this.state.cash -= info.buildCost; Object.assign(plot, { building: kind, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
     this.changed(`Building a ${info.name.toLowerCase()}.`); return null;
@@ -451,6 +459,7 @@ export class RestaurantEngine {
     if (plot.level >= MAX_LEVEL) return 'Already at the highest level.';
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
     const cost = upgradeCost(plot.building, plot.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
+    const reserve = this.reserveError(cost); if (reserve) return reserve;
     const now = this.now(); this.state.cash -= cost;
     plot.job = { kind: 'upgrade', startedAt: now, endsAt: now + jobSeconds(town, plot.building, plot.level + 1) * 1000 };
     this.changed(`Upgrading ${BUILDINGS[plot.building].name.toLowerCase()} to level ${plot.level + 1}.`); return null;

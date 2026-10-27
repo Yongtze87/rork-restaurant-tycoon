@@ -125,10 +125,10 @@ describe('ingredient town effects', () => {
     const e = new RestaurantEngine(), c = 4;
     Object.assign(plotAt(e.state.town, c + 1, c)!, { owned: true, building: 'kelpFarm', level: 10 }); // 10 × 6% × 1.5 → capped 60%
     expect(e.townEffects()).toMatchObject({ kelpCost: .4, fishCost: 1 });
-    for (const dish of DISH_IDS) expect(e.dishCost(dish)).toBe(DISHES[dish].ingredient === 'kelp' ? Math.max(1, Math.round(DISHES[dish].cost * .4)) : DISHES[dish].cost);
+    for (const dish of DISH_IDS) expect(e.dishCost(dish)).toBe(DISHES[dish].ingredient === 'kelp' ? Math.max(1, Math.round(DISHES[dish].cost * .4 * 100) / 100) : DISHES[dish].cost);
     Object.assign(plotAt(e.state.town, c - 1, c)!, { owned: true, building: 'fishery', level: 5 });
     expect(e.townEffects().fishCost).toBeCloseTo(.55); // 5 × 6% × 1.5
-    expect(e.dishCost('lobster')).toBe(Math.round(20 * .55)); expect(e.dishCost('sushi')).toBe(Math.round(14 * .55)); expect(e.dishCost('jellySalad')).toBe(Math.round(18 * .4));
+    expect(e.dishCost('lobster')).toBeCloseTo(20 * .55); expect(e.dishCost('sushi')).toBeCloseTo(14 * .55); expect(e.dishCost('jellySalad')).toBeCloseTo(18 * .4);
   });
   it('tides cheapen dishes by ingredient too, stacking with the town', () => {
     const e = new RestaurantEngine();

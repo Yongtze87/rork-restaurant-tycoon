@@ -81,6 +81,8 @@ export const restaurantSchema = z.preprocess(migrateTutorial, z.object({
   /** Guided first session; `migrateTutorial` marks it done for saves that had dismissed the old welcome card. */
   tutorial: tutorialSchema.default(newTutorial),
   collections: collectionsSchema.default(freshCollections),
+  /** Fraction of a dollar of ingredients owed but not yet charged, so small discounts still add up. */
+  ingredientCarry: z.number().finite().min(0).max(1).default(0),
 }));
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
@@ -141,6 +143,6 @@ export function createRestaurant(): RestaurantState {
     ], guests: [], dirty: [], menu: createMenu(),
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(), tutorial: newTutorial(),
-    collections: freshCollections(),
+    collections: freshCollections(), ingredientCarry: 0,
   };
 }
