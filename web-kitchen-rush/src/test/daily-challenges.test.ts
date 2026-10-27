@@ -3,7 +3,8 @@ import { RestaurantEngine } from '@/management/engine';
 import { advanceDailyChallenges, challengeBonus, createDailyChallenges, isSpecialGuest } from '@/management/daily-challenges';
 import { createRestaurant, restaurantSchema, type DailyChallenge, type Guest } from '@/management/types';
 
-const challenge = (kind: DailyChallenge['kind'], target = 3): DailyChallenge => ({ day: 1, kind, target, progress: 0, reward: 50, rewarded: false });
+const challenge = (kind: DailyChallenge['kind'], target = 3, dish: DailyChallenge['dish'] = null): DailyChallenge => ({ day: 1, kind, dish, target, progress: 0, reward: 50, rewarded: false });
+const dishChallenge = (dish: NonNullable<DailyChallenge['dish']>, target = 3) => challenge('dish', target, dish);
 const meal = { dish: 'salad' as const, special: true, waiting: 20, price: 24 };
 function advance(e: RestaurantEngine, seconds: number): void { for (let i = 0; i < seconds * 10; i++) e.update(.1); }
 function finish(e: RestaurantEngine): void { const day = e.state.day; for (let i = 0; i < 2600 && e.state.day === day; i++) e.update(.1); }
@@ -23,12 +24,12 @@ describe('daily challenge generation', () => {
       boards.add(JSON.stringify(board.map(({ day: _, ...c }) => c)));
       expect(restaurantSchema.safeParse({ ...s, day, dailyChallenges: board }).success).toBe(true);
     }
-    expect(kinds.size).toBe(7); expect(boards.size).toBeGreaterThan(20); expect(JSON.stringify(s)).toBe(before);
+    expect(kinds.size).toBe(6); expect(boards.size).toBeGreaterThan(20); expect(JSON.stringify(s)).toBe(before);
     expect(createDailyChallenges(s)).toEqual(createDailyChallenges(s));
   });
   it.each(['salad', 'burger'] as const)('selects only cookable, enabled dishes after planning the %s menu', dish => {
     const e = new RestaurantEngine(); const other = dish === 'salad' ? 'burger' : 'salad'; e.setDish(other, false, 24);
-    expect(e.state.dailyChallenges).toEqual([]); e.open(); expect(e.state.dailyChallenges[1].kind).toBe(dish);
+    expect(e.state.dailyChallenges).toEqual([]); e.open(); expect(e.state.dailyChallenges[1]).toMatchObject({ kind: 'dish', dish });
     const board = structuredClone(e.state.dailyChallenges); expect(e.open()).toBeTruthy(); expect(e.state.dailyChallenges).toEqual(board);
   });
   it('scales currency goals to low prices, and excludes tips when the menu cannot produce them reliably', () => {
@@ -53,7 +54,7 @@ describe('daily challenge generation', () => {
 
 describe('committed service progress and one-time rewards', () => {
   it('counts matching dishes, stars, speed, sales and tips precisely and caps progress', () => {
-    const all: DailyChallenge[] = (['special', 'salad', 'burger', 'served', 'quick', 'revenue', 'tips'] as const).map(kind => challenge(kind, kind === 'revenue' ? 25 : 3));
+    const all: DailyChallenge[] = [challenge('special'), dishChallenge('salad'), dishChallenge('burger'), challenge('served'), challenge('quick'), challenge('revenue', 25), challenge('tips')];
     advanceDailyChallenges(all, meal, 2);
     expect(all.map(c => c.progress)).toEqual([1, 1, 0, 1, 1, 25, 2]);
     expect(challengeBonus(all)).toBe(50);
@@ -66,7 +67,7 @@ describe('committed service progress and one-time rewards', () => {
   });
   it('counts only first payments, credits and saves each bonus atomically, never as sales or guest receipts', () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open();
-    e.state.dailyChallenges = [challenge('served', 1), challenge('revenue', 10), challenge('salad', 20)];
+    e.state.dailyChallenges = [challenge('served', 1), challenge('revenue', 10), dishChallenge('salad', 20)];
     for (let i = 0; i < 800 && e.state.totals.served === 0; i++) e.update(.1);
     expect(challengeBonus(e.state.dailyChallenges)).toBe(100);
     expect(e.state.cash).toBe(1250 + e.state.totals.revenue + e.state.totals.tips - e.state.totals.ingredients + 100);
@@ -86,7 +87,7 @@ describe('committed service progress and one-time rewards', () => {
     e.pause(false); e.state.cash = 0; advance(e, 80); expect(e.state.totals.missed).toBeGreaterThan(0); expect(e.state.dailyChallenges.every(c => c.progress === 0)).toBe(true);
   });
   it('archives paid and expired objectives without including bonuses in service profit or carrying progress', () => {
-    const e = new RestaurantEngine(); e.open(); e.state.dailyChallenges = [challenge('served', 1), challenge('salad', 100), challenge('burger', 100)]; finish(e);
+    const e = new RestaurantEngine(); e.open(); e.state.dailyChallenges = [challenge('served', 1), dishChallenge('salad', 100), dishChallenge('burger', 100)]; finish(e);
     const report = structuredClone(e.state.history[0]); expect(challengeBonus(report.challenges)).toBe(50);
     expect(report.challenges[1].rewarded).toBe(false); expect(report.challenges[1].progress).toBeGreaterThan(0);
     expect(report.profit).toBe(report.revenue + report.tips - report.ingredients - report.wages - report.rent);
@@ -96,7 +97,7 @@ describe('committed service progress and one-time rewards', () => {
   it('closing immediately pays nothing and renovation waits to roll a menu-compatible board', () => {
     const e = new RestaurantEngine(); e.open(); e.closeEarly(); e.update(.1);
     expect(e.state.lifetimeChallengeBonus).toBe(0); expect(e.state.dailyChallenges).toEqual([]);
-    e.setDish('burger', false, 38); e.open(); expect(e.state.dailyChallenges[1].kind).toBe('salad');
+    e.setDish('burger', false, 38); e.open(); expect(e.state.dailyChallenges[1]).toMatchObject({ kind: 'dish', dish: 'salad' });
     e.reset(); expect(e.state.dailyChallenges).toEqual([]); expect(e.state.lifetimeChallengeBonus).toBe(0);
   });
 });

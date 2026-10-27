@@ -15,11 +15,11 @@ describe('town plots', () => {
   it('starts with only the restaurant plot and neutral effects', () => {
     const town = createTown();
     expect(town.plots.filter(p => p.owned)).toEqual([{ x: C, z: C, owned: true, building: 'restaurant', level: 1, job: null }]);
-    expect(townEffects(town)).toEqual({ saladCost: 1, burgerCost: 1, extraCrew: 0, arrivalBonus: 0, crewSpeed: 1 });
+    expect(townEffects(town)).toEqual({ kelpCost: 1, fishCost: 1, extraCrew: 0, arrivalBonus: 0, crewSpeed: 1 });
   });
   it('unlocks only plots touching the town, charging a growing price', () => {
     const { e } = rich();
-    expect(e.unlockPlot(0, 0)).toMatch(/next to your town/);
+    expect(e.unlockPlot(C + 2, C + 2)).toMatch(/next to your town/);
     const first = unlockCost(e.state.town); expect(e.unlockPlot(C + 1, C)).toBeNull();
     expect(e.state.cash).toBe(100_000 - first);
     expect(unlockCost(e.state.town)).toBeGreaterThan(first);
@@ -43,7 +43,7 @@ describe('construction time', () => {
     h.advance(1); reloaded.update(.1);
     expect(plotAt(reloaded.state.town, C + 1, C)!.job).toBeNull(); expect(reloaded.lastCompletion?.text).toBe('Kelp farm is built.');
     // Level 1 next to the restaurant: 4% × 1.5 = 6% cheaper.
-    expect(reloaded.townEffects().saladCost).toBeCloseTo(.94); expect(reloaded.dishCost('salad')).toBe(7);
+    expect(reloaded.townEffects().kelpCost).toBeCloseTo(.94); expect(reloaded.dishCost('salad')).toBe(7);
     expect(restaurantSchema.safeParse(reloaded.state).success).toBe(true);
   });
   it('finishes construction while the owner is away, even with the restaurant closed', async () => {
@@ -107,7 +107,7 @@ describe('town effects on the restaurant', () => {
   it('neighbours matter: producers and gardens are stronger next to the restaurant, gardens next to homes speed up crew', () => {
     const town = createTown(), set = (x: number, z: number, building: 'kelpFarm' | 'fishery' | 'garden' | 'homes', level: number) => Object.assign(plotAt(town, x, z)!, { owned: true, building, level });
     set(C + 1, C, 'kelpFarm', 5); set(0, 0, 'fishery', 5);
-    expect(townEffects(town).saladCost).toBeCloseTo(1 - 5 * .04 * 1.5); expect(townEffects(town).burgerCost).toBeCloseTo(1 - 5 * .04);
+    expect(townEffects(town).kelpCost).toBeCloseTo(1 - 5 * .04 * 1.5); expect(townEffects(town).fishCost).toBeCloseTo(1 - 5 * .04);
     set(C, C + 1, 'garden', 4); set(C, C + 2, 'homes', 6);
     const e = townEffects(town); expect(e.arrivalBonus).toBeCloseTo(4 * .03 * 1.5); expect(e.crewSpeed).toBeCloseTo(1.04); expect(e.extraCrew).toBe(2);
   });

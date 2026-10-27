@@ -1,4 +1,4 @@
-import { DISHES, comfort, type DailyChallenge, type Guest, type RestaurantState } from './types';
+import { DISHES, DISH_IDS, comfort, type DailyChallenge, type DishId, type Guest, type RestaurantState } from './types';
 
 /** Integer mixing keeps challenge rolls separate from the customer/order random stream. */
 function mix(value: number): number {
@@ -16,11 +16,11 @@ export function createDailyChallenges(state: RestaurantState): DailyChallenge[] 
   let seed = mix(state.seed ^ Math.imul(state.day, 104729));
   const roll = (count: number): number => { seed = mix(seed + 0x9e3779b9); return seed % count; };
   const tier = Math.min(2, Math.floor((state.day - 1) / 3));
-  const make = (kind: DailyChallenge['kind'], target: number, reward: number): DailyChallenge => ({ day: state.day, kind, target, reward, progress: 0, rewarded: false });
-  const available = (['salad', 'burger'] as const).filter(dish => state.menu[dish].enabled && state.furniture.some(f => f.kind === DISHES[dish].station));
+  const make = (kind: DailyChallenge['kind'], target: number, reward: number, dish: DishId | null = null): DailyChallenge => ({ day: state.day, kind, dish, target: Math.min(1000, target), reward, progress: 0, rewarded: false });
+  const available = DISH_IDS.filter(dish => state.menu[dish].enabled && state.furniture.some(f => f.kind === DISHES[dish].station));
   const challenges = [make('special', 6 + tier + roll(3), 65 + tier * 10)];
   const dish = available[roll(Math.max(1, available.length))];
-  challenges.push(dish ? make(dish, 5 + tier + roll(3), 50 + tier * 10) : make('served', 10 + tier + roll(3), 50 + tier * 10));
+  challenges.push(dish ? make('dish', 5 + tier + roll(3), 50 + tier * 10, dish) : make('served', 10 + tier + roll(3), 50 + tier * 10));
   const averagePrice = available.reduce((sum, item) => sum + state.menu[item].price, 0) / Math.max(1, available.length);
   const typicalTip = Math.round(averagePrice * (.04 + comfort(state) * .001) * .55);
   const kinds: DailyChallenge['kind'][] = ['quick', 'revenue', ...(typicalTip > 0 ? ['tips'] as const : []), ...(dish ? ['served'] as const : [])];
@@ -36,7 +36,7 @@ export function advanceDailyChallenges(challenges: DailyChallenge[], guest: Pick
   for (const challenge of challenges) {
     if (challenge.rewarded) continue;
     const increment = challenge.kind === 'special' ? Number(guest.special)
-      : challenge.kind === 'salad' || challenge.kind === 'burger' ? Number(guest.dish === challenge.kind)
+      : challenge.kind === 'dish' ? Number(guest.dish === challenge.dish)
       : challenge.kind === 'quick' ? Number(guest.waiting <= 25)
       : challenge.kind === 'revenue' ? guest.price + tip
       : challenge.kind === 'tips' ? tip : 1;
@@ -49,17 +49,22 @@ export function advanceDailyChallenges(challenges: DailyChallenge[], guest: Pick
 /** Bonuses are separate from service profit, both in current-day UI and immutable receipts. */
 export const challengeBonus = (challenges: readonly DailyChallenge[]): number => challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0);
 
+/** Titles by kind; a dish challenge's own title comes from `challengeTitle`. */
 export const challengeTitles: Record<DailyChallenge['kind'], string> = {
-  special: 'Star treatment', salad: 'Kelp lovers', burger: 'Off the vent', served: 'A full house', quick: 'Hot off the pass', revenue: 'Ring it up', tips: 'A little extra love',
+  special: 'Star treatment', dish: 'Chef’s choice', served: 'A full house', quick: 'Hot off the pass', revenue: 'Ring it up', tips: 'A little extra love',
 };
+const dishTitles: Partial<Record<DishId, string>> = { salad: 'Kelp lovers', burger: 'Off the vent' };
+export function challengeTitle(challenge: Pick<DailyChallenge, 'kind' | 'dish'>): string {
+  if (challenge.kind !== 'dish' || !challenge.dish) return challengeTitles[challenge.kind];
+  return dishTitles[challenge.dish] ?? `${DISHES[challenge.dish].name} fans`;
+}
 
 /** Human-readable objective shared by the board, receipt and accessibility labels. */
 export function challengeObjective(challenge: DailyChallenge): string {
   const n = challenge.target;
   switch (challenge.kind) {
     case 'special': return `Serve ${n} star guests`;
-    case 'salad': return `Sell ${n} kelp salads`;
-    case 'burger': return `Sell ${n} vent-seared fish cakes`;
+    case 'dish': return `Sell ${n} ${challenge.dish ? DISHES[challenge.dish].plural : 'dishes'}`;
     case 'served': return `Serve ${n} guests`;
     case 'quick': return `Serve ${n} meals within 25s of seating`;
     case 'revenue': return `Earn $${n} in sales + tips`;

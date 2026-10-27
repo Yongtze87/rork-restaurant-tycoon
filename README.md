@@ -37,14 +37,15 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - An explicit pause, renovation or too little startup cash stops offline work.
 
 ### Reef town
-- A 5×5 map of plots around the restaurant. Unlock neighbouring plots and choose what to build:
-  - **Kelp farm** and **fishery**: cheaper ingredients (50% stronger next to the restaurant)
+- A 9×9 map of plots around the restaurant. Unlock neighbouring plots and choose what to build:
+  - **Kelp farm** and **fishery**: cheaper kelp or fish dishes (50% stronger next to the restaurant)
   - **Mareen homes**: more crew slots
   - **Glow garden**: guests arrive more often; crew work faster next to homes
   - **Workshop**: all construction finishes faster
 - Buildings and the restaurant level up to 15, with a new look at levels 6 and 11.
 - Construction runs in real time, including while you are away: about a minute at first, hours at the top levels. One builder works at a time.
 - **Time skips:** Current charms (−15 min) and Tide charms (−1 h), earned from a daily gift, all three daily challenges and milestones. **Pearls** finish a job instantly and buy a second builder.
+- **Depth zones** are the long-term chapters. The middle 5×5 is the **Sunlit Shallows**; the next ring is the **Coral Reef**, the outer ring the **Twilight Zone**, and the dark drop-off around the town is the **Abyss**. Each zone needs reputation, buildings and cash (Coral Reef: 3.8★, 4 buildings, $3,000 · Twilight: 4.2★, 8 buildings, one at level 6, $9,000 · Abyss: 4.6★, 12 buildings, one at level 11, $25,000). Each zone opens two dishes and draws guests 5% more often; the Reef and Twilight also open their ring of plots.
 - The pearl shop lists real-money packs, but they can't be bought until a store and payment provider are chosen.
 
 ### Underwater atmosphere
@@ -152,6 +153,9 @@ Copy the printed sizes into `src/management/iso/sprites.ts` with each image's `s
 | Training | $180 × current level (max level 3) |
 | Kelp salad | $7 ingredients, fair price $24, 6 s, needs a kelp counter |
 | Vent-seared fish cake | $12 ingredients, fair price $38, 10 s, needs a vent grill |
+| Coral Reef dishes | Sea-grape sushi ($14 / $44 / 8 s, counter) · Grilled reef lobster ($20 / $58 / 12 s, grill) |
+| Twilight dishes | Moon-jelly salad ($18 / $56 / 10 s, counter) · Glow-squid skewers ($26 / $72 / 14 s, grill) |
+| Abyss dishes | Vent pearl dumplings ($28 / $84 / 13 s, counter) · Abyssal ink noodles ($36 / $100 / 17 s, grill) |
 | Furniture | Table $180 · Kelp counter $240 · Vent grill $360 · Anemone $65 · Kelp screen $80 · Lantern $110 |
 | East grotto | $900, unlocks after 3 service days |
 | Recovery loan | $600 at 0% when cash < $200, repaid at $30 per day |

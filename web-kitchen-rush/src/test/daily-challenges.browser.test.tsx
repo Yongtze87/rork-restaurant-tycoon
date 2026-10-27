@@ -35,9 +35,9 @@ it.each([320, 390, 1280])('opens daily challenges at %spx without overflow or pa
 it('shows earned payouts and archives progress without a collect action or paying twice', async () => {
   const screen = await render(<ManagementGame />); restaurant.open();
   restaurant.state.dailyChallenges = [
-    { day: 1, kind: 'served', target: 1, progress: 0, reward: 50, rewarded: false },
-    { day: 1, kind: 'salad', target: 100, progress: 0, reward: 60, rewarded: false },
-    { day: 1, kind: 'burger', target: 100, progress: 0, reward: 65, rewarded: false },
+    { day: 1, kind: 'served', dish: null, target: 1, progress: 0, reward: 50, rewarded: false },
+    { day: 1, kind: 'dish', dish: 'salad', target: 100, progress: 0, reward: 60, rewarded: false },
+    { day: 1, kind: 'dish', dish: 'burger', target: 100, progress: 0, reward: 65, rewarded: false },
   ];
   for (let i = 0; i < 800 && !restaurant.state.lifetimeChallengeBonus; i++) restaurant.update(.1);
   await screen.getByRole('button', { name: 'View daily challenges' }).click();
@@ -61,14 +61,16 @@ it('explains migration when an old service has no board', async () => {
 });
 it('uses static readable completed, expired and zero-progress states', async () => {
   const challenges: DailyChallenge[] = [
-    { day: 1, kind: 'special', target: 10, progress: 10, rewarded: true, reward: 85 },
-    { day: 1, kind: 'revenue', target: 350, progress: 201, rewarded: false, reward: 75 },
-    { day: 1, kind: 'salad', target: 8, progress: 0, rewarded: false, reward: 70 },
+    { day: 1, kind: 'special', dish: null, target: 10, progress: 10, rewarded: true, reward: 85 },
+    { day: 1, kind: 'revenue', dish: null, target: 350, progress: 201, rewarded: false, reward: 75 },
+    { day: 1, kind: 'dish', dish: 'sushi', target: 8, progress: 0, rewarded: false, reward: 70 },
   ];
   const screen = await render(<DailyChallenges challenges={challenges} day={1} archived />);
   await expect.element(screen.getByRole('progressbar', { name: 'Serve 10 star guests' })).toHaveValue(10);
   await expect.element(screen.getByText('Paid +$85', { exact: true })).toBeVisible();
   await expect.element(screen.getByText('$201 / $350', { exact: true })).toBeVisible();
+  await expect.element(screen.getByRole('progressbar', { name: 'Sell 8 plates of sea-grape sushi' })).toHaveValue(0);
+  await expect.element(screen.getByRole('heading', { name: 'Sea-grape sushi fans' })).toBeVisible();
   expect(screen.container.querySelectorAll('[class*="animate-"]').length).toBe(0);
 });
 it('identifies a star guest accessibly inside the existing pointer-transparent satisfaction meter', async () => {

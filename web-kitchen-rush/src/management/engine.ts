@@ -1,9 +1,10 @@
 import { accessPoints, findPath, layoutError, placementError, seatPoint } from './layout';
-import { CATALOG, DAY_LENGTH, DISHES, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshTotals, guestPatienceSeconds, restaurantSchema, staffWage, width, type Dish, type Furniture, type Guest, type Point, type RestaurantState, type Role, type Staff } from './types';
+import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshTotals, guestPatienceSeconds, restaurantSchema, staffWage, width, type Dish, type Furniture, type Guest, type Point, type RestaurantState, type Role, type Staff } from './types';
 
-import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitles } from './daily-challenges';
+import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, canUnlock, completeJobs, dayKey, finishCost, jobSeconds, plotAt, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
+import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, completeJobs, dayKey, finishCost, jobSeconds, plotAt, plotLockReason, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 
 export const GOALS = [
   { id: 'first-service', title: 'A warm welcome', text: 'Serve your first 5 guests', target: 5, reward: 180, value: (s: RestaurantState) => s.lifetimeServed },
@@ -195,8 +196,10 @@ export class RestaurantEngine {
   }
   setDish(dish: Dish, enabled: boolean, price: number): string | null {
     if (this.state.phase !== 'planning') return 'Set tomorrow’s menu after closing.';
+    const zone = DISHES[dish].zone;
+    if (!hasZone(this.state.town, zone)) return `Reach ${ZONES[zone].place} to cook ${DISHES[dish].name.toLowerCase()}.`;
     if (!enabled && !Object.entries(this.state.menu).some(([key, value]) => key !== dish && value.enabled)) return 'Keep at least one dish on the menu.';
-    this.state.menu[dish] = { enabled, price: Math.max(10, Math.min(60, Math.round(price))) }; this.changed(); return null;
+    this.state.menu[dish] = { enabled, price: Math.max(MIN_PRICE, Math.min(MAX_PRICE, Math.round(price))) }; this.changed(); return null;
   }
   expand(): string | null {
     if (this.state.phase !== 'planning') return 'Build the extension before opening.';
@@ -222,7 +225,7 @@ export class RestaurantEngine {
   readiness(): string[] {
     const errors: string[] = [];
     if (!capacity(this.state)) errors.push('Build at least one coral table.');
-    for (const dish of ['salad', 'burger'] as const) if (this.state.menu[dish].enabled && !this.state.furniture.some(f => f.kind === DISHES[dish].station)) errors.push(`Add a ${DISHES[dish].station === 'prep' ? 'kelp counter' : 'vent grill'} for ${DISHES[dish].name.toLowerCase()}, or remove it from the menu.`);
+    for (const dish of DISH_IDS) if (this.state.menu[dish].enabled && !this.state.furniture.some(f => f.kind === DISHES[dish].station)) errors.push(`Add a ${DISHES[dish].station === 'prep' ? 'kelp counter' : 'vent grill'} for ${DISHES[dish].name.toLowerCase()}, or remove it from the menu.`);
     if (this.state.cash < this.operatingCost() + 30) errors.push(`Keep $${this.operatingCost() + 30} for wages, rent and starting ingredients.`);
     const layout = layoutError(this.state.furniture, width(this.state)); if (layout) errors.push(layout);
     return errors;
@@ -257,7 +260,7 @@ export class RestaurantEngine {
       if (!selected && !s.dirty.includes(`${table.id}:${seat}`) && !s.guests.some(g => g.tableId === table.id && g.seat === seat && g.stage !== 'leaving')) selected = { table, seat };
     }
     if (!selected) { s.totals.missed++; this.event = 'A guest found no free seat. More tables or faster clearing would help.'; return; }
-    const dishes = (['salad', 'burger'] as const).filter(dish => s.menu[dish].enabled);
+    const dishes = DISH_IDS.filter(dish => s.menu[dish].enabled);
     const dish = dishes[Math.floor(this.random() * dishes.length)]; if (!dish) return;
     const price = s.menu[dish].price;
     if (this.random() < Math.max(0, (price / DISHES[dish].fair - 1) * .7)) { s.totals.missed++; this.event = 'A guest thought the menu was too expensive.'; return; }
@@ -349,7 +352,7 @@ export class RestaurantEngine {
           for (const challenge of advanceDailyChallenges(s.dailyChallenges, guest, tip)) {
             s.cash += challenge.reward; s.lifetimeChallengeBonus += challenge.reward;
             this.recordIncome(challenge.reward, 'challenge');
-            this.event = `Daily challenge complete: ${challengeTitles[challenge.kind]}. +$${challenge.reward} automatically added.`;
+            this.event = `Daily challenge complete: ${challengeTitle(challenge)}. +$${challenge.reward} automatically added.`;
             if (!this.catchingUp) this.rewardSavePending = true;
             if (s.dailyChallenges.length === 3 && s.dailyChallenges.every(c => c.rewarded)) { s.town.charms.current++; s.town.pearls++; this.event = 'All three daily challenges done: a Current charm and a pearl are yours.'; }
           }
@@ -361,12 +364,12 @@ export class RestaurantEngine {
   }
   /** Town effects, cached until a building changes. */
   townEffects(): TownEffects {
-    const key = JSON.stringify(this.state.town.plots.map(p => [p.building, p.level, p.job?.kind ?? '']));
+    let key = this.state.town.zones.join(); for (const p of this.state.town.plots) if (p.building) key += `|${p.x},${p.z},${p.building},${p.level},${p.job?.kind ?? ''}`;
     if (!this.effects || key !== this.effectsKey) { this.effects = townEffects(this.state.town); this.effectsKey = key; }
     return this.effects;
   }
   crewLimit(): number { return 6 + this.townEffects().extraCrew; }
-  dishCost(dish: Dish): number { return Math.max(1, Math.round(DISHES[dish].cost * (dish === 'salad' ? this.townEffects().saladCost : this.townEffects().burgerCost))); }
+  dishCost(dish: Dish): number { const effects = this.townEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (DISHES[dish].ingredient === 'kelp' ? effects.kelpCost : effects.fishCost))); }
   /** Finish construction whose end time has passed (wall-clock time, also while away). */
   private tickTown(at: number): void {
     const done = completeJobs(this.state.town, at); if (!done.length) return;
@@ -381,10 +384,16 @@ export class RestaurantEngine {
   private plot(x: number, z: number) { return plotAt(this.state.town, x, z); }
   unlockPlot(x: number, z: number): string | null {
     const town = this.state.town, plot = this.plot(x, z); if (!plot) return 'Choose a plot first.';
-    if (plot.owned) return 'You already own this plot.';
-    if (!canUnlock(town, plot)) return 'Unlock a plot next to your town first.';
+    const locked = plotLockReason(town, plot); if (locked) return locked;
     const cost = unlockCost(town); if (this.state.cash < cost) return `Unlocking costs ${cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.`;
     this.state.cash -= cost; plot.owned = true; this.changed('New plot unlocked. Choose what to build.'); return null;
+  }
+  /** Reach a deeper zone: opens its ring of plots and its dishes once every requirement is met. */
+  unlockZone(id: ZoneId): string | null {
+    const info = ZONES[id]; if (!info) return 'Choose a zone first.';
+    const error = zoneError(this.state, id); if (error) return error;
+    this.state.cash -= info.price; this.state.town.zones.push(id);
+    this.changed(`You reached ${info.place}. New dishes are ready for the menu${id === 'abyss' ? '' : ', and new plots for your town'}.`); return null;
   }
   build(x: number, z: number, kind: BuildingKind): string | null {
     const town = this.state.town, plot = this.plot(x, z);

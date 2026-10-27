@@ -81,11 +81,32 @@ export function drawStool(ctx: Ctx): void {
   ctx.fillStyle = '#F2C9A5'; ctx.beginPath(); ctx.ellipse(0, -10, 11, 6, 0, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#D9A580'; ctx.lineWidth = 1; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(i * 4.5, -6); ctx.stroke(); }
 }
+const dot = (ctx: Ctx, x: number, y: number, r: number, color: string): void => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+const blob = (ctx: Ctx, x: number, y: number, rx: number, ry: number, color: string, rotation = 0): void => { ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rotation, 0, Math.PI * 2); ctx.fill(); };
+/** One simple, recognisable plate per dish. Deeper dishes sit on darker plates. */
 export function drawMeal(ctx: Ctx, dish: Dish | 'dirty'): void {
-  ctx.fillStyle = dish === 'dirty' ? '#BFB7A6' : '#FFFFFF'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-  if (dish === 'salad') { ctx.fillStyle = '#4FA45A'; for (const [x, y] of [[-3, -1], [2, -2], [0, 1], [4, 0]]) { ctx.beginPath(); ctx.arc(x, y, 2.4, 0, Math.PI * 2); ctx.fill(); } ctx.fillStyle = '#7E3F8F'; ctx.beginPath(); ctx.arc(-1, -1, 1.3, 0, Math.PI * 2); ctx.fill(); }
-  else if (dish === 'burger') { ctx.fillStyle = '#D9953C'; ctx.beginPath(); ctx.ellipse(0, -1.5, 5.5, 3.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#F3C46A'; ctx.beginPath(); ctx.ellipse(-1, -2.5, 3, 1.4, 0, 0, Math.PI * 2); ctx.fill(); }
-  else { ctx.fillStyle = '#8E8676'; ctx.beginPath(); ctx.arc(-2, 0, .9, 0, Math.PI * 2); ctx.arc(2, -1, .8, 0, Math.PI * 2); ctx.fill(); }
+  const plate = dish === 'dirty' ? '#BFB7A6' : dish === 'pearlDumplings' || dish === 'inkNoodles' ? '#3A3550' : dish === 'jellySalad' || dish === 'squidSkewers' ? '#C9D6F2' : '#FFFFFF';
+  blob(ctx, 0, 0, 9, 4.5, plate);
+  if (dish === 'salad') { for (const [x, y] of [[-3, -1], [2, -2], [0, 1], [4, 0]]) dot(ctx, x, y, 2.4, '#4FA45A'); dot(ctx, -1, -1, 1.3, '#7E3F8F'); }
+  else if (dish === 'burger') { blob(ctx, 0, -1.5, 5.5, 3.2, '#D9953C'); blob(ctx, -1, -2.5, 3, 1.4, '#F3C46A'); }
+  else if (dish === 'sushi') { for (const x of [-3.5, 3.5]) { blob(ctx, x, -1, 3.2, 2.2, '#F7F3EA'); blob(ctx, x, -2.4, 2.8, 1.2, '#F08A6E'); dot(ctx, x, -3.4, .9, '#5FB86A'); } }
+  else if (dish === 'lobster') {
+    blob(ctx, 0, -1.5, 5, 2.6, '#D9483B'); blob(ctx, -.5, -2.4, 3, 1.1, '#F2735E');
+    for (const side of [-1, 1]) dot(ctx, side * 6, -3, 1.8, '#C23A2F');
+  }
+  else if (dish === 'jellySalad') { for (const [x, y] of [[-3, 0], [3, -.5]]) dot(ctx, x, y, 2, '#3E8E4E'); ctx.globalAlpha = .75; blob(ctx, 0, -2, 5, 3, '#BFE9FF'); ctx.globalAlpha = 1; dot(ctx, -1.5, -3, .9, '#FFFFFF'); }
+  else if (dish === 'squidSkewers') {
+    ctx.strokeStyle = '#B08A5A'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-7, 1); ctx.lineTo(7, -3); ctx.moveTo(-7, 3); ctx.lineTo(7, -1); ctx.stroke();
+    for (const [x, y] of [[-3.5, -.2], [0, -1.2], [3.5, -2.2], [-3.5, 1.8], [0, .8], [3.5, -.2]]) dot(ctx, x, y, 1.6, '#9C7BE0');
+    dot(ctx, 0, -1.2, .7, '#E3F7FF');
+  }
+  else if (dish === 'pearlDumplings') { for (const [x, y] of [[-3.5, -.5], [3.5, -.5], [0, -2.5]]) { blob(ctx, x, y, 2.8, 2.1, '#F2EEE6'); dot(ctx, x - .8, y - .8, .7, '#BDF4FF'); } }
+  else if (dish === 'inkNoodles') {
+    blob(ctx, 0, -1.2, 6, 3, '#14121E');
+    ctx.strokeStyle = '#3B3656'; ctx.lineWidth = .8; for (const r of [1.5, 3, 4.5]) { ctx.beginPath(); ctx.ellipse(0, -1.2, r, r / 2, 0, 0, Math.PI * 1.6); ctx.stroke(); }
+    for (const [x, y] of [[-2.5, -2], [2, -.5], [3.5, -2.5]]) dot(ctx, x, y, .7, '#4DF0FF');
+  }
+  else { dot(ctx, -2, 0, .9, '#8E8676'); dot(ctx, 2, -1, .8, '#8E8676'); }
 }
 
 /** Mareen palettes: fully human, with small fin-like ears. */

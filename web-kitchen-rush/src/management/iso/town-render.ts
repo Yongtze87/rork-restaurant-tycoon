@@ -1,4 +1,5 @@
-import { TOWN_SIZE, canUnlock, lookFor, unlockCost, type Town } from '../town';
+import { TOWN_SIZE, canUnlock, lookFor, plotZone, unlockCost, type Town } from '../town';
+import { ZONES, hasZone, type ZoneId } from '../zones';
 import type { Ambience } from './ambience';
 import { depthOf, toScreen, type View } from './projection';
 import { at, drawDecor, drawParticles, drawWater, floorPolygon, type Decor } from './render';
@@ -22,6 +23,14 @@ const decor: Decor[] = (() => {
   return list;
 })();
 
+/** Seabed colour per depth zone. The Abyss is the dark drop-off around the town. */
+const ZONE_GROUND: Record<ZoneId, string> = { shallows: '#D9C49A', reef: '#E0A184', twilight: '#2F4C7C', abyss: '#12101C' };
+const LOCKED_DIM = 'rgba(8,10,26,.5)';
+/** Where each locked zone's name is drawn once: a corner of its ring, or beside the town for the Abyss. */
+const C = (TOWN_SIZE - 1) / 2;
+const ZONE_LABEL: Record<Exclude<ZoneId, 'shallows'>, { x: number; z: number }> = { reef: { x: C - 3, z: C + 3 }, twilight: { x: C + 4, z: C + 4 }, abyss: { x: -1.4, z: C } };
+const abyssGlow = decor.filter((_, i) => i % 3 === 0).map((d, i) => ({ x: d.x + .3, z: d.z - .2, phase: i * 1.7 }));
+
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
@@ -32,10 +41,21 @@ export function formatDuration(ms: number): string {
 export function renderTown(ctx: Ctx, f: TownFrame): void {
   const { town, view, time, now, reduced, selected } = f, t = reduced ? 0 : time, price = unlockCost(town);
   drawWater(ctx, f);
-  floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fillStyle = '#D9C49A'; ctx.fill();
+  // Zone ground: the Abyss surrounds the grid, each ring of plots takes its zone's colour.
+  const abyss = hasZone(town, 'abyss');
+  floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fillStyle = ZONE_GROUND.abyss; ctx.fill();
+  for (const g of abyssGlow) {
+    const p = toScreen(view, g.x, g.z), r = 12 * view.scale, a = (abyss ? .5 : .12) * (.7 + .3 * Math.sin(t * 1.3 + g.phase));
+    const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r); glow.addColorStop(0, `rgba(77,240,255,${a})`); glow.addColorStop(1, 'rgba(77,240,255,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  if (!abyss) { floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fillStyle = LOCKED_DIM; ctx.fill(); }
+  for (const plot of town.plots) { floorPolygon(ctx, view, plot.x - .5, plot.z - .5, plot.x + .5, plot.z + .5); ctx.fillStyle = ZONE_GROUND[plotZone(plot)]; ctx.fill(); }
   const c = toScreen(view, (TOWN_SIZE - 1) / 2, (TOWN_SIZE - 1) / 2), r = (TOWN_SIZE + MARGIN * 2) * 64 * .62 * view.scale;
   const fog = ctx.createRadialGradient(c.x, c.y, r * .35, c.x, c.y, r); fog.addColorStop(0, 'rgba(42,143,176,0)'); fog.addColorStop(1, 'rgba(18,88,122,.95)');
   ctx.fillStyle = fog; floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fill();
+  // Locked rings are dimmed until the player reaches their zone.
+  for (const plot of town.plots) if (!hasZone(town, plotZone(plot))) { floorPolygon(ctx, view, plot.x - .5, plot.z - .5, plot.x + .5, plot.z + .5); ctx.fillStyle = LOCKED_DIM; ctx.fill(); }
   // Plots: owned are paved, unlockable are outlined with their price, the rest stay wild.
   for (const plot of town.plots) {
     const open = canUnlock(town, plot), x0 = plot.x - .5 + GAP, z0 = plot.z - .5 + GAP, x1 = plot.x + .5 - GAP, z1 = plot.z + .5 - GAP;
@@ -73,6 +93,14 @@ export function renderTown(ctx: Ctx, f: TownFrame): void {
     } else if (plot.owned) {
       ctx.fillStyle = 'rgba(18,15,46,.6)'; ctx.font = `700 ${Math.max(8, 8 * s)}px Quicksand, sans-serif`; ctx.fillText('Empty plot', p.x, p.y);
     }
+  }
+  for (const [id, spot] of Object.entries(ZONE_LABEL) as [Exclude<ZoneId, 'shallows'>, { x: number; z: number }][]) {
+    if (hasZone(town, id)) continue;
+    const p = toScreen(view, spot.x, spot.z), s = view.scale, label = `${ZONES[id].name} · locked`;
+    ctx.font = `700 ${Math.max(9, 11 * s)}px "Baloo 2", sans-serif`;
+    const w = ctx.measureText(label).width + 12 * Math.max(.8, s);
+    ctx.fillStyle = 'rgba(18,15,46,.8)'; ctx.beginPath(); ctx.roundRect(p.x - w / 2, p.y - 9 * Math.max(.8, s), w, 18 * Math.max(.8, s), 9 * Math.max(.8, s)); ctx.fill();
+    ctx.fillStyle = 'rgba(233,230,255,.85)'; ctx.fillText(label, p.x, p.y + .5);
   }
   drawParticles(ctx, f);
 }

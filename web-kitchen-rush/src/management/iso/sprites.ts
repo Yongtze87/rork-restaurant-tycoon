@@ -1,4 +1,4 @@
-import type { FurnitureKind, Guest, Role } from '../types';
+import { DISH_IDS, type DishId, type FurnitureKind, type Guest, type Role } from '../types';
 import type { BuildingKind } from '../town';
 
 /**
@@ -17,7 +17,7 @@ export type SpriteKey =
   | 'furniture.table.2' | 'furniture.table.3'
   | `guest.${Look}.${'front' | 'back'}`
   | `staff.${Role}.${'front' | 'back'}`
-  | 'meal.salad' | 'meal.burger' | 'meal.dirty'
+  | `meal.${DishId}` | 'meal.dirty'
   | `building.${BuildingKind}.${1 | 2 | 3}`;
 
 const furniture = (w: number, h: number, ay: number): SpriteSlot => ({ w, h, ax: w / 2, ay });
@@ -25,6 +25,7 @@ const person: SpriteSlot = { w: 48, h: 64, ax: 24, ay: 60 };
 const meal: SpriteSlot = { w: 24, h: 16, ax: 12, ay: 10 };
 // Town buildings: one plot is 64 art px wide; tall looks reach about 80 px above the ground.
 const building: SpriteSlot = { w: 80, h: 96, ax: 40, ay: 84 };
+const mealSlots = Object.fromEntries(DISH_IDS.map(dish => [`meal.${dish}`, meal])) as Record<`meal.${DishId}`, SpriteSlot>;
 const buildingSlots = Object.fromEntries((['restaurant', 'kelpFarm', 'fishery', 'homes', 'garden', 'workshop'] as const).flatMap(kind => [1, 2, 3].map(look => [`building.${kind}.${look}`, building]))) as Record<`building.${BuildingKind}.${1 | 2 | 3}`, SpriteSlot>;
 
 export const SPRITES: Record<SpriteKey, SpriteSlot> = {
@@ -38,7 +39,7 @@ export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   'guest.coral.front': person, 'guest.coral.back': person, 'guest.pearl.front': person, 'guest.pearl.back': person,
   'guest.lagoon.front': person, 'guest.lagoon.back': person, 'guest.dusk.front': person, 'guest.dusk.back': person,
   'staff.chef.front': person, 'staff.chef.back': person, 'staff.server.front': person, 'staff.server.back': person,
-  'meal.salad': meal, 'meal.burger': meal, 'meal.dirty': meal,
+  ...mealSlots, 'meal.dirty': meal,
   ...buildingSlots,
 };
 

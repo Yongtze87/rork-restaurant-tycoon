@@ -14,7 +14,7 @@ describe('weekly revenue projection', () => {
     expect(revenueAxisMax(week)).toBeGreaterThan(0);
   });
   it('groups by game-day boundaries and counts only saved sales and tips', () => {
-    const history = receipts(10); history[0].challenges = [{ day: 1, kind: 'served', target: 1, progress: 1, rewarded: true, reward: 85 }];
+    const history = receipts(10); history[0].challenges = [{ day: 1, kind: 'served', dish: null, target: 1, progress: 1, rewarded: true, reward: 85 }];
     history[0].debtPayment = 30; history[0].profit = -999;
     const [first, second] = buildRevenueWeeks(history);
     expect(first).toMatchObject({ start: 1, end: 7, sales: 700, tips: 70, total: 770, count: 7 });
