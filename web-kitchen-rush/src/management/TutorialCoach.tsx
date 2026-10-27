@@ -8,7 +8,7 @@ import type { Panel } from './Panels';
 import type { PlotRef } from './TownPanel';
 
 /** What the shell is showing, so a step can point at the next control to tap. */
-export interface TutorialView { panel: Panel | null; view: 'restaurant' | 'town'; plot: PlotRef | null; placing: boolean; inspecting: boolean; capitalWarning: boolean }
+export interface TutorialView { panel: Panel | null; view: 'restaurant' | 'town'; plot: PlotRef | null; placing: boolean; inspecting: boolean; capitalWarning: boolean; /** Shown inside an open menu window instead of over the scene. */ docked?: boolean }
 interface Guide { title: string; text: string; targets: string[]; action?: { label: string; run: () => void } }
 
 const next = (step: TutorialStep) => () => restaurant.tutorialTo(TUTORIAL_STEPS.indexOf(step) + 1);
@@ -27,11 +27,11 @@ function guide(step: TutorialStep, ui: TutorialView): Guide {
       ? { text: 'These are your dishes and prices. Stay near the suggested price and guests won’t walk away.', targets: [], action: { label: 'Looks good', run: next('menu') } }
       : { text: 'Tap Menu to see what your chefs cook tonight.', targets: ['menu-tab'] } };
     case 'open': return { title: 'Open the doors', ...s.phase === 'planning'
-      ? { text: 'Tap Open restaurant. Your crew cooks, serves and cleans on their own.', targets: ['open-restaurant'] }
+      ? { text: 'Tap Open. From now on your restaurant stays open, even while you build, hire or change the menu.', targets: ['open-restaurant'] }
       : { text: 'Your first guest is on the way. Watch them sit, order and get served.', targets: [] } };
     case 'plot': return { title: 'Grow your town', ...!inTown ? townTab('Your first guest is served! Now tap Town to see the reef around you.')
       : selected && !selected.owned ? { text: 'Tap Unlock to claim this plot for your town.', targets: ['unlock-plot'] }
-      : { text: 'Tap a plot next to your restaurant to unlock it.', targets: ['plot-locked'] } };
+      : { text: 'Tap a plot to unlock it, on the map or in the row below.', targets: ['plot-locked'] } };
     case 'build': return { title: 'Build something', ...!inTown ? townTab('Tap Town to choose a building for your new plot.')
       : selected?.owned && !selected.building ? { text: 'Pick any building. Each one helps your restaurant in its own way.', targets: ['build-building'] }
       : { text: 'Tap your empty plot to choose a building.', targets: ['plot-empty'] } };
@@ -45,9 +45,10 @@ function guide(step: TutorialStep, ui: TutorialView): Guide {
 }
 
 /** Ring the controls a step points at. Only changed elements are touched, so the pulse doesn't restart every frame. */
-function useHighlight(targets: string[]): void {
+function useHighlight(targets: string[], off = false): void {
   const key = targets.join();
   useEffect(() => {
+    if (off) return;
     const wanted = new Set(targets.map(id => document.querySelector(`[data-tutorial="${id}"]:not(:disabled)`) ?? document.querySelector(`[data-tutorial="${id}"]`)).filter((el): el is Element => Boolean(el)));
     document.querySelectorAll('[data-tutorial-highlight]').forEach(el => { if (!wanted.has(el)) el.removeAttribute('data-tutorial-highlight'); });
     wanted.forEach(el => {
@@ -58,7 +59,7 @@ function useHighlight(targets: string[]): void {
       if (box) { const outer = box.getBoundingClientRect(), inner = el.getBoundingClientRect(); if (inner.top < outer.top || inner.bottom > outer.bottom) box.scrollTop += inner.top - outer.top - 16; }
     });
   });
-  useEffect(() => () => document.querySelectorAll('[data-tutorial-highlight]').forEach(el => el.removeAttribute('data-tutorial-highlight')), [key]);
+  useEffect(() => () => { if (!off) document.querySelectorAll('[data-tutorial-highlight]').forEach(el => el.removeAttribute('data-tutorial-highlight')); }, [key, off]);
 }
 
 /** A small, skippable coach card. It never blocks the game: no overlay, no focus trap, service keeps running. */
@@ -66,7 +67,8 @@ export function TutorialCoach(ui: TutorialView) {
   useSyncExternalStore(restaurant.subscribe, restaurant.getSnapshot);
   const index = currentStep(restaurant.state), step = index === null ? null : TUTORIAL_STEPS[index];
   const info = step ? guide(step, ui) : null;
-  useHighlight(info?.targets ?? []);
+  // Only the coach over the scene rings controls; a copy docked in a window just shows the words.
+  useHighlight(info?.targets ?? [], ui.docked);
   // Save progress the simulation already shows (e.g. a table placed early) so a reload resumes here.
   useEffect(() => { if (index !== null && index > restaurant.state.tutorial.step) restaurant.tutorialTo(index); }, [index]);
   // The menu step is about looking: closing the menu after opening it also counts.
@@ -76,7 +78,7 @@ export function TutorialCoach(ui: TutorialView) {
     if (ui.panel === 'menu') sawMenu.current = true; else if (sawMenu.current) next('menu')();
   }, [step, ui.panel]);
   if (index === null || !step || !info) return null;
-  return <section aria-label="Tutorial" data-testid="tutorial" data-step={step} className="paper pointer-events-auto absolute left-2 right-[56px] top-2 z-[35] p-2.5 sm:left-3 sm:right-auto sm:w-[280px] sm:p-3">
+  return <section aria-label="Tutorial" data-testid={ui.docked ? "tutorial-docked" : "tutorial"} data-step={step} className={ui.docked ? 'rounded-xl border border-teal/35 bg-teal/5 p-2.5' : 'paper pointer-events-auto absolute left-2 right-[56px] top-2 z-[35] p-2.5 sm:left-3 sm:right-auto sm:w-[280px] sm:p-3'}>
     <div className="flex items-center justify-between gap-2">
       <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-teal"><Shell size={13} aria-hidden="true" />Getting started</span>
       <button type="button" onClick={() => restaurant.welcome()} className="-mr-1 min-h-11 px-1 text-xs font-bold text-ink/65 underline-offset-2 hover:text-ink hover:underline">Skip tutorial</button>

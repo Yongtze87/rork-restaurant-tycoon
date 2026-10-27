@@ -18,7 +18,8 @@ it.each([320, 1280])('badges the Ledger when rewards are ready and collects them
   await expect.element(screen.getByTestId('ledger-badge')).toHaveTextContent('2');
   await expect.element(ledger).toHaveAccessibleDescription('2 rewards to collect');
   await ledger.click();
-  await screen.getByRole('button', { name: 'Collection: 0 of 63 rewards earned, 2 ready' }).click();
+  await screen.getByRole('tab', { name: /Collection/ }).click();
+  await expect.element(screen.getByRole('tab', { name: /Collection/ })).toHaveTextContent('2');
   const dishes = screen.getByRole('region', { name: 'Dish mastery' }), salad = dishes.getByRole('group', { name: 'Kelp salad · Bronze' });
   await expect.element(salad).toHaveTextContent('10/10');
   await expect.element(dishes.getByRole('group', { name: 'Vent-seared fish cake · Bronze' })).toHaveTextContent('0/10');
@@ -35,6 +36,7 @@ it.each([320, 1280])('badges the Ledger when rewards are ready and collects them
   expect(restaurant.state.town.pearls).toBe(pearls + 18); expect(restaurant.state.collections.claimed).toEqual(['dish-salad-bronze', 'zone-reef']);
   await expect.element(screen.getByRole('region', { name: 'Explorer' }).getByRole('group', { name: 'Twilight Zone' })).toHaveTextContent('Tier 2 of 3');
   await expect.element(screen.getByTestId('ledger-badge')).not.toBeInTheDocument();
+  await screen.getByRole('button', { name: 'Close', exact: true }).click();
   await expect.element(screen.getByRole('button', { name: 'Ledger', exact: true })).not.toHaveAccessibleDescription('2 rewards to collect');
 });
 
@@ -42,10 +44,11 @@ it('shows a finished chain as collected and keeps the overview with milestones',
   const screen = await render(<ManagementGame />);
   restaurant.state.town.zones.push('reef', 'twilight', 'abyss'); restaurant.state.collections.claimed.push('zone-reef', 'zone-twilight', 'zone-abyss'); restaurant.notify();
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
-  await expect.element(screen.getByRole('heading', { name: 'Little milestones' })).toBeVisible();
-  await screen.getByRole('button', { name: 'Collection: 3 of 63 rewards earned' }).click();
+  await screen.getByRole('tab', { name: 'Milestones' }).click();
+  await expect.element(screen.getByRole('region', { name: 'Little milestones' })).toBeVisible();
+  await screen.getByRole('tab', { name: /Collection/ }).click();
   const abyss = screen.getByRole('region', { name: 'Explorer' }).getByRole('group', { name: 'Abyss' });
   await expect.element(abyss).toHaveTextContent('Collected'); await expect.element(abyss.getByRole('button')).not.toBeInTheDocument();
-  await screen.getByRole('button', { name: 'Back to ledger' }).click();
-  await expect.element(screen.getByRole('heading', { name: 'Little milestones' })).toBeVisible();
+  await screen.getByRole('tab', { name: 'Milestones' }).click();
+  await expect.element(screen.getByRole('region', { name: 'Little milestones' })).toBeVisible();
 });

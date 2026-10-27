@@ -143,10 +143,10 @@ describe('exact ingredient costs and the closing reserve', () => {
     const ratio = perSalad(farmed) / perSalad(plain); expect(ratio).toBeLessThan(.98); expect(ratio).toBeGreaterThan(.88);
     expect(Number.isInteger(farmed.state.cash)).toBe(true); expect(farmed.state.ingredientCarry).toBeGreaterThanOrEqual(0); expect(farmed.state.ingredientCarry).toBeLessThan(1);
   });
-  it("keeps tonight's wages and rent when buying in town during service", () => {
+  it("flags, but does not block, town spending that dips into tonight's bills", () => {
     const e = new RestaurantEngine(); e.open();
-    const price = unlockCost(e.state.town); e.state.cash = price + e.operatingCost() - 1;
-    expect(e.unlockPlot(C + 1, C)).toMatch(/for tonight's wages and rent/); expect(e.state.cash).toBe(price + e.operatingCost() - 1);
-    e.state.cash += 1; expect(e.unlockPlot(C + 1, C)).toBeNull();
+    const price = unlockCost(e.state.town); e.state.cash = price + e.billsTonight() - 1;
+    expect(e.spendCheck(price)).toEqual({ after: e.billsTonight() - 1, reserve: e.billsTonight() + 30 });
+    expect(e.unlockPlot(C + 1, C)).toBeNull(); expect(e.state.cash).toBe(e.billsTonight() - 1);
   });
 });

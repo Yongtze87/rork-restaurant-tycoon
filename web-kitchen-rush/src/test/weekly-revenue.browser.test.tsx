@@ -17,7 +17,8 @@ it.each([320, 390, 768, 1280])('shows the weekly chart immediately in Ledger at 
   await page.viewport(width, 800); restaurant.state.history = history(); restaurant.state.day = 11;
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
-  const panel = screen.getByRole('complementary', { name: 'The owner’s ledger' }).element();
+  await screen.getByRole('tab', { name: 'Week' }).click();
+  const panel = screen.getByRole('dialog', { name: 'Ledger' }).element();
   const chart = screen.getByTestId('revenue-chart').element().getBoundingClientRect();
   const bounds = panel.getBoundingClientRect();
   expect(chart.top).toBeGreaterThan(bounds.top); expect(chart.bottom).toBeLessThanOrEqual(bounds.bottom);
@@ -25,10 +26,7 @@ it.each([320, 390, 768, 1280])('shows the weekly chart immediately in Ledger at 
   const section = screen.getByRole('region', { name: 'Weekly revenue' }).element();
   expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-  if (width < 1024) {
-    expect(screen.getByTestId('restaurant-scene').element().getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top);
-    expect(bounds.bottom).toBeLessThanOrEqual(screen.getByRole('navigation', { name: 'Restaurant management' }).element().getBoundingClientRect().top);
-  }
+  expect(bounds.top).toBeGreaterThanOrEqual(0); expect(bounds.bottom).toBeLessThanOrEqual(800);
   for (const control of section.querySelectorAll('button,select')) {
     const rect = control.getBoundingClientRect(); expect(rect.height).toBeGreaterThanOrEqual(44); expect(rect.width).toBeGreaterThanOrEqual(44);
   }
@@ -46,26 +44,26 @@ it('opens a selected receipt with exact sales/tips and does not pause, spend or 
   restaurant.state.history = history(); restaurant.state.day = 11; restaurant.open();
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
+  await screen.getByRole('tab', { name: 'Week' }).click();
   const before = JSON.stringify(restaurant.state), cash = restaurant.state.cash;
   await screen.getByRole('combobox', { name: 'Explore a day' }).selectOptions('8');
   await expect.element(screen.getByTestId('revenue-day-detail')).toHaveTextContent('Day 8: $150 sales + $10 tips.');
-  expect(screen.container.querySelector('[data-revenue-day="8"] circle')).not.toBeNull();
+  expect(document.querySelector('[data-revenue-day="8"] circle')).not.toBeNull();
   await screen.getByRole('button', { name: 'Open Day 8 revenue receipt' }).click();
-  await expect.element(screen.getByRole('dialog')).toBeVisible();
+  await expect.element(screen.getByRole('heading', { name: 'Day 8 summary' })).toBeVisible();
   expect(JSON.stringify(restaurant.state)).toBe(before); expect(restaurant.state.cash).toBe(cash); expect(restaurant.paused).toBe(false);
   await screen.getByRole('button', { name: 'Back to ledger' }).click();
   const clock = restaurant.state.clock; restaurant.update(.1); expect(restaurant.state.clock).toBeGreaterThan(clock);
 });
 
-it('keeps the challenge shortcut at the top and the normal Ledger tab focused on revenue', async () => {
+it('shows the challenges on the first Ledger screen and revenue one tab away', async () => {
   await page.viewport(390, 800); const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'View daily challenges' }).click();
-  const panel = screen.getByRole('complementary', { name: 'The owner’s ledger' }).element();
+  const panel = screen.getByRole('dialog', { name: 'Ledger' }).element();
   const board = screen.getByRole('region', { name: 'Day 1 challenges' }).element().getBoundingClientRect();
-  expect(board.top - panel.getBoundingClientRect().top).toBeLessThan(100);
-  await screen.getByRole('button', { name: 'Close panel' }).click();
-  await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
-  expect(screen.getByRole('region', { name: 'Weekly revenue' }).element().getBoundingClientRect().top - screen.getByRole('complementary', { name: 'The owner’s ledger' }).element().getBoundingClientRect().top).toBeLessThan(100);
+  expect(board.bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
+  await screen.getByRole('tab', { name: 'Week' }).click();
+  expect(screen.getByRole('region', { name: 'Weekly revenue' }).element().getBoundingClientRect().top - panel.getBoundingClientRect().top).toBeLessThan(140);
 });
 
 it('shows empty, zero-sales and trimmed-history states truthfully', async () => {
@@ -99,6 +97,7 @@ it('follows new closing receipts, retains a browsed week, and recovers from rese
 it('keeps native select keyboard interaction from pausing service', async () => {
   restaurant.state.history = history(); restaurant.state.day = 11; restaurant.open();
   const screen = await render(<ManagementGame />); await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
+  await screen.getByRole('tab', { name: 'Week' }).click();
   const select = screen.getByRole('combobox', { name: 'Explore a day' }).element();
   (select as HTMLSelectElement).focus();
   await userEvent.keyboard(' '); await userEvent.keyboard('{Escape}');

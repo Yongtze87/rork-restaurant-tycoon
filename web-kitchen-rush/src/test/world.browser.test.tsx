@@ -18,6 +18,7 @@ it.each([320, 1280])('claims a region from the town panel and starts its branch 
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Town', exact: true }).click();
   await expect.element(screen.getByTestId('region-name')).toHaveTextContent('Home Reef');
+  await screen.getByRole('button', { name: /All plots/ }).click(); await screen.getByRole('tab', { name: 'Regions' }).click();
   const regions = screen.getByRole('region', { name: 'Regions' });
   await expect.element(regions).toHaveTextContent('0 fame');
   const lagoon = regions.getByRole('button', { name: 'Glasswater Lagoon, Calm lagoon, 1 of 5 stars, claim for $2,500' });
@@ -46,7 +47,8 @@ it.each([320, 1280])('claims a region from the town panel and starts its branch 
   await expect.element(screen.getByTestId('branch-income')).toHaveTextContent('Opens when built: $');
   inside(screen.getByRole('region', { name: 'Branch restaurant' }).element(), width);
   // Back on the list, the plots are grouped by region.
-  await screen.getByRole('button', { name: 'All plots' }).click();
+  await screen.getByRole('button', { name: 'Back to town' }).click();
+  await screen.getByRole('button', { name: /All plots/ }).click();
   await expect.element(screen.getByRole('group', { name: 'Glasswater Lagoon plots' })).toHaveTextContent('Branch restaurant · building');
   await expect.element(screen.getByRole('group', { name: 'Home Reef plots' })).toHaveTextContent('Restaurant · Lv 1');
 });
@@ -56,6 +58,7 @@ it('shows why a region cannot be claimed yet and keeps the old ocean map and com
   expect(document.querySelector('[aria-label^="Ocean map"]')).toBeNull();
   await screen.getByRole('button', { name: 'Town', exact: true }).click();
   await expect.element(screen.getByRole('group', { name: 'The Ocean' })).not.toBeInTheDocument();
+  await screen.getByRole('button', { name: /All plots/ }).click(); await screen.getByRole('tab', { name: 'Regions' }).click();
   const regions = screen.getByRole('region', { name: 'Regions' });
   await regions.getByRole('button', { name: /Kelpwood Hollow, Kelp forest, 2 of 5 stars, After the Coral Reef/ }).click();
   const details = screen.getByRole('region', { name: 'Region details' });
@@ -75,7 +78,7 @@ it('pays a finished branch at closing and shows it as branch income on the recei
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger' }).click();
   const summaries = screen.getByRole('region', { name: 'Daily summaries' });
-  await expect.element(summaries).toHaveTextContent(`Branch income+$${income}`);
+  await expect.element(summaries.getByRole('button', { name: 'View Day 1 summary' })).toBeVisible();
   await summaries.getByRole('button', { name: 'View Day 1 summary' }).click();
   const receipt = screen.getByRole('table', { name: 'Day 1 income and expenses' });
   await expect.element(receipt.getByRole('row', { name: new RegExp(`Branch income \\$${income}`) })).toBeVisible();

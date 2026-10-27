@@ -5,7 +5,7 @@
  * Time model (see docs/BALANCE.md): the owner opens the game a few times per real day, plays
  * each session at 1×, and pauses when leaving. While away only wall-clock construction moves.
  */
-import { GOALS, RestaurantEngine } from '../engine';
+import { GOALS, OFFLINE_SERVICE_DAYS, OFFLINE_SERVICE_HOURS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
 import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
 import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, activeLevel, branchIn, busyBuilders, neighbours, plotLockReason, plotsIn, type BuildingKind, type Plot } from '../town';
@@ -30,6 +30,8 @@ export interface SimOptions {
   maxServiceDays?: number;
   /** Claim ocean regions, build branches and specialised buildings there (default true). */
   regions?: boolean;
+  /** Hours away that are replayed when the owner returns (default OFFLINE_SERVICE_HOURS, as in the game; the day cap still applies). 0: no offline service. */
+  awayHours?: number;
   /** How the owner picks the next region among the claimable ones. */
   region?: RegionStrategy;
   /** Fixed region ids to claim, in order (overrides `region` while they last). */
@@ -80,8 +82,6 @@ export class Simulation {
   readonly engine: RestaurantEngine;
   private now = START;
   private activeSeconds = 0;
-  private renovating = false;
-  private checkedToday = false;
   private pressure: Pressure[] = [];
   private live: Pressure = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 };
   private lastMissed = 0;
@@ -90,6 +90,10 @@ export class Simulation {
   private lastCharms = { current: 0, tide: 0 };
   private lastPearls = 0;
   private lastDay = 1;
+  /** The owner reviews the dining room and crew once a day, as they did when it closed between days. */
+  private planningDue = true;
+  /** Replaying time away: the owner makes no decisions. */
+  private away = false;
 
   constructor(readonly options: SimOptions) {
     this.engine = new RestaurantEngine(undefined, () => this.now);
@@ -110,8 +114,18 @@ export class Simulation {
     const sessions = Math.max(1, Math.min(6, this.options.sessions ?? 3)), minutes = this.options.sessionMinutes ?? 10;
     const hours = SESSION_HOURS.slice(0, sessions).sort((a, b) => a - b);
     outer: for (let day = 0; day < this.options.days; day++) for (const hour of hours) {
-      this.now = START + day * 86_400_000 + hour * 3_600_000;
-      // The owner always pauses before leaving, so this only grants the daily gift and finishes construction.
+      const sessionStart = START + day * 86_400_000 + hour * 3_600_000;
+      // Away with the restaurant open: replay service up to the cap, exactly as the game does on return (1× steps).
+      const awayHours = this.options.awayHours ?? OFFLINE_SERVICE_HOURS;
+      if (awayHours > 0 && this.s.phase === 'service' && this.now > START) {
+        const end = Math.min(sessionStart, this.now + awayHours * 3_600_000);
+        this.away = true;
+        const startDay = this.s.day;
+        while (this.now < end && this.s.day - startDay < OFFLINE_SERVICE_DAYS) { this.now += 100; this.engine.update(.1); if (this.s.day !== this.lastDay) this.dayEnded(); }
+        this.away = false;
+      }
+      this.now = sessionStart; this.s.lastActiveAt = this.now;
+      // Only grants the daily gift and finishes construction: offline service was replayed above, or the owner paused.
       void this.engine.resume();
       if (this.engine.catchingUp) throw new Error('Simulator left the restaurant running offline');
       this.trackRewards();
@@ -124,12 +138,10 @@ export class Simulation {
         this.classifyMisses();
         if (this.s.phase === 'service' && i % 10 === 0) this.sample();
         if (this.s.day !== this.lastDay) this.dayEnded();
-        else if (this.s.phase === 'service' && !this.checkedToday && this.s.elapsed >= DAY_LENGTH - .5) { this.checkedToday = true; if (this.wantsPlanning()) { this.renovating = true; this.engine.closeEarly(); } }
         if (i % 100 === 0) this.act();
         if (this.options.maxServiceDays && this.result.serviceDays >= this.options.maxServiceDays) break outer;
       }
-      if (this.s.phase === 'service') this.engine.pause(true);
-      this.engine.suspend();
+      if ((this.options.awayHours ?? OFFLINE_SERVICE_HOURS) === 0) { if (this.s.phase === 'service') this.engine.pause(true); this.engine.suspend(); }
     }
     return this.finish();
   }
@@ -171,10 +183,10 @@ export class Simulation {
     const report = this.s.history[this.s.history.length - 1];
     this.result.rows.push({ day: report.day, realDay: this.realDay, activeHours: +(this.activeSeconds / 3600).toFixed(2), cash: Math.round(this.s.cash), profit: Math.round(report.profit), bonus: report.challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0), branch: report.branch, served: report.served, missed: report.missed, reputation: this.s.reputation, buildings: this.builtCount(), fame: this.s.ocean.fame, regions: this.s.ocean.regions.length });
     this.result.serviceDays++;
-    if (this.s.phase === 'planning' && !this.renovating) this.result.reserveBlocks++;
-    this.renovating = false; this.checkedToday = false;
+    if (this.engine.event.includes('bank covered')) this.result.bankruptDays++;
+    this.planningDue = true;
     this.trackRewards();
-    this.act();
+    if (!this.away) this.act();
   }
 
   private reserve(): number { return this.engine.operatingCost() * this.p.reserveDays + 30; }
@@ -201,30 +213,12 @@ export class Simulation {
     }
     if (this.options.regions !== false) this.worldTurn();
     if (s.town.pearls >= SHOP.builder.pearls && s.town.builders < MAX_BUILDERS && this.options.strategy !== 'cautious') e.buy('builder');
-    if (this.p.townFirst || s.phase !== 'planning') this.townTurn();
-    if (s.phase === 'planning') {
-      if (!this.p.townFirst) { this.planningTurn(); this.townTurn(); } else this.planningTurn();
-      this.reopen();
-    }
+    // The restaurant stays open: the dining room, crew and town are all managed while guests come and go.
+    const planning = this.planningDue; this.planningDue = false;
+    if (this.p.townFirst) { this.townTurn(); if (planning) this.planningTurn(); } else { if (planning) this.planningTurn(); this.townTurn(); }
     this.useCharms();
     this.result.minCash = Math.min(this.result.minCash, s.cash);
   }
-
-  private reopen(): void {
-    const e = this.engine, s = this.s;
-    if (e.open() === null) return;
-    if (s.cash < 200 && s.debt === 0 && e.loan() === null) { this.result.loans++; if (e.open() === null) return; }
-    // Let extra crew go (lower wages), then sell decor, until the opening reserve is met.
-    for (const member of [...s.staff].reverse()) if (e.dismiss(member.id) === null && e.open() === null) return;
-    for (const kind of ['lamp', 'divider', 'plant', 'table'] as FurnitureKind[]) {
-      for (const item of s.furniture.filter(f => f.kind === kind)) { if (kind === 'table' && capacity(s) <= 4) break; e.sell(item.id); if (e.open() === null) return; }
-    }
-    if (!this.stuckDays.has(s.day)) { this.stuckDays.add(s.day); this.result.bankruptDays++; }
-  }
-  private stuckDays = new Set<number>();
-
-  /** Something in the dining room (furniture, crew, menu) worth closing for tonight. */
-  private wantsPlanning(): boolean { return this.planningWishes().some(w => w.cost <= this.budget()); }
 
   private planningWishes(): Wish[] {
     const e = this.engine, s = this.s, list: Wish[] = [];

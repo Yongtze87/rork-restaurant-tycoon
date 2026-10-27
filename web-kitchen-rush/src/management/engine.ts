@@ -1,4 +1,4 @@
-import { accessPoints, findPath, layoutError, placementError, seatPoint } from './layout';
+import { accessPoints, findPath, inBounds, layoutError, occupied, placementError, seatPoint } from './layout';
 import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
@@ -21,6 +21,8 @@ export const GOALS = [
 export interface AwaySummary { seconds: number; days: number; served: number; cashChange: number; challengeBonus: number; capped: boolean; }
 /** Offline service stops after this much time away; construction timers keep running regardless. */
 export const OFFLINE_SERVICE_HOURS = 4;
+/** While away the crew works at most this many service days; the rest of the time passes without service (keeps real-day pacing, see docs/BALANCE.md). */
+export const OFFLINE_SERVICE_DAYS = 1;
 export interface StorageAdapter { getItem(key: string): string | null; setItem(key: string, value: string): void; }
 const resetStaff = (staff: Staff): void => { staff.task = 'idle'; staff.guestId = null; staff.stationId = null; staff.timer = 0; staff.route = []; };
 const seatKey = (g: Pick<Guest, 'tableId' | 'seat'>): string => `${g.tableId}:${g.seat}`;
@@ -40,6 +42,8 @@ function walk(agent: Point & { route: Point[]; yaw: number }, dt: number, speed:
 
 /** Independent, deterministic owner simulation. Rendering never owns money or service outcomes. */
 export class RestaurantEngine {
+  /** Service days replayed while away (OFFLINE_SERVICE_DAYS). Tests comparing long offline replays with live play lift it. */
+  static offlineDays = OFFLINE_SERVICE_DAYS;
   state: RestaurantState = createRestaurant();
   get paused(): boolean { return this.state.isPaused; }
   set paused(value: boolean) { this.state.isPaused = value; }
@@ -87,6 +91,8 @@ export class RestaurantEngine {
         // Legacy service starts challenges next day, never assigns full-day goals near closing.
         if (this.state.phase === 'service' && this.state.elapsed === 0 && !this.state.dailyChallenges.length) this.startChallenges();
         if (this.state.phase === 'planning') this.rollTide();
+        // The restaurant stays open once it has opened: older saves waiting in planning or renovation reopen.
+        if (this.state.phase === 'planning' && (this.state.history.length > 0 || this.state.lifetimeServed > 0)) { this.state.renovation = false; this.state.phase = 'service'; this.startChallenges(); }
         this.event = 'Welcome back. Your restaurant story continues.';
       }
     } catch { this.loadWarning = 'The previous save could not be read. A fresh restaurant is shown; save again only when you are ready to replace it.'; this.saveFailed = true; }
@@ -128,18 +134,18 @@ export class RestaurantEngine {
     while (this.state === s && !this.paused && s.phase === 'service') {
       // Include time spent replaying/throttled in the background instead of silently discarding it.
       target = Math.max(target, this.now()); steps = Math.floor((Math.min(target, limit) - start) / 100);
-      if (done >= steps) break;
+      if (done >= steps || s.day - before.day >= RestaurantEngine.offlineDays) break;
       const end = Math.min(steps, done + 1000);
-      for (; done < end && s.phase === 'service' && !this.paused; done++) { this.tickTown(start + done * 100); this.step(.1); }
+      for (; done < end && s.phase === 'service' && !this.paused && s.day - before.day < RestaurantEngine.offlineDays; done++) { this.tickTown(start + done * 100); this.step(.1); }
       s.lastActiveAt = start + done * 100;
       this.catchUpProgress = done / steps;
       this.save(); this.notify();
-      if (done < steps && s.phase === 'service' && !this.paused) await new Promise<void>(resolve => setTimeout(resolve, 0));
+      if (done < steps && s.phase === 'service' && !this.paused && s.day - before.day < RestaurantEngine.offlineDays) await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     if (this.state !== s) return;
     this.tickTown(target);
     s.lastActiveAt = Math.max(s.lastActiveAt, target);
-    this.awaySummary = s.clock - before.clock >= 1 ? { seconds: Math.round(s.clock - before.clock), days: s.day - before.day, served: s.lifetimeServed - before.served, cashChange: s.cash - before.cash, challengeBonus: s.lifetimeChallengeBonus - before.challengeBonus, capped: target > limit } : null;
+    this.awaySummary = s.clock - before.clock >= 1 ? { seconds: Math.round(s.clock - before.clock), days: s.day - before.day, served: s.lifetimeServed - before.served, cashChange: s.cash - before.cash, challengeBonus: s.lifetimeChallengeBonus - before.challengeBonus, capped: target > limit || s.day - before.day >= RestaurantEngine.offlineDays } : null;
     if (this.pauseAfterCatchUp !== null) { this.paused = this.pauseAfterCatchUp; this.pauseAfterCatchUp = null; }
     this.catchUpProgress = 1; this.save(); this.catchingUp = false; this.savedAt = s.clock; this.notify();
   }
@@ -163,6 +169,26 @@ export class RestaurantEngine {
     if (!path) { const found = findPath(this.state.furniture, width(this.state), from, to); if (!found) return null; path = found; if (this.routeCache.size < 256) this.routeCache.set(key, path); }
     return path.map(point => ({ ...point }));
   }
+  /** After a layout change while open, everyone keeps their task and finds a new way to where they were going. */
+  private reroute(): void {
+    const s = this.state, blocked = occupied(s.furniture), columns = width(s), free = (p: Point) => inBounds(p, columns) && !blocked.has(`${Math.round(p.x)},${Math.round(p.z)}`);
+    for (const agent of [...s.guests, ...s.staff]) {
+      if (!agent.route.length) continue;
+      // Seats and the doorway step sit off the walkable grid: keep them as the last leg.
+      let i = agent.route.length - 1; while (i > 0 && !free(agent.route[i])) i--;
+      const target = agent.route[i], tail = agent.route.slice(i + 1);
+      const path = this.route(agent, target) ?? (Object.assign(agent, { x: entrance.x, z: entrance.z }) && this.route(entrance, target));
+      agent.route = path ? [...path, ...tail] : [];
+    }
+  }
+  /** What blocks changing a piece while guests are in: a seated table or a station that is cooking. */
+  private inUse(id: number): string | null {
+    const s = this.state, item = s.furniture.find(f => f.id === id); if (!item || s.phase !== 'service') return null;
+    if (item.kind === 'table' && (s.guests.some(g => g.tableId === id && g.stage !== 'leaving') || s.dirty.some(key => key.startsWith(`${id}:`)))) return 'Guests are at this table. Try again when it is free.';
+    if ((item.kind === 'prep' || item.kind === 'grill') && (s.staff.some(m => m.stationId === id && m.task !== 'idle') || s.guests.some(g => g.stationId === id && g.stage !== 'leaving' && g.stage !== 'eating'))) return 'A dish is being made here. Try again in a moment.';
+    return null;
+  }
+  private layoutChanged(): void { if (this.state.phase === 'service') this.reroute(); else this.relocateStaff(); }
   private relocateStaff(): void {
     this.state.staff.forEach((staff, i) => {
       resetStaff(staff);
@@ -172,26 +198,25 @@ export class RestaurantEngine {
     });
   }
   place(item: Placement): string | null {
-    if (this.state.phase !== 'planning') return 'Rearrange the restaurant between service days.';
     const existing = this.state.furniture.find(f => f.id === item.id);
+    if (existing) { const busy = this.inUse(existing.id); if (busy) return busy; }
     if (existing && existing.kind !== item.kind) return 'Move the selected furniture without changing its type.';
     if (!existing && this.state.cash < CATALOG[item.kind].price) return 'Not enough cash. Serve a day or sell something you no longer need.';
     const error = placementError(this.state, item); if (error) return error;
     if (existing) Object.assign(existing, item, { level: existing.level });
     else { this.state.cash -= CATALOG[item.kind].price; this.state.furniture.push({ ...item, id: this.state.nextId++, level: 1 }); }
-    this.relocateStaff(); this.changed(`${CATALOG[item.kind].name} ${existing ? 'moved' : 'built'}. A little more you.`); return null;
+    this.layoutChanged(); this.changed(`${CATALOG[item.kind].name} ${existing ? 'moved' : 'built'}. A little more you.`); return null;
   }
   sell(id: number): string | null {
-    if (this.state.phase !== 'planning') return 'Wait until closing to sell furniture.';
     const item = this.state.furniture.find(f => f.id === id); if (!item) return 'Select a piece of furniture first.';
+    const busy = this.inUse(id); if (busy) return busy;
     if (this.state.furniture.length === 1) return 'Keep at least one piece of furniture.';
     this.state.furniture = this.state.furniture.filter(f => f.id !== id); this.state.cash += Math.floor(CATALOG[item.kind].price * .7);
     this.recordIncome(Math.floor(CATALOG[item.kind].price * .7), 'sale');
-    this.relocateStaff(); this.changed('Sold for 70% of the original price.'); return null;
+    this.layoutChanged(); this.changed('Sold for 70% of the original price.'); return null;
   }
-  /** Instant, planning-only upgrade of one placed piece. Selling still refunds 70% of the base price. */
+  /** Instant upgrade of one placed piece, also while open. Selling still refunds 70% of the base price. */
   upgradeFurniture(id: number): string | null {
-    if (this.state.phase !== 'planning') return 'Upgrade furniture between service days.';
     const item = this.state.furniture.find(f => f.id === id); if (!item) return 'Select a piece of furniture first.';
     if (item.level >= FURNITURE_MAX_LEVEL) return 'Already at the highest level.';
     const cost = furnitureUpgradeCost(item.kind, item.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
@@ -199,7 +224,6 @@ export class RestaurantEngine {
     this.changed(`${CATALOG[item.kind].name} is now level ${item.level}.${lookFor(item.level) > lookFor(item.level - 1) ? ' A whole new look!' : ''}`); return null;
   }
   hire(role: Role): string | null {
-    if (this.state.phase !== 'planning') return 'Hire before opening for the day.';
     if (this.state.staff.length >= this.crewLimit()) return `Your crew is limited to ${this.crewLimit()} Mareen. Build Mareen homes for more.`;
     if (this.state.cash < 150) return 'Recruitment costs $150.';
     const names = role === 'chef' ? ['Marlo', 'Nerin', 'Coralie', 'Kai', 'Delphine', 'Ondine'] : ['Pearl', 'Tidus', 'Maris', 'Shelly', 'Reef', 'Calyx'];
@@ -209,26 +233,25 @@ export class RestaurantEngine {
   }
   train(id: number): string | null {
     const staff = this.state.staff.find(s => s.id === id);
-    if (this.state.phase !== 'planning' || !staff) return 'Train staff between service days.';
+    if (!staff) return 'Choose a crew member first.';
     if (staff.level === 3) return 'Already fully trained.';
     const cost = 180 * staff.level; if (this.state.cash < cost) return `Training costs $${cost}.`;
     this.state.cash -= cost; staff.level++; this.changed(`${staff.name} is now level ${staff.level}. Faster service, happier guests.`); return null;
   }
   dismiss(id: number): string | null {
     const member = this.state.staff.find(s => s.id === id);
-    if (!member || this.state.phase !== 'planning') return 'Manage your team before opening.';
+    if (!member) return 'Choose a crew member first.';
+    if (member.task !== 'idle') return `${member.name} is busy. Try again in a moment.`;
     if (this.state.staff.filter(s => s.role === member.role).length <= 1) return 'Keep at least one chef and one server.';
     this.state.staff = this.state.staff.filter(s => s.id !== id); this.changed(`${member.name} has left the team.`); return null;
   }
   setDish(dish: Dish, enabled: boolean, price: number): string | null {
-    if (this.state.phase !== 'planning') return 'Set tomorrow’s menu after closing.';
     const zone = DISHES[dish].zone;
     if (!hasZone(this.state.town, zone)) return `Reach ${ZONES[zone].place} to cook ${DISHES[dish].name.toLowerCase()}.`;
     if (!enabled && !Object.entries(this.state.menu).some(([key, value]) => key !== dish && value.enabled)) return 'Keep at least one dish on the menu.';
     this.state.menu[dish] = { enabled, price: Math.max(MIN_PRICE, Math.min(MAX_PRICE, Math.round(price))) }; this.changed(); return null;
   }
   expand(): string | null {
-    if (this.state.phase !== 'planning') return 'Build the extension before opening.';
     if (this.state.expanded) return 'Your east grotto is already open.';
     if (this.state.history.length < 3) return 'Complete 3 service days to unlock the east grotto.';
     if (this.state.cash < 900) return 'The east grotto costs $900.';
@@ -251,7 +274,7 @@ export class RestaurantEngine {
   /** Milestones and achievements ready to collect, for the Ledger badge. */
   rewardsReady(): number { return GOALS.filter(g => !this.state.claimed.includes(g.id) && g.value(this.state) >= g.target).length + claimableAchievements(this.state).length; }
   loan(): string | null {
-    if (this.state.phase !== 'planning' || this.state.cash >= 200 || this.state.debt > 0) return 'A $600 recovery loan is available below $200, with no existing loan.';
+    if (this.state.cash >= 200 || this.state.debt > 0) return 'A $600 recovery loan is available below $200, with no existing loan.';
     this.state.cash += 600; this.state.debt = 600; this.recordIncome(600, 'loan'); this.changed('Recovery loan received. $30 is repaid after each day, with no interest.'); return null;
   }
   rename(name: string): void { this.state.name = name.trim().slice(0, 28) || 'Little Reef'; this.changed(); }
@@ -275,9 +298,11 @@ export class RestaurantEngine {
   }
   operatingCost(): number { return this.state.staff.reduce((sum, staff) => sum + staffWage(staff), 0) + (this.state.expanded ? 50 : 30); }
   /** Cash that can be spent while still affording the next opening (wages, rent and $30 of starting ingredients). */
-  safeToSpend(): number { return Math.max(0, this.state.cash - this.operatingCost() - 30); }
+  safeToSpend(): number { return Math.max(0, this.state.cash - this.billsTonight() - 30); }
+  /** Wages, rent and the day's loan repayment, paid at closing. */
+  billsTonight(): number { return this.operatingCost() + Math.min(30, this.state.debt); }
   /** What a purchase leaves against the next opening; `extraDaily` is a new daily cost it adds, like a wage. */
-  spendCheck(cost: number, extraDaily = 0): { after: number; reserve: number } { return { after: this.state.cash - cost, reserve: this.operatingCost() + extraDaily + 30 }; }
+  spendCheck(cost: number, extraDaily = 0): { after: number; reserve: number } { return { after: this.state.cash - cost, reserve: this.billsTonight() + extraDaily + 30 }; }
   open(): string | null {
     if (this.state.phase !== 'planning') return 'The restaurant is already open.';
     const errors = this.readiness(); if (errors.length) return errors[0];
@@ -292,16 +317,12 @@ export class RestaurantEngine {
   private rollTide(): void { this.state.tide = rollTide(this.state.seed, this.state.day); }
   tideEffects(): TideEffects { return TIDES[this.state.tide].effects; }
   private beginNextDay(): void {
-    const renovate = this.state.renovation;
-    this.state.day++; this.state.phase = 'planning'; this.state.guests = []; this.state.dirty = []; this.state.elapsed = 0; this.state.nextArrival = 1; this.state.totals = freshTotals(); this.relocateStaff();
+    this.state.day++; this.state.phase = 'service'; this.state.guests = []; this.state.dirty = []; this.state.elapsed = 0; this.state.nextArrival = 1; this.state.totals = freshTotals(); this.relocateStaff();
     this.state.renovation = false; this.incomeReceipts = []; this.state.dailyChallenges = []; this.rollTide();
-    const errors = this.readiness();
-    if (!renovate && !errors.length) { this.state.phase = 'service'; this.startChallenges(); this.event = `Day ${this.state.day}. Doors open again — yesterday’s receipt is in Ledger.`; }
-    else this.event = renovate ? 'Closed for renovation. Reopen whenever you are ready.' : `Waiting for the owner: ${errors[0]}`;
+    this.startChallenges(); this.event = `Day ${this.state.day} begins. Yesterday’s receipt is in Ledger.`;
   }
   /** Compatibility for older receipts; normal service rolls forward automatically. */
   nextDay(): void { if (this.state.phase === 'report') { this.beginNextDay(); this.changed(); } }
-  closeEarly(): void { if (this.state.phase === 'service') { this.state.renovation = true; this.state.elapsed = Math.max(DAY_LENGTH, this.state.elapsed); this.changed('Last orders, then renovation. Your team will finish serving before closing.'); } }
   private arrive(): void {
     const s = this.state;
     if (s.guests.length >= 20) return;
@@ -310,8 +331,8 @@ export class RestaurantEngine {
       if (!selected && !s.dirty.includes(`${table.id}:${seat}`) && !s.guests.some(g => g.tableId === table.id && g.seat === seat && g.stage !== 'leaving')) selected = { table, seat };
     }
     if (!selected) { s.totals.missed++; this.event = 'A guest found no free seat. More tables or faster clearing would help.'; return; }
-    const dishes = DISH_IDS.filter(dish => s.menu[dish].enabled);
-    const dish = dishes[Math.floor(this.random() * dishes.length)]; if (!dish) return;
+    const dishes = DISH_IDS.filter(dish => s.menu[dish].enabled && s.furniture.some(f => f.kind === DISHES[dish].station));
+    const dish = dishes[Math.floor(this.random() * dishes.length)]; if (!dish) { s.totals.missed++; this.event = 'A guest found nothing on the menu your kitchen can make.'; return; }
     const price = s.menu[dish].price;
     if (this.random() < Math.max(0, (price / DISHES[dish].fair - 1) * .7)) { s.totals.missed++; this.event = 'A guest thought the menu was too expensive.'; return; }
     const route = this.route(entrance, accessPoints(selected.table)[selected.seat]); if (!route) return;
@@ -337,7 +358,7 @@ export class RestaurantEngine {
         for (const guest of s.guests.filter(g => g.stage === 'waiting')) {
           const station = s.furniture.find(f => f.kind === DISHES[guest.dish].station && !s.staff.some(worker => worker.stationId === f.id && worker.role === 'chef' && worker.task !== 'idle'));
           const due = s.ingredientCarry + this.dishCost(guest.dish), cost = Math.floor(due + 1e-9);
-          if (!station || s.cash < cost) continue;
+          if (!station) continue;
           const route = this.route(member, accessPoints(station)[0]); if (!route) continue;
           guest.stage = 'cooking'; guest.stationId = station.id; member.guestId = guest.id; member.stationId = station.id; member.task = 'toKitchen'; member.route = route;
           s.cash -= cost; s.totals.ingredients += cost; s.ingredientCarry = Math.max(0, Math.min(1, due - cost)); break;
@@ -493,10 +514,9 @@ export class RestaurantEngine {
     town.lastGiftDay = day; town.charms.current++; this.event = 'Daily gift: a Current charm. It skips 15 minutes of building.';
   }
   private plot(x: number, z: number) { return plotAt(this.state.town, x, z); }
-  /** During service tonight's wages and rent come out of the register at closing, so town spending can't use that money. */
+  /** Spending is never silently blocked by bills: the owner is warned before buying instead (see spend-guard). */
   private reserveError(cost: number): string | null {
-    const bills = this.operatingCost() + Math.min(30, this.state.debt);
-    return this.state.phase === 'service' && this.state.cash - cost < bills ? `Keep $${bills} for tonight's wages and rent. Try again after closing, or earn a little more first.` : null;
+    return this.state.cash < cost ? `This costs ${usd(cost)}.` : null;
   }
   unlockPlot(x: number, z: number): string | null {
     const town = this.state.town, plot = this.plot(x, z); if (!plot) return 'Choose a plot first.';
@@ -567,11 +587,15 @@ export class RestaurantEngine {
     const branch = this.branchTotal();
     if (branch > 0) { s.cash += branch; this.recordIncome(branch, 'branch'); }
     s.cash -= wages + rent + debtPayment; s.debt -= debtPayment;
+    // Short at closing: the bank covers the bills and the shortfall is repaid like a loan, $30 a day.
+    const covered = s.cash < 0; if (covered) { s.debt += -s.cash; s.cash = 0; }
     const rating = Math.max(1, Math.min(5, 3 + (s.totals.served / Math.max(1, s.totals.served + s.totals.missed)) * 1.5 + comfort(s) * .005 - s.totals.missed * .06));
     s.reputation = Math.round((s.reputation * .65 + rating * .35) * 100) / 100;
     recordDay(s.collections, { ...s.totals, rating, tide: s.tide });
     s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips + branch - s.totals.ingredients - wages - rent - debtPayment, rating, tide: s.tide, branch }); s.history = s.history.slice(-20);
-    this.beginNextDay(); this.changed();
+    this.beginNextDay();
+    if (covered) this.event = 'The bank covered tonight’s bills. The shortfall is repaid $30 a day.';
+    this.changed();
   }
 }
 function browserStorage(): StorageAdapter | undefined { return typeof window === 'undefined' ? undefined : { getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) }; }

@@ -27,15 +27,13 @@ describe('furniture upgrade tiers', () => {
     }
   });
 
-  it('upgrades instantly for the exact cost, only while planning', () => {
+  it('upgrades instantly for the exact cost, also while open', () => {
     const e = new RestaurantEngine(), table = e.state.furniture.find(f => f.kind === 'table')!, cost = furnitureUpgradeCost('table', 2);
     expect(table.level).toBe(1);
     expect(e.upgradeFurniture(table.id)).toBeNull();
     expect(table.level).toBe(2); expect(e.state.cash).toBe(1250 - cost);
     expect(e.upgradeFurniture(999)).toContain('Select');
-    e.open(); const during = JSON.stringify(e.state);
-    expect(e.upgradeFurniture(table.id)).toBe('Upgrade furniture between service days.');
-    expect(JSON.stringify(e.state)).toBe(during);
+    e.open(); expect(e.upgradeFurniture(table.id)).toBeNull(); expect(table.level).toBe(3);
   });
 
   it('checks cash without spending and stops at the highest level', () => {

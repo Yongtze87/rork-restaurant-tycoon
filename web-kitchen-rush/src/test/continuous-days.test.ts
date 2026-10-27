@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { OFFLINE_SERVICE_HOURS, RestaurantEngine } from '@/management/engine';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { OFFLINE_SERVICE_HOURS, RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { SAVE_KEY, createRestaurant, restaurantSchema } from '@/management/types';
+
+// These tests compare long offline replays with live play, so the crew may work more than one day while away.
+beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
+afterEach(() => { RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS; });
+
 
 function harness() {
   let now = 1_800_000_000_000, raw = '';
@@ -40,14 +45,18 @@ describe('continuous local restaurant', () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(60); e.suspend(); e.save();
     expect(h.read().lastActiveAt).toBe(h.now() - 60000); await e.resume(); expect(e.state.clock).toBeCloseTo(60);
   });
-  it('finishes guests for renovation, then stays editable offline without charging idle days', async () => {
-    const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); advance(e, 40); e.closeEarly(); e.suspend(); h.advance(900); await e.resume();
-    expect(e.state.phase).toBe('planning'); expect(e.state.day).toBe(2); expect(e.state.history).toHaveLength(1); expect(e.hire('chef')).toBeNull();
-    const cash = e.state.cash; e.suspend(); h.advance(1000); await e.resume(); expect(e.state.cash).toBe(cash); expect(e.open()).toBeNull();
+  it('keeps serving day after day offline, and editing works while open', async () => {
+    const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); advance(e, 40); e.suspend(); h.advance(900); await e.resume();
+    expect(e.state.phase).toBe('service'); expect(e.state.day).toBeGreaterThan(1); expect(e.state.history.length).toBeGreaterThan(0); expect(e.hire('chef')).toBeNull();
   });
-  it('stops charging future days if the business lacks startup funds', async () => {
-    const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.state.cash = 0; e.suspend(); h.advance(900); await e.resume();
-    expect(e.state.phase).toBe('planning'); expect(e.state.history).toHaveLength(1); expect(e.event).toContain('Waiting for the owner');
+  it('lets the bank cover a short register at closing instead of closing the restaurant', async () => {
+    const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.state.cash = -1000; e.suspend(); h.advance(900); await e.resume();
+    expect(e.state.phase).toBe('service'); expect(e.state.history.length).toBeGreaterThan(0); expect(e.state.debt).toBeGreaterThan(0);
+  });
+  it('reopens an older save that was waiting in planning after earlier days', () => {
+    const s = createRestaurant(); s.history = [{ ...s.totals, challenges: [], day: 1, wages: 60, rent: 30, debtPayment: 0, profit: 10, rating: 3, tide: 'calm', branch: 0 }]; s.day = 2; s.renovation = true;
+    const h = harness(); h.storage.setItem(SAVE_KEY, JSON.stringify(s)); const e = new RestaurantEngine(h.storage, h.now);
+    expect(e.state.phase).toBe('service'); expect(e.state.renovation).toBe(false); expect(e.state.dailyChallenges).toHaveLength(3);
   });
   it('migrates old report saves once, preserving paid receipts and ignoring unknown offline time', async () => {
     const s = createRestaurant(); s.phase = 'report'; s.history = [{ ...s.totals, challenges: [], day: 1, wages: 60, rent: 30, debtPayment: 0, profit: -90, rating: 3, tide: 'calm', branch: 0 }]; s.cash = 1160;
@@ -74,6 +83,12 @@ describe('continuous local restaurant', () => {
     const task = e.resume(); h.advance(60); await task; e.suspend();
     expect(e.state.clock).toBeCloseTo(960); expect(h.read().lastActiveAt).toBe(h.now());
     const restored = new RestaurantEngine(h.storage, h.now); await restored.resume(); expect(restored.state.clock).toBeCloseTo(960);
+  });
+  it('lets the crew work at most one service day while the owner is away', async () => {
+    RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS;
+    const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(3 * 3600); await e.resume();
+    expect(e.state.day).toBe(1 + OFFLINE_SERVICE_DAYS); expect(e.state.history).toHaveLength(OFFLINE_SERVICE_DAYS); expect(e.awaySummary?.capped).toBe(true);
+    expect(e.state.lastActiveAt).toBe(h.now()); const clock = e.state.clock; await e.resume(); expect(e.state.clock).toBe(clock);
   });
   it('replays at most the offline cap of an eight-hour absence, with bounded history and valid checkpoints', async () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(8 * 3600); await e.resume();

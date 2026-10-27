@@ -24,6 +24,7 @@ const which = value('strategy', 'all'), strategies = which === 'all' ? STRATEGIE
 const regionArg = value('region', 'balanced'), regionList = regionArg === 'all' ? REGION_STRATEGIES : [regionArg as RegionStrategy], world = !flag('no-regions');
 const route = value('route', '') ? value('route', '').split(';') : undefined;
 const sessions = Number(value('sessions', '3')), minutes = Number(value('minutes', '10')), charms = !flag('no-charms'), quiet = flag('quiet');
+const awayHours = value('away-hours', '') === '' ? undefined : Number(value('away-hours', ''));
 
 const pad = (v: unknown, n: number) => String(v).padStart(n);
 const when = (t?: { day: number; realDay: number; activeHours: number }) => t ? `svc day ${t.day} · real day ${t.realDay} · ${t.activeHours} h played` : '—';
@@ -102,7 +103,7 @@ if (flag('payback')) {
 
 const all: SimResult[] = [];
 for (const strategy of strategies) for (const region of world ? regionList : [undefined]) for (let i = 0; i < seeds; i++) {
-  const t = performance.now(), r = simulate({ strategy, days, seed: seed + i * 7919, sessions, sessionMinutes: minutes, charms, regions: world, region, route });
+  const t = performance.now(), r = simulate({ strategy, days, seed: seed + i * 7919, sessions, sessionMinutes: minutes, charms, regions: world, region, route, awayHours });
   if (world && regionList.length > 1 && !flag('json')) console.log(`\n--- regions: ${route ? `route ${route.join(' → ')}` : region} ---`);
   all.push(r);
   if (flag('json')) continue;

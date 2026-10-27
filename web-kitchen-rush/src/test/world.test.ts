@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { RestaurantEngine } from '@/management/engine';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { BIOMES, CLAIM, FAME_BONUS, FIRST_RING, MASTERY, OCEAN_BALANCE, VISITABLE_BIOMES, claimGate, claimPrice, claimableRegions, createOcean, describeModifiers, fameBonuses, isClaimable, masteryFame, migrateOcean, modifiersFor, neighbourIds, oceanSchema, regionAt, regionById, regionStatus, ring, worldBounds } from '@/management/ocean';
 import { HOME_ID, REGION_PITCH, REGION_SIZE, cellOf, inHome, regionBlock, regionCenter, regionOfPlot } from '@/management/world';
 import { BUILDINGS, TOWN_BALANCE, TOWN_SIZE, branchIncome, buildableAt, createTown, jobSeconds, plotAt, plotsIn, townEffects, unlockCost, upgradeCost, type BuildingKind } from '@/management/town';
@@ -7,6 +7,11 @@ import { achievement, isClaimable as achievementReady } from '@/management/colle
 import { ZONES, type ZoneId } from '@/management/zones';
 import { createRestaurant, restaurantSchema } from '@/management/types';
 import { pickRegion } from '@/management/sim/simulator';
+
+// These tests compare long offline replays with live play, so the crew may work more than one day while away.
+beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
+afterEach(() => { RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS; });
+
 
 function harness() {
   let now = 1_800_000_000_000, raw = '';
@@ -114,10 +119,10 @@ describe('claiming regions', () => {
     e.state.cash = price; expect(e.claimRegion('0,1')).toBeNull(); expect(e.state.cash).toBe(0);
     expect(e.claimPrice('-1,1')).toBe(Math.round(claimPrice(regionAt(-1, 1), 1) * (1 - e.fameBonuses().build) / 10) * 10);
   });
-  it('keeps tonight’s wages and rent when claiming during service', () => {
+  it('lets the owner claim into tonight’s bills, and refuses only without the cash', () => {
     const e = new RestaurantEngine(); zones(e, 'reef'); e.open();
-    e.state.cash = e.claimPrice('0,1') + e.operatingCost() - 1;
-    expect(e.claimRegion('0,1')).toMatch(/for tonight's wages and rent/); e.state.cash += 1; expect(e.claimRegion('0,1')).toBeNull();
+    e.state.cash = e.claimPrice('0,1') - 1; expect(e.claimRegion('0,1')).toBeTruthy();
+    e.state.cash += 1; expect(e.claimRegion('0,1')).toBeNull(); expect(e.state.cash).toBe(0);
   });
   it('adds the region’s 49 plots in place, with its middle plot owned, and keeps everything already built', () => {
     const { e, h } = rich(); place(e, C + 1, C, 'garden', 4);

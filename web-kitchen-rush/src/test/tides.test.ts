@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { RestaurantEngine } from '@/management/engine';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { TIDES, TIDE_KINDS, rollTide, tideEffectText, type TideKind } from '@/management/tides';
 import { nightLevel, sceneNight } from '@/management/light';
 import { DAY_LENGTH, SAVE_KEY, createRestaurant, restaurantSchema } from '@/management/types';
+
+// These tests compare long offline replays with live play, so the crew may work more than one day while away.
+beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
+afterEach(() => { RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS; });
+
 
 function harness() {
   let now = 1_800_000_000_000, raw = '';

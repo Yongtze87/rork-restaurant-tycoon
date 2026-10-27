@@ -26,13 +26,11 @@ automated owner uses only public engine methods: `claim`, `unlockZone`, `claimRe
 
 - **Sessions.** The owner opens the game 3 times per real day (08:00, 13:00, 20:00 UTC) and plays
   10 minutes each time at 1×, so **30 minutes of play per day**, about 9–10 service days. (`--sessions`, `--minutes`.)
-- **Leaving.** The owner pauses before leaving. While away only wall-clock construction moves
-  (`resume()` grants the daily gift and finishes jobs). This is the conservative model: a player who
-  leaves the restaurant *open* gets every hour away replayed at 1× (≈ 400 service days per real day),
-  which makes real-day pacing meaningless for that play style.
-- **Dining-room changes** need the planning phase, so the owner presses *Close for renovation* in the last
-  half-second of a service day when something is worth buying, makes the changes, and reopens.
-  Town actions happen every 10 s of play and whenever a day ends.
+- **Leaving.** The restaurant stays open (there is no pause any more), so time away is replayed on
+  return: at most `OFFLINE_SERVICE_HOURS` and at most `OFFLINE_SERVICE_DAYS` (1) service day.
+  `--away-hours 0` models an owner whose restaurant earns nothing while away.
+- **Dining-room changes** (furniture, crew, menu) happen while open, once per service day, as owners did
+  when the restaurant still closed between days. Town actions happen every 10 s of play and whenever a day ends.
 
 ### Strategies
 
@@ -298,3 +296,24 @@ weeks, branch levels 11–15, full regions and fame milestones.
   and claims rarely; a longer pause between claims would pull it back.
 - **Names:** generated names never repeat a first-ring name, but two far regions can share one (e.g. two "Glacier
   Ledge"); the panel shows the biome and stars next to each name.
+
+## Always open (no more closing between days)
+
+The restaurant no longer closes: furniture, crew and menu change while guests are in, and there is no pause or
+speed control. Without a pause, every player now gets service replayed while away, so the offline cap matters a lot:
+
+| offline cap (3 sessions a day) | balanced Coral Reef | Twilight | Abyss |
+|---|---|---|---|
+| no offline service (old model, owner paused) | real day 2 | 14 | 31 |
+| 4 hours | 1 | 3 | 5 |
+| 1 hour | 1 | 4 | 6 |
+| 2 service days | 2 | 9 | 19 |
+| **1 service day (chosen)** | **2** | **12** | **28** |
+
+With one service day while away (8 weeks, all owners): cautious reaches the Abyss on real day 52, builder on 31,
+balanced on 28; no bankrupt days. A short register at closing no longer closes the restaurant: the bank covers the
+bills and the shortfall is added to the loan (repaid $30 a day). Ingredients are bought on credit, so a broke
+restaurant can always cook its way out.
+
+A longer offline shift (“night manager”) is an obvious premium item; it would speed players up roughly as the
+table shows, so price it with that in mind.

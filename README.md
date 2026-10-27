@@ -23,7 +23,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - The crew and guests pathfind on their own. **Chefs** prepare kelp salads at kelp counters and sear fish cakes at vent grills. **Servers** deliver food and clear tables.
 - Guests are Mareen in four looks (coral, pearl, lagoon, dusk).
 - **Satisfaction meters** above every guest are driven by each guest's actual patience timer.
-- Pause plus 1×, 2× and 3× speed.
+- **Always open:** after the first opening the restaurant never closes. Build, hire, train, upgrade and change the menu while guests come and go; a table with seated guests or a station that is cooking waits until it is free.
 
 ### Run the business
 - **Team:** hire chefs or servers (up to 6). Training makes them faster and raises their daily wage.
@@ -31,12 +31,12 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Continuous days:** service rolls into the next day automatically, and each day saves an immutable receipt.
 - **Ledger:** a weekly revenue chart, growth against the previous week, and the last 20 daily receipts.
 - **Daily tides:** each service day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
-- **Daily challenges**, **milestones**, an interest-free **recovery loan** and a **low-capital warning** with one-click **Close for renovation**.
+- **Daily challenges**, **milestones**, an interest-free **recovery loan**, a **low-cash warning**, and a **“Tight on cash”** prompt before any purchase that would leave too little for tonight’s bills. If the register is short at closing, the bank covers it and you repay $30 a day.
 - **Collection:** 63 long-term achievements in the Ledger (dish mastery, builder, explorer, ocean voyager, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
 
 ### Offline progress you can trust
 - When you return, the game **replays the elapsed time at 1× through the same simulation step**, with checkpoints.
-- An explicit pause, renovation or too little startup cash stops offline work.
+- While you are away the crew works **at most one service day** (`OFFLINE_SERVICE_DAYS`); building timers keep running the whole time.
 
 ### Reef town
 - A 9×9 map of plots around the restaurant. Unlock neighbouring plots and choose what to build:
@@ -70,16 +70,15 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 
 1. **Make it yours:** open **Build → Interiors**, buy tables, anemones, lanterns or kelp screens, and snap them onto the grid.
 2. **Set up your crew and menu:** you need a kelp counter for kelp salads and a vent grill for fish cakes.
-3. **Open the restaurant.** Your crew takes it from there. Each day lasts about 2½ minutes at 1×.
+3. **Open the restaurant** once. It stays open from then on; each day lasts about 2½ minutes.
 4. **Read the receipt** from the business-updates card or the **Ledger**.
-5. **Reinvest:** use **Build → Close for renovation** to change furniture, crew or menu.
+5. **Reinvest any time:** Build (a strip of furniture along the bottom), Team, Menu and Town all work while guests are in.
 
 | Action | Mouse / touch | Keyboard |
 |---|---|---|
 | Place or move furniture | Tap a grid cell | Arrow keys |
 | Rotate placement | Rotate button | `R` |
-| Cancel / close panel | ✕ button | `Esc` |
-| Pause / resume service | Pause button | `Space` |
+| Cancel / close a menu | ✕ button | `Esc` |
 | Look around | Drag the reef; zoom and reset buttons | — |
 
 ---
@@ -121,7 +120,7 @@ web-kitchen-rush/
 │   │   ├── town.ts          # Plots across the world, buildings, branches, construction (pure)
 │   │   ├── TownScene.tsx    # The world scene: drag, zoom, tap plots and regions
 │   │   ├── layout.ts        # Grid placement rules and pathfinding
-│   │   ├── ManagementGame.tsx  # Owner UI shell: header, dock, panels, dialogs
+│   │   ├── ManagementGame.tsx  # Owner UI shell: header, dock, build tray, town card, menu windows
 │   │   ├── RestaurantScene.tsx # Canvas host: game loop, taps, drag-to-look, labels
 │   │   └── iso/
 │   │       ├── projection.ts   # Isometric math, fitting, depth order, sprite facing

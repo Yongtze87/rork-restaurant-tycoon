@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { buildRevenueWeeks, revenueAxisMax } from '@/management/weekly-revenue';
-import { RestaurantEngine } from '@/management/engine';
+import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { freshTotals, type Report } from '@/management/types';
+
+// These tests compare long offline replays with live play, so the crew may work more than one day while away.
+beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
+afterEach(() => { RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS; });
+
 
 const receipt = (day: number, revenue = 100, tips = 10): Report => ({ ...freshTotals(), day, revenue, tips, wages: 60, rent: 30, debtPayment: 0, profit: revenue + tips - 90, rating: 4, challenges: [], tide: 'calm', branch: 0 });
 const receipts = (count: number, start = 1): Report[] => Array.from({ length: count }, (_, i) => receipt(start + i));

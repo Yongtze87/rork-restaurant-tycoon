@@ -5,7 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { restaurant } from '@/management/engine';
 import ManagementGame from '@/management/ManagementGame';
 import { money } from '@/management/format';
-import type { Report } from '@/management/types';
+import { DAY_LENGTH, type Report } from '@/management/types';
 import '@/index.css';
 
 vi.mock('@/management/RestaurantScene', () => ({ default: () => <div data-testid="mock-scene">Restaurant world</div> }));
@@ -29,21 +29,22 @@ it('charges only confirmed placements and supports keyboard cancellation', async
   expect(restaurant.state.cash).toBe(1250);
   await screen.getByRole('button', { name: 'Confirm', exact: true }).click();
   expect(restaurant.state.cash).toBe(1185);
-  await screen.getByRole('button', { name: 'Build', exact: true }).click();
   await screen.getByRole('button', { name: /Sea anemone/ }).click();
   await userEvent.keyboard('{Escape}');
   await expect.element(screen.getByRole('region', { name: 'Furniture placement' })).not.toBeInTheDocument();
   expect(restaurant.state.cash).toBe(1185);
 });
-it('freezes business changes during service and has no speed or pause controls', async () => {
+it('stays open after the first opening, edits work while open, and there are no speed or pause controls', async () => {
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: /Open restaurant/ }).click();
   await expect.element(screen.getByText('0 served')).toBeVisible();
+  await expect.element(screen.getByRole('button', { name: /Open restaurant/ })).not.toBeInTheDocument();
   expect(document.querySelector('[aria-label="3x speed"],[aria-label="Pause service"]')).toBeNull(); expect(restaurant.speed).toBe(1);
   await screen.getByRole('button', { name: 'Menu', exact: true }).click();
-  await expect.element(screen.getByRole('button', { name: 'Raise Kelp salad price' })).toBeDisabled();
+  await screen.getByRole('button', { name: 'Raise Kelp salad price' }).click(); expect(restaurant.state.menu.salad.price).toBe(26);
+  await screen.getByRole('button', { name: 'Close', exact: true }).click();
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await expect.element(screen.getByRole('button', { name: /Coral table/ })).toBeDisabled();
+  await expect.element(screen.getByRole('button', { name: /Preview Coral table/ })).toBeEnabled();
 });
 it('ignores the global pause shortcut while recovering offline progress', async () => {
   const screen = await render(<ManagementGame />); restaurant.open(); restaurant.catchingUp = true; restaurant.notify();
@@ -82,10 +83,11 @@ it('shows real closing numbers and pays milestones only once', async () => {
   await expect.element(screen.getByRole('table', { name: 'Day 1 income and expenses' })).toBeInTheDocument();
   const clock = restaurant.state.clock; restaurant.update(.1); expect(restaurant.state.clock).toBeGreaterThan(clock);
   await screen.getByRole('button', { name: 'Back to ledger' }).click();
+  await screen.getByRole('tab', { name: /Milestones/ }).click();
   const before = restaurant.state.cash;
-  await screen.getByRole('button', { name: 'Collect reward', exact: false }).first().click();
+  await screen.getByRole('button', { name: /^Collect / }).first().click();
   expect(restaurant.state.cash).toBe(before + 180);
-  await expect.element(screen.getByRole('button', { name: 'Collected', exact: false }).first()).toBeDisabled();
+  await expect.element(screen.getByRole('button', { name: / collected$/ }).first()).toBeDisabled();
 });
 
 it.each([320, 1280])('keeps the ocean soundtrack and view controls on screen without changing saves at %spx', async width => {
@@ -107,8 +109,8 @@ it('reopens a saved daily summary without changing money, wages or the current d
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
   const summary = screen.getByRole('button', { name: 'View Day 1 summary' });
-  await expect.element(summary).toHaveTextContent('Total revenue$320');
-  await expect.element(summary).toHaveTextContent('Labor costs$60');
+  await expect.element(summary).toHaveTextContent('$320 in');
+  await expect.element(summary).toHaveTextContent('+$140');
   const before = JSON.stringify(restaurant.state);
   await summary.click();
   await expect.element(screen.getByRole('heading', { name: 'Day 1 summary' })).toBeVisible();
@@ -117,7 +119,7 @@ it('reopens a saved daily summary without changing money, wages or the current d
   expect(JSON.stringify(restaurant.state)).toBe(before);
   await summary.click();
   await userEvent.keyboard('{Escape}');
-  await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
+  await expect.element(screen.getByRole('heading', { name: 'Day 1 summary' })).not.toBeInTheDocument();
   expect(restaurant.state.day).toBe(2);
 });
 it('keeps ongoing service running while reviewing history', async () => {
@@ -140,8 +142,8 @@ it.each([[240, 'higher'], [40, 'lower'], [140, 'unchanged']])('compares a %s pro
   await expect.element(screen.getByTestId('report-comparison')).toHaveTextContent('Day 1');
   if (direction !== 'unchanged') await expect.element(screen.getByTestId('report-comparison')).toHaveTextContent('$100');
 });
-it('shows a loss and no invented margin for early closing without sales', async () => {
-  restaurant.open(); restaurant.closeEarly(); restaurant.update(.1);
+it('shows a loss and no invented margin for a day without sales', async () => {
+  restaurant.open(); restaurant.state.elapsed = DAY_LENGTH; restaurant.update(.1);
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Read latest report: Day 1' }).click();
   await expect.element(screen.getByTestId('report-revenue')).toHaveTextContent('$0');

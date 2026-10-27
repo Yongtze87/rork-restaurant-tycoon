@@ -22,7 +22,7 @@ it.each([320, 1280])('shows locked dishes greyed with their zone, and offers the
   await expect.element(screen.getByRole('switch', { name: 'Offer Kelp salad' })).toBeChecked();
   await expect.element(screen.getByRole('switch', { name: 'Offer Vent-seared fish cake' })).toBeChecked();
   const locked = screen.getByRole('region', { name: 'Locked dishes' });
-  await expect.element(locked.getByLabelText('Sea-grape sushi: unlocks in Coral Reef')).toHaveTextContent('Unlocks in Coral Reef');
+  await expect.element(locked.getByLabelText('Sea-grape sushi: unlocks in Coral Reef')).toHaveTextContent('Coral Reef');
   await expect.element(locked.getByLabelText('Abyssal ink noodles: unlocks in Abyss')).toBeVisible();
   await expect.element(screen.getByRole('switch', { name: 'Offer Sea-grape sushi' })).not.toBeInTheDocument();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
@@ -37,6 +37,7 @@ it.each([320, 1280])('shows locked dishes greyed with their zone, and offers the
 it('shows each zone’s requirements with progress and reaches the Coral Reef from the town panel', async () => {
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Town', exact: true }).click();
+  await screen.getByRole('button', { name: /All plots/ }).click(); await screen.getByRole('tab', { name: 'Depth zones' }).click();
   const zones = screen.getByRole('region', { name: 'Depth zones' }), reef = zones.getByRole('group', { name: 'Coral Reef' });
   await expect.element(zones.getByText('Sunlit Shallows')).toBeVisible();
   await expect.element(reef).toHaveTextContent('Reputation 3.8 · now 3.5');
@@ -57,11 +58,12 @@ it('explains why a plot in a locked zone cannot be unlocked, and keeps the zone 
   await page.viewport(320, 740); const screen = await render(<ManagementGame />);
   restaurant.state.cash = 100_000; restaurant.unlockPlot(C + 1, C); restaurant.unlockPlot(C + 2, C);
   await screen.getByRole('button', { name: 'Town', exact: true }).click();
+  await screen.getByRole('button', { name: /All plots/ }).click(); await screen.getByRole('tab', { name: 'Depth zones' }).click();
   const zones = screen.getByRole('region', { name: 'Depth zones' });
   await expect.element(zones).toBeVisible();
   const rect = zones.element().getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(320);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
-  const panel = await render(<TownPanel selected={{ x: C + 3, z: C }} onSelect={() => undefined} onEnterRestaurant={() => undefined} onShop={() => undefined} action={() => undefined} />);
+  const panel = await render(<TownPanel selected={{ x: C + 3, z: C }} onSelect={() => undefined} onEnterRestaurant={() => undefined} onShop={() => undefined} onOverview={() => undefined} action={() => undefined} />);
   const plot = panel.getByRole('region', { name: 'Locked plot' });
   await expect.element(plot).toHaveTextContent('Coral Reef');
   await expect.element(plot).toHaveTextContent('Reach the Coral Reef first.');

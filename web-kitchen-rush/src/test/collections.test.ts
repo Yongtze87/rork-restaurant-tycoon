@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { RestaurantEngine } from '@/management/engine';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { ACHIEVEMENTS, FAMILY_IDS, FIVE_STAR_RATING, PERFECT_DAY_MIN_SERVED, achievement, claimableAchievements, isClaimable, recordDay, visibleSteps } from '@/management/collections';
 import { BUILDABLE, TOWN_SIZE } from '@/management/town';
 import { TIDE_KINDS } from '@/management/tides';
 import { DISH_IDS, SAVE_KEY, createRestaurant, freshCollections, restaurantSchema, type Report } from '@/management/types';
+
+// These tests compare long offline replays with live play, so the crew may work more than one day while away.
+beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
+afterEach(() => { RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS; });
+
 
 function harness() {
   let now = 1_800_000_000_000, raw = '';

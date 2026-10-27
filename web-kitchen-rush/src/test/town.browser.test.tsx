@@ -13,7 +13,6 @@ it('unlocks a plot, builds with a timer, and skips it with a charm', async () =>
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Town', exact: true }).click();
   await expect.element(screen.getByTestId('town-view')).toBeVisible();
-  await expect.element(screen.getByRole('heading', { name: 'Reef town' })).toBeVisible();
   const price = unlockCost(restaurant.state.town);
   await screen.getByRole('button', { name: `Unlock plot · $${price}` }).first().click();
   await screen.getByRole('button', { name: `Unlock · $${price}` }).click();
@@ -33,6 +32,7 @@ it('keeps the town tab, pearls and panel usable on a 320px phone and returns to 
   await page.viewport(320, 740); const screen = await render(<ManagementGame />);
   for (const button of document.querySelectorAll('nav[aria-label="Restaurant management"] button')) { const rect = button.getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(320); }
   await screen.getByRole('button', { name: 'Town', exact: true }).click();
+  await screen.getByRole('button', { name: /All plots/ }).click();
   await screen.getByRole('button', { name: 'Restaurant · Lv 1' }).click();
   await expect.element(screen.getByRole('button', { name: /Upgrade ·/ })).toBeVisible();
   await screen.getByRole('button', { name: 'Enter' }).click();

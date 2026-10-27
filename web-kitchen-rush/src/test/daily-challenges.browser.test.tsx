@@ -17,6 +17,7 @@ it.each([320, 390, 1280])('opens daily challenges at %spx without overflow or pa
   await page.viewport(width, 800); const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'View daily challenges' }).click();
   await expect.element(screen.getByRole('region', { name: 'Day 1 challenges' })).toHaveTextContent('Open the restaurant');
+  await screen.getByRole('button', { name: 'Close', exact: true }).click();
   await screen.getByRole('button', { name: /Open restaurant/ }).click();
   await screen.getByRole('button', { name: 'View daily challenges' }).click();
   const board = screen.getByRole('region', { name: 'Day 1 challenges' });
@@ -29,7 +30,7 @@ it.each([320, 390, 1280])('opens daily challenges at %spx without overflow or pa
   expect(board.element().scrollWidth).toBeLessThanOrEqual(board.element().clientWidth);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   const clock = restaurant.state.clock; restaurant.update(.1); expect(restaurant.state.clock).toBeGreaterThan(clock); expect(restaurant.paused).toBe(false);
-  await screen.getByRole('button', { name: 'Close panel' }).click();
+  await screen.getByRole('button', { name: 'Close', exact: true }).click();
   await expect.element(screen.getByRole('button', { name: 'View daily challenges' })).toBeVisible();
 });
 it('shows earned payouts and archives progress without a collect action or paying twice', async () => {
@@ -43,8 +44,8 @@ it('shows earned payouts and archives progress without a collect action or payin
   await screen.getByRole('button', { name: 'View daily challenges' }).click();
   const board = screen.getByRole('region', { name: 'Day 1 challenges' });
   await expect.element(board).toHaveTextContent('Paid +$50'); await expect.element(board).toHaveTextContent('1/3 completed');
-  await expect.element(board.getByRole('button')).not.toBeInTheDocument();
-  await screen.getByRole('button', { name: 'Close panel' }).click();
+  await expect.element(board.getByRole('button', { name: /Collect/ })).not.toBeInTheDocument();
+  await screen.getByRole('button', { name: 'Close', exact: true }).click();
   for (let i = 0; i < 2600 && restaurant.state.day === 1; i++) restaurant.update(.1);
   const before = restaurant.state.cash;
   await screen.getByRole('button', { name: 'Read latest report: Day 1' }).click();
@@ -57,7 +58,7 @@ it('shows earned payouts and archives progress without a collect action or payin
 it('explains migration when an old service has no board', async () => {
   restaurant.open(); restaurant.state.dailyChallenges = []; restaurant.state.elapsed = 151;
   const screen = await render(<ManagementGame />); await screen.getByRole('button', { name: 'View daily challenges' }).click();
-  await expect.element(screen.getByRole('region', { name: 'Day 1 challenges' })).toHaveTextContent('start next service day');
+  await expect.element(screen.getByRole('region', { name: 'Day 1 challenges' })).toHaveTextContent('start with the next day');
 });
 it('uses static readable completed, expired and zero-progress states', async () => {
   const challenges: DailyChallenge[] = [

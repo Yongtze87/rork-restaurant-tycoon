@@ -12,7 +12,7 @@ it('asks before a purchase that leaves too little to open, counting the new wage
   restaurant.state.cash = 250; restaurant.notify();
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Team', exact: true }).click();
-  await expect.element(screen.getByTestId('safe-to-spend')).toHaveTextContent('Safe to spend $130 · keeps $120 to open');
+  await expect.element(screen.getByTestId('safe-to-spend')).toHaveTextContent('$130');
   await screen.getByRole('button', { name: /Hire chef/ }).click();
   const dialog = screen.getByRole('alertdialog');
   await expect.element(dialog).toHaveTextContent('Hiring a chef costs $150 and adds $34/day in wages.');

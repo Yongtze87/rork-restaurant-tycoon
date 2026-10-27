@@ -5,10 +5,10 @@ import type { Report } from '@/management/types';
 
 const receipt: Report = { challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, rating: 4, tide: 'calm', branch: 0 };
 function finishDay(engine: RestaurantEngine): void {
-  expect(engine.open()).toBeNull();
-  engine.state.renovation = true;
-  for (let i = 0; i < 2600 && engine.state.phase === 'service'; i++) engine.update(.1);
-  expect(engine.state.phase).toBe('planning');
+  if (engine.state.phase === 'planning') expect(engine.open()).toBeNull();
+  const days = engine.state.history.length;
+  for (let i = 0; i < 2600 && engine.state.history.length === days; i++) engine.update(.1);
+  expect(engine.state.phase).toBe('service'); expect(engine.state.history).toHaveLength(days + 1);
 }
 
 describe('daily business summaries', () => {
@@ -38,7 +38,7 @@ describe('daily business summaries', () => {
     const original = structuredClone(engine.state.history[0]);
     const cash = engine.state.cash;
     const restored = new RestaurantEngine(storage);
-    expect(restored.state.phase).toBe('planning');
+    expect(restored.state.phase).toBe('service');
     expect(restored.state.history[0]).toEqual(original);
     restored.update(.25); expect(restored.state.cash).toBe(cash);
     restored.nextDay(); expect(restored.hire('chef')).toBeNull();

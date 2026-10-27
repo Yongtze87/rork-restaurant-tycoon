@@ -12,12 +12,12 @@ vi.mock('@/management/RestaurantScene', () => ({ default: ({ building, draft, on
 beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 afterEach(async () => { await page.viewport(1280, 800); });
 
-it('shows grid only while building, selecting or moving and never during service', async () => {
+it('shows the grid only while building, selecting or moving, also while open', async () => {
   const screen = await render(<ManagementGame />), scene = screen.getByTestId('grid-scene');
   await expect.element(scene).toHaveAttribute('data-building', 'false');
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
   await expect.element(scene).toHaveAttribute('data-building', 'true');
-  await screen.getByRole('button', { name: 'Close panel' }).click();
+  await screen.getByRole('button', { name: 'Close build menu' }).click();
   await expect.element(scene).toHaveAttribute('data-building', 'false');
   await screen.getByRole('button', { name: 'Select existing table' }).click();
   await expect.element(scene).toHaveAttribute('data-building', 'true');
@@ -28,7 +28,7 @@ it('shows grid only while building, selecting or moving and never during service
   await expect.element(scene).toHaveAttribute('data-building', 'false');
   await screen.getByRole('button', { name: /Open restaurant/ }).click();
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
-  await expect.element(scene).toHaveAttribute('data-building', 'false');
+  await expect.element(scene).toHaveAttribute('data-building', 'true');
 });
 
 it('updates coordinates, rotation and non-color validity without charging until confirm', async () => {
@@ -54,6 +54,7 @@ it('updates coordinates, rotation and non-color validity without charging until 
   expect(restaurant.state.cash).toBe(1070);
   expect(restaurant.state.furniture[restaurant.state.furniture.length - 1]).toMatchObject({ kind: 'table', x: 0, z: 7, rotation: 0 });
   await expect.element(readout).not.toBeInTheDocument();
+  await screen.getByRole('button', { name: 'Close build menu' }).click();
   await expect.element(screen.getByTestId('grid-scene')).toHaveAttribute('data-building', 'false');
 });
 

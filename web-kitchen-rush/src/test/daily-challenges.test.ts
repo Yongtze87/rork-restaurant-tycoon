@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { RestaurantEngine } from '@/management/engine';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { advanceDailyChallenges, challengeBonus, createDailyChallenges, isSpecialGuest } from '@/management/daily-challenges';
 import { createRestaurant, restaurantSchema, type DailyChallenge, type Guest } from '@/management/types';
+
+// These tests compare long offline replays with live play, so the crew may work more than one day while away.
+beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
+afterEach(() => { RestaurantEngine.offlineDays = OFFLINE_SERVICE_DAYS; });
+
 
 const challenge = (kind: DailyChallenge['kind'], target = 3, dish: DailyChallenge['dish'] = null): DailyChallenge => ({ day: 1, kind, dish, target, progress: 0, reward: 50, rewarded: false });
 const dishChallenge = (dish: NonNullable<DailyChallenge['dish']>, target = 3) => challenge('dish', target, dish);
@@ -84,7 +89,7 @@ describe('committed service progress and one-time rewards', () => {
     const e = new RestaurantEngine(); e.open(); advance(e, 2);
     expect(e.state.guests.length).toBeGreaterThan(0); expect(e.state.dailyChallenges.every(c => c.progress === 0)).toBe(true);
     const before = structuredClone(e.state); e.pause(true); advance(e, 400); expect(e.state.dailyChallenges).toEqual(before.dailyChallenges);
-    e.pause(false); e.state.cash = 0; advance(e, 80); expect(e.state.totals.missed).toBeGreaterThan(0); expect(e.state.dailyChallenges.every(c => c.progress === 0)).toBe(true);
+    e.pause(false); e.state.staff = e.state.staff.filter(m => m.role !== 'chef'); advance(e, 80); expect(e.state.totals.missed).toBeGreaterThan(0); expect(e.state.dailyChallenges.every(c => c.progress === 0)).toBe(true);
   });
   it('archives paid and expired objectives without including bonuses in service profit or carrying progress', () => {
     const e = new RestaurantEngine(); e.open(); e.state.dailyChallenges = [challenge('served', 1), dishChallenge('salad', 100), dishChallenge('burger', 100)]; finish(e);
@@ -94,10 +99,9 @@ describe('committed service progress and one-time rewards', () => {
     expect(e.state.cash).toBe(1250 + report.profit + 50); expect(e.state.dailyChallenges.every(c => c.progress === 0 && c.day === 2)).toBe(true);
     finish(e); expect(e.state.history[0]).toEqual(report);
   });
-  it('closing immediately pays nothing and renovation waits to roll a menu-compatible board', () => {
-    const e = new RestaurantEngine(); e.open(); e.closeEarly(); e.update(.1);
-    expect(e.state.lifetimeChallengeBonus).toBe(0); expect(e.state.dailyChallenges).toEqual([]);
-    e.setDish('burger', false, 38); e.open(); expect(e.state.dailyChallenges[1]).toMatchObject({ kind: 'dish', dish: 'salad' });
+  it('rolls the next day’s board from the menu as it is then', () => {
+    const e = new RestaurantEngine(); e.open(); e.setDish('burger', false, 38); finish(e);
+    expect(e.state.dailyChallenges).toHaveLength(3); expect(e.state.dailyChallenges.some(c => c.kind === 'dish' && c.dish === 'burger')).toBe(false);
     e.reset(); expect(e.state.dailyChallenges).toEqual([]); expect(e.state.lifetimeChallengeBonus).toBe(0);
   });
 });
