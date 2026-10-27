@@ -274,6 +274,10 @@ export class RestaurantEngine {
     return errors;
   }
   operatingCost(): number { return this.state.staff.reduce((sum, staff) => sum + staffWage(staff), 0) + (this.state.expanded ? 50 : 30); }
+  /** Cash that can be spent while still affording the next opening (wages, rent and $30 of starting ingredients). */
+  safeToSpend(): number { return Math.max(0, this.state.cash - this.operatingCost() - 30); }
+  /** What a purchase leaves against the next opening; `extraDaily` is a new daily cost it adds, like a wage. */
+  spendCheck(cost: number, extraDaily = 0): { after: number; reserve: number } { return { after: this.state.cash - cost, reserve: this.operatingCost() + extraDaily + 30 }; }
   open(): string | null {
     if (this.state.phase !== 'planning') return 'The restaurant is already open.';
     const errors = this.readiness(); if (errors.length) return errors[0];

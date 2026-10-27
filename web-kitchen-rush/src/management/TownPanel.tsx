@@ -9,6 +9,7 @@ import { DISHES, DISH_IDS } from './types';
 import { REGION_SIZE, inHome, regionCenter } from './world';
 import { formatDuration } from './iso/town-render';
 import { money } from './format';
+import { guardSpend } from './spend-guard';
 import { Notice, SmallButton, type Action } from './Panels';
 
 export type PlotRef = { x: number; z: number };
@@ -89,7 +90,7 @@ function RegionDetails({ id, back, onSelect, action, summary }: { id: string; ba
       <div className="flex items-center justify-between gap-2"><h4 className="font-display text-base">Claim {region.name}</h4><span className="font-display text-base tabular-nums text-teal">{money(price)}</span></div>
       <p className="text-[11px] text-ink/65">Its {REGION_SIZE * REGION_SIZE} plots join your world here, with the middle plot ready for a branch restaurant. Everything you built stays.</p>
       <p className="mt-1 text-[11px] font-bold text-gold">Claiming earns +{steps[0].fame} fame · {region.fame} fame in all for mastering it</p>
-      <SmallButton className="mt-2 w-full bg-tomato text-paper" disabled={Boolean(error)} onClick={() => action(restaurant.claimRegion(id))}><MapPinned size={15} />{error ? 'Not yet' : `Claim · ${money(price)}`}</SmallButton>
+      <SmallButton className="mt-2 w-full bg-tomato text-paper" disabled={Boolean(error)} onClick={() => guardSpend(`Claiming ${region.name}`, price, () => action(restaurant.claimRegion(id)))}><MapPinned size={15} />{error ? 'Not yet' : `Claim · ${money(price)}`}</SmallButton>
       {error && <p className="mt-1 text-[11px] font-bold text-danger">{error}</p>}
     </div>}
     {status === 'claimed' && <div className="mt-3 space-y-2">
@@ -121,7 +122,7 @@ function boostNote(plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind): string | nu
 export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaurant, onShop, action }: { selected: PlotRef | null; onSelect: (plot: PlotRef | null) => void; region?: string | null; onRegion?: (id: string | null) => void; onEnterRestaurant: () => void; onShop: () => void; action: Action }) {
   const now = useNow(), state = restaurant.state, town = state.town, plot = selected && plotAt(town, selected.x, selected.z), fame = restaurant.fameBonuses();
   const busy = busyBuilders(town) >= town.builders, reserve = restaurant.operatingCost() + 30;
-  const afterSpend = (cost: number) => state.cash - cost < reserve ? <p className="mt-1 text-[11px] font-bold text-danger">Leaves {money(state.cash - cost)}, below the {money(reserve)} needed to reopen.</p> : null;
+  const afterSpend = (cost: number) => state.cash - cost < reserve ? <p className="mt-1 text-[11px] font-bold text-danger">Leaves {money(state.cash - cost)}, below the {money(reserve)} you need to open next time.</p> : null;
   const summary = <div className="mb-3 grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
     <div className="rounded-xl bg-ink/[.06] p-2"><Hammer size={15} className="mx-auto mb-0.5 text-teal" aria-hidden="true" />Builders {busyBuilders(town)}/{town.builders}</div>
     <div className="rounded-xl bg-ink/[.06] p-2"><Waves size={15} className="mx-auto mb-0.5 text-teal" aria-hidden="true" />{town.charms.current} × 15m · {town.charms.tide} × 1h</div>
@@ -149,7 +150,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
   if (!plot.owned) {
     const cost = restaurant.plotPrice(plot.x, plot.z), open = canUnlock(town, plot), reason = plotLockReason(town, plot), zone = ZONES[plotZone(plot)];
     return <section aria-label="Locked plot">{back}{summary}<h3 className="text-base">Wild seabed</h3><p className="text-xs text-ink/60">{inHome(plot) ? zone.name : regionName(plot)}</p>{where}
-      {open ? <><p className="my-2 text-xs text-ink/65">Claim this plot for your town. Each new plot in a region costs more than the last.</p>{afterSpend(cost)}<SmallButton tutorial="unlock-plot" className="mt-2 w-full bg-teal text-paper" disabled={state.cash < cost} onClick={() => action(restaurant.unlockPlot(plot.x, plot.z))}><LockKeyhole size={16} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Unlock · ${money(cost)}`}</SmallButton></>
+      {open ? <><p className="my-2 text-xs text-ink/65">Claim this plot for your town. Each new plot in a region costs more than the last.</p>{afterSpend(cost)}<SmallButton tutorial="unlock-plot" className="mt-2 w-full bg-teal text-paper" disabled={state.cash < cost} onClick={() => guardSpend('Unlocking this plot', cost, () => action(restaurant.unlockPlot(plot.x, plot.z)))}><LockKeyhole size={16} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Unlock · ${money(cost)}`}</SmallButton></>
         : <Notice>{reason}{!inHome(plot) || hasZone(town, plotZone(plot)) ? ' Plots grow outward from the ones you own.' : ' See Depth zones under All plots.'}</Notice>}
     </section>;
   }
@@ -162,7 +163,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
         <p className="mt-1.5 text-[11px] font-bold text-teal">{effectText(town, plot, kind, 1, fame.branch)}</p>
         {special && <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-gold"><Sparkles size={12} aria-hidden="true" />{special}</p>}
         {info.adjacency && <p className={cn('mt-1 flex items-center gap-1 text-[11px]', bonus ? 'font-bold text-gold' : 'text-ink/55')}><Sparkles size={12} aria-hidden="true" />{bonus ? 'Neighbour bonus active here. ' : ''}{info.adjacency}</p>}
-        <SmallButton tutorial="build-building" className="mt-2 w-full" disabled={!affordable || busy} onClick={() => action(restaurant.build(plot.x, plot.z, kind))}><Hammer size={15} />{!affordable ? `Need ${money(price - state.cash)} more` : `Build · ${formatDuration(restaurant.jobSeconds(kind, 1, plot.x, plot.z) * 1000)}`}</SmallButton>
+        <SmallButton tutorial="build-building" className="mt-2 w-full" disabled={!affordable || busy} onClick={() => guardSpend(`Building a ${info.name.toLowerCase()}`, price, () => action(restaurant.build(plot.x, plot.z, kind)))}><Hammer size={15} />{!affordable ? `Need ${money(price - state.cash)} more` : `Build · ${formatDuration(restaurant.jobSeconds(kind, 1, plot.x, plot.z) * 1000)}`}</SmallButton>
       </div>;
     })}</div></section>;
   const kind = plot.building, info = BUILDINGS[kind], job = plot.job, next = plot.level + 1, cost = restaurant.upgradePrice(kind, next, plot.x, plot.z), special = boostNote(plot, kind);
@@ -187,7 +188,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
       {lookFor(next) !== lookFor(plot.level) && <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-gold"><Sparkles size={12} aria-hidden="true" />New look: {info.looks[lookFor(next) - 1]}</p>}
       {busy && <p className="mt-1 text-[11px] text-ink/60">Your builder is busy with another job.</p>}
       {afterSpend(cost)}
-      <SmallButton className="mt-2 w-full" disabled={state.cash < cost || busy} onClick={() => action(restaurant.upgrade(plot.x, plot.z))}><Clock size={15} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Upgrade · ${formatDuration(restaurant.jobSeconds(kind, next, plot.x, plot.z) * 1000)}`}</SmallButton>
+      <SmallButton className="mt-2 w-full" disabled={state.cash < cost || busy} onClick={() => guardSpend(`Upgrading this ${info.name.toLowerCase()}`, cost, () => action(restaurant.upgrade(plot.x, plot.z)))}><Clock size={15} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Upgrade · ${formatDuration(restaurant.jobSeconds(kind, next, plot.x, plot.z) * 1000)}`}</SmallButton>
     </div>}
   </section>;
 }

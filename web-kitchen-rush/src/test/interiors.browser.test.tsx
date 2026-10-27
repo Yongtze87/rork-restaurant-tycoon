@@ -72,6 +72,9 @@ it('uses real cash shortfalls and warns before spending the opening reserve with
   await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('After purchase: $20');
   await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('Below opening reserve');
   await screen.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect.element(screen.getByRole('alertdialog')).toHaveTextContent('A coral table costs $180.');
+  expect(restaurant.state.cash).toBe(200);
+  await screen.getByRole('button', { name: 'Spend anyway' }).click();
   expect(restaurant.state.cash).toBe(20); expect(restaurant.open()).toContain('Keep $120');
 });
 
