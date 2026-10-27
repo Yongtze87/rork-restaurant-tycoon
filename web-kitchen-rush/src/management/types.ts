@@ -102,8 +102,8 @@ export const freshTotals = (): Totals => ({ revenue: 0, ingredients: 0, served: 
 export const staffWage = (staff: Staff): number => (staff.role === 'chef' ? 34 : 26) + (staff.level - 1) * 12;
 /** Furniture upgrades: 15 levels, 3 looks (1–5, 6–10, 11–15). Upgrades are instant and planning-only. */
 export const FURNITURE_MAX_LEVEL = MAX_LEVEL;
-export const FURNITURE_UPGRADES = { tipPerLevel: .02, tableComfortPerLevel: 1, decorComfortPerLevel: 1, cookSpeedPerLevel: .03, cookSpeedCap: .4 } as const;
-export const furnitureUpgradeCost = (kind: FurnitureKind, nextLevel: number): number => Math.round(CATALOG[kind].price * .5 * nextLevel ** 1.3 / 5) * 5;
+export const FURNITURE_UPGRADES = { tipPerLevel: .03, tableComfortPerLevel: 1, decorComfortPerLevel: 1, cookSpeedPerLevel: .03, cookSpeedCap: .4 } as const;
+export const furnitureUpgradeCost = (kind: FurnitureKind, nextLevel: number): number => Math.round(CATALOG[kind].price * .4 * nextLevel ** 1.3 / 5) * 5;
 const above = (level: number): number => Math.max(0, Math.min(FURNITURE_MAX_LEVEL, level) - 1);
 /** Extra share of the dish price a table adds to tips. */
 export const tableTipBonus = (level: number): number => above(level) * FURNITURE_UPGRADES.tipPerLevel;

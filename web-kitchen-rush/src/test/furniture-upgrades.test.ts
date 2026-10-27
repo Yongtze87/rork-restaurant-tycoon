@@ -19,8 +19,8 @@ function serve(e: RestaurantEngine, seconds: number): RestaurantEngine { expect(
 
 describe('furniture upgrade tiers', () => {
   it('costs grow with every level for every kind, using the shared formula', () => {
-    expect(furnitureUpgradeCost('table', 2)).toBe(Math.round(180 * .5 * 2 ** 1.3 / 5) * 5);
-    expect(furnitureUpgradeCost('table', 2)).toBe(220);
+    expect(furnitureUpgradeCost('table', 2)).toBe(Math.round(180 * .4 * 2 ** 1.3 / 5) * 5);
+    expect(furnitureUpgradeCost('table', 2)).toBe(175);
     for (const kind of KINDS) for (let level = 3; level <= FURNITURE_MAX_LEVEL; level++) {
       expect(furnitureUpgradeCost(kind, level)).toBeGreaterThan(furnitureUpgradeCost(kind, level - 1));
       expect(furnitureUpgradeCost(kind, level) % 5).toBe(0);
@@ -93,15 +93,15 @@ describe('furniture upgrade tiers', () => {
   });
 
   it('table upgrades raise real tips and atmosphere', () => {
-    expect(tableTipBonus(1)).toBe(0); expect(tableTipBonus(3)).toBeCloseTo(.04);
+    expect(tableTipBonus(1)).toBe(0); expect(tableTipBonus(3)).toBeCloseTo(.06);
     expect(furnitureComfort({ kind: 'table', level: 4 })).toBe(3);
     const base = serve(new RestaurantEngine(), 140), better = upgraded(['table'], 6);
     expect(comfort(better.state)).toBe(comfort(base.state) + 3 * 5);
     serve(better, 140);
     expect(base.state.totals.served).toBeGreaterThan(3);
     expect(better.state.totals.tips).toBeGreaterThan(base.state.totals.tips);
-    expect(upgradeEffectText({ kind: 'table', level: 1 })).toBe('Tips +2% · +1 atmosphere');
-    expect(upgradeEffectText({ kind: 'table', level: 2 })).toBe('Tips +2% → +4% · +1 atmosphere');
+    expect(upgradeEffectText({ kind: 'table', level: 1 })).toBe('Tips +3% · +1 atmosphere');
+    expect(upgradeEffectText({ kind: 'table', level: 2 })).toBe('Tips +3% → +6% · +1 atmosphere');
   });
 
   it('kitchen upgrades shorten real cooking at that station, capped at 40%', () => {
