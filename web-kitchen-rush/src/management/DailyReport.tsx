@@ -5,6 +5,8 @@ import { money } from './format';
 import { DailyChallenges } from './DailyChallenges';
 import { challengeBonus } from './daily-challenges';
 import { summarizeReport } from './report';
+import { TIDES, tideEffectText } from './tides';
+import { TideIcon } from './TideCard';
 import type { Report } from './types';
 
 type DailyReportProps = {
@@ -42,6 +44,7 @@ export function DailyReport({ report, previous, restaurantName, closing, onConti
         <div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.18em] text-teal"><ReceiptText size={16} aria-hidden="true" />Daily business summary <span className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-gold/25 px-2 py-1 tracking-normal">Day {report.day}</span></div>
         <DialogTitle className="font-display text-3xl">{closing ? 'That’s a wrap.' : `Day ${report.day} summary`}</DialogTitle>
         <DialogDescription className="mt-1 break-words text-xs text-ink/65">{restaurantName} · Day {report.day} closing receipt</DialogDescription>
+        <p data-testid="report-tide" className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-teal/10 px-2.5 py-1 text-[11px] font-extrabold text-teal"><TideIcon tide={report.tide} size={14} className="shrink-0" /><span className="min-w-0">{TIDES[report.tide].name} <span className="font-semibold text-ink/65">· {tideEffectText(report.tide)}</span></span></p>
       </div>
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold sm:px-7" role="region" aria-label="Daily report details" tabIndex={0} data-testid="report-scroll">
         <dl className="grid grid-cols-2 gap-3">

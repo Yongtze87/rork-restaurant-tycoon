@@ -3,6 +3,7 @@ import { CATALOG, DAY_LENGTH, DISHES, SAVE_KEY, capacity, comfort, createRestaur
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitles } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
+import { TIDES, rollTide, type TideEffects } from './tides';
 import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, canUnlock, completeJobs, dayKey, finishCost, jobSeconds, plotAt, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 
 export const GOALS = [
@@ -70,6 +71,7 @@ export class RestaurantEngine {
         if (this.state.phase === 'report') { this.beginNextDay(); this.state.lastActiveAt = 0; }
         // Legacy service starts challenges next day, never assigns full-day goals near closing.
         if (this.state.phase === 'service' && this.state.elapsed === 0 && !this.state.dailyChallenges.length) this.startChallenges();
+        if (this.state.phase === 'planning') this.rollTide();
         this.event = 'Welcome back. Your restaurant story continues.';
       }
     } catch { this.loadWarning = 'The previous save could not be read. A fresh restaurant is shown; save again only when you are ready to replace it.'; this.saveFailed = true; }
@@ -232,16 +234,19 @@ export class RestaurantEngine {
     if (this.state.phase !== 'planning') return 'The restaurant is already open.';
     const errors = this.readiness(); if (errors.length) return errors[0];
     Object.assign(this.state, { phase: 'service', renovation: false, elapsed: 0, nextArrival: 1, totals: freshTotals(), guests: [], dirty: [] });
-    this.startChallenges(); this.relocateStaff(); this.paused = false; this.accumulator = 0; this.changed('Doors open. Your team has it from here.'); return null;
+    this.rollTide(); this.startChallenges(); this.relocateStaff(); this.paused = false; this.accumulator = 0; this.changed('Doors open. Your team has it from here.'); return null;
   }
   private startChallenges(): void {
     if (this.state.dailyChallenges.length) return;
     this.state.dailyChallenges = createDailyChallenges(this.state);
   }
+  /** Today's tide: a pure hash of seed and day, so rolling again before service starts gives the same tide. */
+  private rollTide(): void { this.state.tide = rollTide(this.state.seed, this.state.day); }
+  tideEffects(): TideEffects { return TIDES[this.state.tide].effects; }
   private beginNextDay(): void {
     const renovate = this.state.renovation;
     this.state.day++; this.state.phase = 'planning'; this.state.guests = []; this.state.dirty = []; this.state.elapsed = 0; this.state.nextArrival = 1; this.state.totals = freshTotals(); this.relocateStaff();
-    this.state.renovation = false; this.incomeReceipts = []; this.state.dailyChallenges = [];
+    this.state.renovation = false; this.incomeReceipts = []; this.state.dailyChallenges = []; this.rollTide();
     const errors = this.readiness();
     if (!renovate && !errors.length) { this.state.phase = 'service'; this.startChallenges(); this.event = `Day ${this.state.day}. Doors open again — yesterday’s receipt is in Ledger.`; }
     else this.event = renovate ? 'Closed for renovation. Reopen whenever you are ready.' : `Waiting for the owner: ${errors[0]}`;
@@ -307,7 +312,7 @@ export class RestaurantEngine {
   }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
-    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + (Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2) / (1 + this.townEffects().arrivalBonus); }
+    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + (Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2) / ((1 + this.townEffects().arrivalBonus) * this.tideEffects().arrival); }
     for (const guest of s.guests) {
       if (guest.stage === 'arriving' && walk(guest, dt, 1.7)) {
         guest.stage = 'waiting'; const table = s.furniture.find(f => f.id === guest.tableId); guest.yaw = Math.PI - (table?.rotation ?? 0) * Math.PI / 2;
@@ -316,14 +321,14 @@ export class RestaurantEngine {
         guest.timer -= dt;
         if (guest.timer <= 0) { s.dirty.push(seatKey(guest)); this.leave(guest, true); }
       } else if (['waiting', 'cooking', 'ready', 'delivering'].includes(guest.stage)) {
-        guest.waiting += dt; if (guest.waiting > guestPatienceSeconds(s)) this.leave(guest, false);
+        guest.waiting += dt; if (guest.waiting > guestPatienceSeconds(s, this.tideEffects().patience)) this.leave(guest, false);
       }
     }
     s.guests = s.guests.filter(g => g.stage !== 'leaving' || g.route.length > 0);
     this.assignJobs();
     for (const staff of s.staff) {
       if (staff.task === 'idle') continue;
-      const pace = this.townEffects().crewSpeed;
+      const pace = this.townEffects().crewSpeed * this.tideEffects().crewSpeed;
       if (!walk(staff, dt, (2 + (staff.level - 1) * .4) * pace)) continue;
       if (staff.task === 'clean') {
         staff.timer -= dt * pace / (1 - (staff.level - 1) * .17);
@@ -342,7 +347,7 @@ export class RestaurantEngine {
       } else if (staff.task === 'deliver') {
         guest.stage = 'eating'; guest.timer = 10; guest.happy = true;
         if (!guest.paid) {
-          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001) * Math.max(.15, 1 - guest.waiting / 60)));
+          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips));
           const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; guest.paid = true;
           this.recordIncome(earned, 'service', guest.id, tip);
           this.event = `${DISHES[guest.dish].name} served. +$${earned}${tip ? ` including $${tip} tip` : ''}`;
@@ -366,7 +371,7 @@ export class RestaurantEngine {
     return this.effects;
   }
   crewLimit(): number { return 6 + this.townEffects().extraCrew; }
-  dishCost(dish: Dish): number { return Math.max(1, Math.round(DISHES[dish].cost * (dish === 'salad' ? this.townEffects().saladCost : this.townEffects().burgerCost))); }
+  dishCost(dish: Dish): number { return Math.max(1, Math.round(DISHES[dish].cost * (dish === 'salad' ? this.townEffects().saladCost * this.tideEffects().kelpCost : this.townEffects().burgerCost * this.tideEffects().fishCost))); }
   /** Finish construction whose end time has passed (wall-clock time, also while away). */
   private tickTown(at: number): void {
     const done = completeJobs(this.state.town, at); if (!done.length) return;
@@ -434,7 +439,7 @@ export class RestaurantEngine {
     s.cash -= wages + rent + debtPayment; s.debt -= debtPayment;
     const rating = Math.max(1, Math.min(5, 3 + (s.totals.served / Math.max(1, s.totals.served + s.totals.missed)) * 1.5 + comfort(s) * .005 - s.totals.missed * .06));
     s.reputation = Math.round((s.reputation * .65 + rating * .35) * 100) / 100;
-    s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips - s.totals.ingredients - wages - rent - debtPayment, rating }); s.history = s.history.slice(-20);
+    s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips - s.totals.ingredients - wages - rent - debtPayment, rating, tide: s.tide }); s.history = s.history.slice(-20);
     this.beginNextDay(); this.changed();
   }
 }

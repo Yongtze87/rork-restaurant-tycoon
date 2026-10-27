@@ -1,13 +1,15 @@
-import { TOWN_SIZE, canUnlock, lookFor, unlockCost, type Town } from '../town';
+import { TOWN_SIZE, activeLevel, canUnlock, lookFor, unlockCost, type Town } from '../town';
 import type { Ambience } from './ambience';
 import { depthOf, toScreen, type View } from './projection';
-import { at, drawDecor, drawParticles, drawWater, floorPolygon, type Decor } from './render';
+import { at, drawDecor, drawNight, drawParticles, drawWater, floorPolygon, type Decor, type Glow } from './render';
 import { drawSprite } from './sprites';
 import { drawBuilding, drawScaffold } from './town-art';
 
 export interface TownFrame {
   town: Town; cash: number; view: View; width: number; height: number; windowTop: number; windowHeight: number;
   time: number; now: number; ambience: Ambience; reduced: boolean; selected: { x: number; z: number } | null;
+  /** Evening darkness, 0 (dusk) to 1 (night); visual only. */
+  night?: number;
 }
 type Ctx = CanvasRenderingContext2D;
 const MARGIN = 2, GAP = .07;
@@ -55,6 +57,15 @@ export function renderTown(ctx: Ctx, f: TownFrame): void {
     }) });
   }
   items.sort((a, b) => a.depth - b.depth).forEach(item => item.draw());
+  const night = f.night ?? 0;
+  if (night > 0) drawNight(ctx, f, night, town.plots.flatMap((plot): Glow[] => {
+    if (!plot.building || !activeLevel(plot)) return [];
+    const look = lookFor(plot.level), s = view.scale, glows: Glow[] = [];
+    if (plot.building === 'garden') glows.push({ ...toScreen(view, plot.x, plot.z, 12), r: 52 * s, color: '165, 123, 255', strength: .2 + look * .1 });
+    if (plot.building === 'restaurant') glows.push({ ...toScreen(view, plot.x, plot.z, 10), r: 26 * s, color: '255, 226, 122', strength: .4 });
+    if (look === 3) glows.push({ ...toScreen(view, plot.x, plot.z, 30), r: 58 * s, color: plot.building === 'homes' ? '255, 226, 122' : '77, 240, 255', strength: .35 });
+    return glows;
+  }));
   // Badges after the buildings so they are never hidden: level, construction progress, unlock price.
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const plot of town.plots) {
