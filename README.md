@@ -32,6 +32,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Ledger:** a weekly revenue chart, growth against the previous week, and the last 20 daily receipts.
 - **Daily tides:** each service day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
 - **Daily challenges**, **milestones**, an interest-free **recovery loan** and a **low-capital warning** with one-click **Close for renovation**.
+- **Collection:** 51 long-term achievements in the Ledger (dish mastery, builder, explorer, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
 
 ### Offline progress you can trust
 - When you return, the game **replays the elapsed time at 1× through the same simulation step**, with checkpoints.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MAX_LEVEL, createTown, townSchema, type Validated } from './town';
-import { rollTide, tideKind } from './tides';
+import { rollTide, tideKind, type TideKind } from './tides';
 import type { ZoneId } from './zones';
 
 export const furnitureKind = z.enum(['table', 'prep', 'grill', 'plant', 'divider', 'lamp']);
@@ -56,6 +56,17 @@ const menuItem = (dish: DishId) => z.object({ enabled: z.boolean(), price: price
 /** One entry per dish; dishes added after a save was made start off the menu at their suggested price. */
 const menuSchema = z.object(Object.fromEntries(DISH_IDS.map(dish => [dish, menuItem(dish)])) as { [K in DishId]: ReturnType<typeof menuItem> });
 export type Menu = Validated<z.infer<typeof menuSchema>>;
+const counter = z.number().int().nonnegative().default(0);
+const unique = (list: unknown[]): boolean => new Set(list).size === list.length;
+export const freshCollections = () => ({ served: Object.fromEntries(DISH_IDS.map(dish => [dish, 0])) as Record<DishId, number>, tides: [] as TideKind[], perfectDays: 0, fiveStarDays: 0, bestFurniture: 1, claimed: [] as string[] });
+/** Long-term achievement progress. Counters only move when the real event happens (see `collections.ts`). */
+const collectionsSchema = z.object({
+  served: z.object(Object.fromEntries(DISH_IDS.map(dish => [dish, counter])) as { [K in DishId]: typeof counter }).default(() => freshCollections().served),
+  tides: z.array(tideKind).max(tideKind.options.length).default([]).refine(unique, 'Duplicate tides'),
+  perfectDays: counter, fiveStarDays: counter, bestFurniture: z.number().int().min(1).max(MAX_LEVEL).default(1),
+  claimed: z.array(z.string().max(40)).max(200).default([]).refine(unique, 'Duplicate achievements'),
+});
+export type Collections = Validated<z.infer<typeof collectionsSchema>>;
 /** Validated versioned save. Arcade records live under a different key. */
 export const restaurantSchema = z.object({
   version: z.literal(1), name: z.string().min(1).max(28), day: z.number().int().min(1), cash: z.number().finite(), reputation: z.number().min(1).max(5), debt: z.number().nonnegative(), expanded: z.boolean(),
@@ -66,6 +77,7 @@ export const restaurantSchema = z.object({
   dailyChallenges: challengesSchema, lifetimeChallengeBonus: z.number().int().nonnegative().default(0), tide: tideKind.default('calm'),
   totals: totalsSchema, history: z.array(reportSchema).max(20), lifetimeServed: z.number().int().nonnegative(), claimed: z.array(z.string()).max(10), music: z.boolean(), welcomed: z.boolean(),
   town: townSchema.default(createTown),
+  collections: collectionsSchema.default(freshCollections),
 });
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
@@ -126,5 +138,6 @@ export function createRestaurant(): RestaurantState {
     ], guests: [], dirty: [], menu: createMenu(),
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(),
+    collections: freshCollections(),
   };
 }
