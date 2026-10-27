@@ -32,3 +32,14 @@ bunx vitest run         # unit tests
 bun run build
 ```
 Browser tests: `bunx vitest run --config vitest.browser.config.ts`. In the cloud sandbox Chromium lives at `/opt/pw-browsers/chromium`; use a temporary copy of the config with `playwright({ launchOptions: { executablePath: '/opt/pw-browsers/chromium' } })`, and delete it (plus `.vitest-attachments`, `src/test/__screenshots__`) afterwards.
+
+## The Ocean: colonies and endless expansion
+The Abyss ends a **chapter**, not the game. After reaching the Abyss the player can **found a new colony** in another region of an endless Ocean map.
+- **Ocean map.** Regions on a grid around the Home Reef, expanding in every direction. Only regions next to explored ones can be colonised, so routes branch. The first ring is hand-designed; everything beyond is generated deterministically from the region's coordinates, so the map never runs out. Hand-made landmark regions can be added in updates.
+- **Biomes.** Kelp forest, volcanic vents, ice shelf, coral atoll, sunken city, open trench (more later). Each biome has a look (water and ground palette, decor) and modifiers.
+- **Difficulty is not a straight line.**
+  1. *Sawtooth across colonies:* each colony restarts, but permanent fame makes the early game faster; difficulty then ramps to that colony's Abyss.
+  2. *Route choice:* every region mixes upsides and downsides (e.g. ice shelf: slower crew, guests pay more; volcanic vents: cheaper fish, impatient guests; calm lagoon: easy and lower rewards). Distance raises difficulty on average, but there are always easier and harder neighbours.
+  3. *Rewards grow faster than difficulty* so moving outward always feels worth it.
+- **Kept on founding:** pearls, charms, extra builders, collections (claims and counters), tutorial state, fame. **Reset:** cash, restaurant layout and staff, town, zones, history.
+- **Fame** is permanent and earned per founded colony (more for harder regions); it grants clear, capped bonuses (for example tips, starting cash, guest arrival) shown before founding.
