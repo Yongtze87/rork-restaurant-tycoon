@@ -1,5 +1,5 @@
 import { DISH_IDS, type DishId, type FurnitureKind, type Guest, type Role } from '../types';
-import type { BuildingKind } from '../town';
+import { lookFor, type BuildingKind } from '../town';
 
 /**
  * Art slots for generated images. Each image is drawn at w×h art pixels (one floor tile is 64×32),
@@ -12,9 +12,8 @@ export interface SpriteSlot { src?: string; w: number; h: number; ax: number; ay
 
 export type Look = Guest['look'];
 export type SpriteKey =
-  | `furniture.${FurnitureKind}`
+  | `furniture.${FurnitureKind}` | `furniture.${FurnitureKind}.${2 | 3}`
   | 'furniture.stool'
-  | 'furniture.table.2' | 'furniture.table.3'
   | `guest.${Look}.${'front' | 'back'}`
   | `staff.${Role}.${'front' | 'back'}`
   | `meal.${DishId}` | 'meal.dirty'
@@ -26,15 +25,17 @@ const meal: SpriteSlot = { w: 24, h: 16, ax: 12, ay: 10 };
 // Town buildings: one plot is 64 art px wide; tall looks reach about 80 px above the ground.
 const building: SpriteSlot = { w: 80, h: 96, ax: 40, ay: 84 };
 const mealSlots = Object.fromEntries(DISH_IDS.map(dish => [`meal.${dish}`, meal])) as Record<`meal.${DishId}`, SpriteSlot>;
+/** Upgrade looks 2 and 3 for every furniture kind; they share the look-1 frame until art arrives. */
+const furnitureLooks = (kind: Exclude<FurnitureKind, 'table'>, slot: SpriteSlot) => ({ [`furniture.${kind}`]: slot, [`furniture.${kind}.2`]: slot, [`furniture.${kind}.3`]: slot }) as Record<`furniture.${typeof kind}` | `furniture.${typeof kind}.${2 | 3}`, SpriteSlot>;
 const buildingSlots = Object.fromEntries((['restaurant', 'kelpFarm', 'fishery', 'homes', 'garden', 'workshop'] as const).flatMap(kind => [1, 2, 3].map(look => [`building.${kind}.${look}`, building]))) as Record<`building.${BuildingKind}.${1 | 2 | 3}`, SpriteSlot>;
 
 export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   'furniture.table': { src: '/art/furniture/table-1.webp', w: 79.5, h: 67.5, ax: 39.8, ay: 64.1, surface: 41 },
-  // Upgrade tiers, ready for the progression system.
+  // Upgrade looks: levels 6–10 and 11–15.
   'furniture.table.2': { src: '/art/furniture/table-2.webp', w: 79.9, h: 66.8, ax: 39.9, ay: 63.4, surface: 37 },
   'furniture.table.3': { src: '/art/furniture/table-3.webp', w: 92.7, h: 78.5, ax: 46.4, ay: 70.1, surface: 39 },
-  'furniture.prep': furniture(64, 72, 56), 'furniture.grill': furniture(64, 72, 56),
-  'furniture.plant': furniture(64, 72, 56), 'furniture.divider': furniture(64, 112, 96), 'furniture.lamp': furniture(64, 112, 96),
+  ...furnitureLooks('prep', furniture(64, 72, 56)), ...furnitureLooks('grill', furniture(64, 72, 56)),
+  ...furnitureLooks('plant', furniture(64, 72, 56)), ...furnitureLooks('divider', furniture(64, 112, 96)), ...furnitureLooks('lamp', furniture(64, 112, 96)),
   'furniture.stool': furniture(32, 28, 20),
   'guest.coral.front': person, 'guest.coral.back': person, 'guest.pearl.front': person, 'guest.pearl.back': person,
   'guest.lagoon.front': person, 'guest.lagoon.back': person, 'guest.dusk.front': person, 'guest.dusk.back': person,
@@ -42,6 +43,11 @@ export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   ...mealSlots, 'meal.dirty': meal,
   ...buildingSlots,
 };
+
+/** The sprite slot for a placed piece's look (levels 1–5, 6–10, 11–15). */
+export function furnitureSprite(kind: FurnitureKind, level = 1): `furniture.${FurnitureKind}` | `furniture.${FurnitureKind}.${2 | 3}` {
+  const look = lookFor(level); return look === 1 ? `furniture.${kind}` : `furniture.${kind}.${look}`;
+}
 
 const images = new Map<string, HTMLImageElement>();
 

@@ -3,7 +3,7 @@ import { buildRevenueWeeks, revenueAxisMax } from '@/management/weekly-revenue';
 import { RestaurantEngine } from '@/management/engine';
 import { freshTotals, type Report } from '@/management/types';
 
-const receipt = (day: number, revenue = 100, tips = 10): Report => ({ ...freshTotals(), day, revenue, tips, wages: 60, rent: 30, debtPayment: 0, profit: revenue + tips - 90, rating: 4, challenges: [] });
+const receipt = (day: number, revenue = 100, tips = 10): Report => ({ ...freshTotals(), day, revenue, tips, wages: 60, rent: 30, debtPayment: 0, profit: revenue + tips - 90, rating: 4, challenges: [], tide: 'calm' });
 const receipts = (count: number, start = 1): Report[] => Array.from({ length: count }, (_, i) => receipt(start + i));
 
 describe('weekly revenue projection', () => {

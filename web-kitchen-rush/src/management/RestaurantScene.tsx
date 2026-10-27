@@ -1,6 +1,6 @@
 import { Component, useEffect, useRef, type ReactNode } from 'react';
 import { useReducedMotionQuery } from '@/hooks/use-reduced-motion';
-import { CATALOG, HEIGHT, width, type Furniture, type Point, type RestaurantState } from './types';
+import { CATALOG, HEIGHT, width, type Placement, type Point, type RestaurantState } from './types';
 import { restaurant } from './engine';
 import { placementError } from './layout';
 import { RestaurantLabels } from './RestaurantLabels';
@@ -10,7 +10,7 @@ import { cellAt, fitView, type View } from './iso/projection';
 import { usePanTap } from './iso/use-pan-tap';
 import { furnitureAt, renderFrame, type HitBox, type Tracked } from './iso/render';
 
-interface SceneProps { state: RestaurantState; building: boolean; draft: Furniture | null; selected: number | null; zoom: number; viewKey?: number; onTile: (point: Point) => void; onSelect: (id: number) => void; }
+interface SceneProps { state: RestaurantState; building: boolean; draft: Placement | null; selected: number | null; zoom: number; viewKey?: number; onTile: (point: Point) => void; onSelect: (id: number) => void; }
 export class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }

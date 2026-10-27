@@ -3,6 +3,7 @@ import { useReducedMotionQuery } from '@/hooks/use-reduced-motion';
 import { restaurant } from './engine';
 import { SceneBoundary } from './RestaurantScene';
 import { TOWN_SIZE } from './town';
+import { sceneNight } from './light';
 import { createAmbience, stepAmbience } from './iso/ambience';
 import { cellAt, fitView, type View } from './iso/projection';
 import { renderTown } from './iso/town-render';
@@ -34,7 +35,7 @@ export default function TownScene(props: TownSceneProps) {
       if (!reduced.matches) stepAmbience(ambience, dt);
       const v = fitView(w, h, TOWN_SIZE, TOWN_SIZE, latest.current.zoom, pan.current); view.current = v;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      renderTown(ctx, { town: restaurant.state.town, cash: restaurant.state.cash, view: v, width: w, height: h, windowTop: rect.top, windowHeight: window.innerHeight, time: now / 1000, now: Date.now(), ambience, reduced: reduced.matches, selected: latest.current.selected });
+      renderTown(ctx, { town: restaurant.state.town, cash: restaurant.state.cash, view: v, width: w, height: h, windowTop: rect.top, windowHeight: window.innerHeight, time: now / 1000, now: Date.now(), ambience, reduced: reduced.matches, selected: latest.current.selected, night: sceneNight(restaurant.state) });
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);

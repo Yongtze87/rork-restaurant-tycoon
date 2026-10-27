@@ -130,5 +130,11 @@ describe('ingredient town effects', () => {
     expect(e.townEffects().fishCost).toBeCloseTo(.7);
     expect(e.dishCost('lobster')).toBe(Math.round(20 * .7)); expect(e.dishCost('sushi')).toBe(Math.round(14 * .7)); expect(e.dishCost('jellySalad')).toBe(Math.round(18 * .4));
   });
+  it('tides cheapen dishes by ingredient too, stacking with the town', () => {
+    const e = new RestaurantEngine();
+    e.state.tide = 'plankton'; expect(e.dishCost('jellySalad')).toBeLessThan(18); expect(e.dishCost('pearlDumplings')).toBeLessThan(28); expect(e.dishCost('sushi')).toBe(14);
+    e.state.tide = 'shoal'; expect(e.dishCost('sushi')).toBeLessThan(14); expect(e.dishCost('inkNoodles')).toBeLessThan(36); expect(e.dishCost('jellySalad')).toBe(18);
+    const shoal = e.dishCost('lobster'); Object.assign(plotAt(e.state.town, 5, 4)!, { owned: true, building: 'fishery', level: 5 }); expect(e.dishCost('lobster')).toBeLessThan(shoal);
+  });
   it('is neutral for a new town', () => { expect(townEffects(createTown())).toEqual({ kelpCost: 1, fishCost: 1, extraCrew: 0, arrivalBonus: 0, crewSpeed: 1 }); });
 });

@@ -1,12 +1,13 @@
 import { z } from 'zod';
-import { createTown, townSchema, type Validated } from './town';
+import { MAX_LEVEL, createTown, townSchema, type Validated } from './town';
+import { rollTide, tideKind } from './tides';
 import type { ZoneId } from './zones';
 
 export const furnitureKind = z.enum(['table', 'prep', 'grill', 'plant', 'divider', 'lamp']);
 export type FurnitureKind = z.infer<typeof furnitureKind>;
 export const pointSchema = z.object({ x: z.number().finite().min(-2).max(16), z: z.number().finite().min(-2).max(16) });
 export type Point = Validated<z.infer<typeof pointSchema>>;
-const furnitureSchema = z.object({ id: z.number().int().nonnegative(), kind: furnitureKind, x: z.number().int().min(0).max(13), z: z.number().int().min(0).max(9), rotation: z.number().int().min(0).max(3) });
+const furnitureSchema = z.object({ id: z.number().int().nonnegative(), kind: furnitureKind, x: z.number().int().min(0).max(13), z: z.number().int().min(0).max(9), rotation: z.number().int().min(0).max(3), level: z.number().int().min(1).max(MAX_LEVEL).default(1) });
 export type Furniture = Validated<z.infer<typeof furnitureSchema>>;
 /** Dish ids in menu order. `salad` and `burger` keep their original ids so older saves stay valid. */
 export const DISH_IDS = ['salad', 'burger', 'sushi', 'lobster', 'jellySalad', 'squidSkewers', 'pearlDumplings', 'inkNoodles'] as const;
@@ -27,6 +28,8 @@ export const DISHES: Record<DishId, DishInfo> = {
   pearlDumplings: { name: 'Vent pearl dumplings', plural: 'vent pearl dumplings', cost: 28, fair: 84, seconds: 13, station: 'prep', ingredient: 'kelp', zone: 'abyss', description: 'Silky kelp dough folded around warm vent pearls. Rare and soft.' },
   inkNoodles: { name: 'Abyssal ink noodles', plural: 'bowls of abyssal ink noodles', cost: 36, fair: 100, seconds: 17, station: 'grill', ingredient: 'fish', zone: 'abyss', description: 'Midnight-black noodles tossed with fish from the deepest vents.' },
 };
+/** A piece being placed: new purchases always start at level 1 and moves keep the placed level. */
+export type Placement = Omit<Furniture, 'level'> & { level?: number };
 const roleSchema = z.enum(['chef', 'server']);
 export type Role = z.infer<typeof roleSchema>;
 const agentSchema = pointSchema.extend({ yaw: z.number().finite(), route: z.array(pointSchema).max(200) });
@@ -47,7 +50,7 @@ const challengeSchema = z.preprocess(legacyChallenge, z.object({
 }).refine(c => c.progress <= c.target && c.rewarded === (c.progress === c.target), 'Invalid challenge progress').refine(c => (c.kind === 'dish') === (c.dish !== null), 'A dish challenge names one dish'));
 export type DailyChallenge = Validated<z.infer<typeof challengeSchema>>;
 const challengesSchema = z.array(challengeSchema).max(3).default([]).refine(items => new Set(items.map(c => `${c.kind}:${c.dish}`)).size === items.length, 'Duplicate challenges');
-const reportSchema = totalsSchema.extend({ challenges: challengesSchema, day: z.number().int().positive(), wages: z.number().nonnegative(), rent: z.number().nonnegative(), debtPayment: z.number().nonnegative(), profit: z.number().finite(), rating: z.number().min(1).max(5) });
+const reportSchema = totalsSchema.extend({ challenges: challengesSchema, day: z.number().int().positive(), wages: z.number().nonnegative(), rent: z.number().nonnegative(), debtPayment: z.number().nonnegative(), profit: z.number().finite(), rating: z.number().min(1).max(5), tide: tideKind.default('calm') });
 export type Report = Validated<z.infer<typeof reportSchema>>;
 const menuItem = (dish: DishId) => z.object({ enabled: z.boolean(), price: priceSchema }).default({ enabled: false, price: DISHES[dish].fair });
 /** One entry per dish; dishes added after a save was made start off the menu at their suggested price. */
@@ -60,7 +63,7 @@ export const restaurantSchema = z.object({
   menu: menuSchema,
   phase: z.enum(['planning', 'service', 'report']), elapsed: z.number().finite().nonnegative(), nextArrival: z.number().finite().nonnegative(), clock: z.number().finite().nonnegative(), nextId: z.number().int().positive(), seed: z.number().finite(),
   lastActiveAt: z.number().finite().nonnegative().default(0), isPaused: z.boolean().default(false), renovation: z.boolean().default(false),
-  dailyChallenges: challengesSchema, lifetimeChallengeBonus: z.number().int().nonnegative().default(0),
+  dailyChallenges: challengesSchema, lifetimeChallengeBonus: z.number().int().nonnegative().default(0), tide: tideKind.default('calm'),
   totals: totalsSchema, history: z.array(reportSchema).max(20), lifetimeServed: z.number().int().nonnegative(), claimed: z.array(z.string()).max(10), music: z.boolean(), welcomed: z.boolean(),
   town: townSchema.default(createTown),
 });
@@ -82,23 +85,46 @@ export const width = (state: Pick<RestaurantState, 'expanded'>): number => state
 export const entrance: Point = { x: 4, z: 9 };
 export const freshTotals = (): Totals => ({ revenue: 0, ingredients: 0, served: 0, missed: 0, tips: 0 });
 export const staffWage = (staff: Staff): number => (staff.role === 'chef' ? 34 : 26) + (staff.level - 1) * 12;
-export const comfort = (state: RestaurantState): number => Math.min(100, state.furniture.reduce((total, item) => total + CATALOG[item.kind].comfort, 20));
-/** Shared service deadline, including the restaurant's existing atmosphere bonus. */
-export const guestPatienceSeconds = (state: RestaurantState): number => 48 + comfort(state) * .18;
+/** Furniture upgrades: 15 levels, 3 looks (1–5, 6–10, 11–15). Upgrades are instant and planning-only. */
+export const FURNITURE_MAX_LEVEL = MAX_LEVEL;
+export const FURNITURE_UPGRADES = { tipPerLevel: .02, tableComfortPerLevel: 1, decorComfortPerLevel: 1, cookSpeedPerLevel: .03, cookSpeedCap: .4 } as const;
+export const furnitureUpgradeCost = (kind: FurnitureKind, nextLevel: number): number => Math.round(CATALOG[kind].price * .5 * nextLevel ** 1.3 / 5) * 5;
+const above = (level: number): number => Math.max(0, Math.min(FURNITURE_MAX_LEVEL, level) - 1);
+/** Extra share of the dish price a table adds to tips. */
+export const tableTipBonus = (level: number): number => above(level) * FURNITURE_UPGRADES.tipPerLevel;
+/** Share of cooking time a prep counter or grill saves. */
+export const stationSpeedup = (level: number): number => Math.min(FURNITURE_UPGRADES.cookSpeedCap, above(level) * FURNITURE_UPGRADES.cookSpeedPerLevel);
+export function furnitureComfort(item: Pick<Furniture, 'kind' | 'level'>): number {
+  const base = CATALOG[item.kind].comfort;
+  if (item.kind === 'table') return base + above(item.level) * FURNITURE_UPGRADES.tableComfortPerLevel;
+  return base > 0 ? base + above(item.level) * FURNITURE_UPGRADES.decorComfortPerLevel : base;
+}
+const pct = (n: number): string => `${Math.round(n * 100)}%`;
+/** The next upgrade's effect in plain words, or null at the highest level. */
+export function upgradeEffectText(item: Pick<Furniture, 'kind' | 'level'>): string | null {
+  if (item.level >= FURNITURE_MAX_LEVEL) return null;
+  const next = item.level + 1, atmosphere = `+${furnitureComfort({ ...item, level: next }) - furnitureComfort(item)} atmosphere`;
+  if (item.kind === 'table') { const now = tableTipBonus(item.level), then = tableTipBonus(next); return `${now ? `Tips +${pct(now)} → +${pct(then)}` : `Tips +${pct(then)}`} · ${atmosphere}`; }
+  if (item.kind === 'prep' || item.kind === 'grill') { const now = stationSpeedup(item.level), then = stationSpeedup(next); return now ? `Cooks ${pct(now)} → ${pct(then)} faster` : `Cooks ${pct(then)} faster`; }
+  return atmosphere;
+}
+export const comfort = (state: RestaurantState): number => Math.min(100, state.furniture.reduce((total, item) => total + furnitureComfort(item), 20));
+/** Shared service deadline, including the restaurant's existing atmosphere bonus; `factor` is today's tide. */
+export const guestPatienceSeconds = (state: RestaurantState, factor = 1): number => (48 + comfort(state) * .18) * factor;
 export const capacity = (state: RestaurantState): number => state.furniture.filter(item => item.kind === 'table').length * 2;
 /** A playable starter business, with no fabricated revenue or customers served. */
 export function createRestaurant(): RestaurantState {
   return { version: 1, name: 'Little Reef', day: 1, cash: 1250, reputation: 3.5, debt: 0, expanded: false,
     furniture: [
-      { id: 1, kind: 'prep', x: 1, z: 1, rotation: 0 }, { id: 2, kind: 'grill', x: 3, z: 1, rotation: 0 },
-      { id: 3, kind: 'table', x: 1, z: 4, rotation: 0 }, { id: 4, kind: 'table', x: 5, z: 4, rotation: 0 }, { id: 5, kind: 'table', x: 7, z: 1, rotation: 0 },
-      { id: 6, kind: 'plant', x: 0, z: 0, rotation: 0 }, { id: 7, kind: 'plant', x: 9, z: 7, rotation: 0 }, { id: 8, kind: 'lamp', x: 9, z: 0, rotation: 0 },
+      { id: 1, kind: 'prep', x: 1, z: 1, rotation: 0, level: 1 }, { id: 2, kind: 'grill', x: 3, z: 1, rotation: 0, level: 1 },
+      { id: 3, kind: 'table', x: 1, z: 4, rotation: 0, level: 1 }, { id: 4, kind: 'table', x: 5, z: 4, rotation: 0, level: 1 }, { id: 5, kind: 'table', x: 7, z: 1, rotation: 0, level: 1 },
+      { id: 6, kind: 'plant', x: 0, z: 0, rotation: 0, level: 1 }, { id: 7, kind: 'plant', x: 9, z: 7, rotation: 0, level: 1 }, { id: 8, kind: 'lamp', x: 9, z: 0, rotation: 0, level: 1 },
     ],
     staff: [
       { id: 10, name: 'Marlo', role: 'chef', level: 1, x: 1, z: 2, yaw: Math.PI, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
       { id: 11, name: 'Pearl', role: 'server', level: 1, x: 4, z: 7, yaw: 0, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
     ], guests: [], dirty: [], menu: createMenu(),
-    lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0,
+    lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(),
   };
 }
