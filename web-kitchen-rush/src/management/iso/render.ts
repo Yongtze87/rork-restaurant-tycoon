@@ -22,7 +22,7 @@ export const WATER_TOP = '#7FD3DC', WATER_MID = '#2A8FB0', WATER_DEEP = '#0B3552
 const SEABED_MARGIN = 5;
 type Ctx = CanvasRenderingContext2D;
 interface Drawable { depth: number; draw: () => void; }
-interface Decor { x: number; z: number; kind: 'kelp' | 'rock' | 'coral' | 'shell'; tint: number; }
+export interface Decor { x: number; z: number; kind: 'kelp' | 'rock' | 'coral' | 'shell'; tint: number; }
 
 /** Deterministic seabed decoration around the restaurant: a reef rim behind it, scattered life in front. */
 export function seabedDecor(columns: number): Decor[] {
@@ -39,15 +39,17 @@ export function seabedDecor(columns: number): Decor[] {
 }
 const decorCache = new Map<number, Decor[]>();
 
-function at(ctx: Ctx, view: View, x: number, z: number, lift: number, body: () => void, alpha = 1): void {
+export function at(ctx: Ctx, view: View, x: number, z: number, lift: number, body: () => void, alpha = 1): void {
   const p = toScreen(view, x, z, lift); ctx.save(); ctx.translate(p.x, p.y); ctx.scale(view.scale, view.scale); if (alpha < 1) ctx.globalAlpha = alpha; body(); ctx.restore();
 }
-function floorPolygon(ctx: Ctx, view: View, x0: number, z0: number, x1: number, z1: number): void {
+export function floorPolygon(ctx: Ctx, view: View, x0: number, z0: number, x1: number, z1: number): void {
   const a = toScreen(view, x0, z0), b = toScreen(view, x1, z0), c = toScreen(view, x1, z1), d = toScreen(view, x0, z1);
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath();
 }
 
-function drawWater(ctx: Ctx, f: FrameInput): void {
+/** Open water behind any scene: gradient matched to the page, sun shafts, reef silhouettes and fish. */
+export type WaterInput = Pick<FrameInput, 'width' | 'height' | 'windowTop' | 'windowHeight' | 'time' | 'ambience' | 'reduced' | 'view'>;
+export function drawWater(ctx: Ctx, f: WaterInput): void {
   const { width, height, windowTop, windowHeight, time, ambience, reduced, view } = f;
   const g = ctx.createLinearGradient(0, -windowTop, 0, windowHeight - windowTop);
   g.addColorStop(0, WATER_TOP); g.addColorStop(.45, WATER_MID); g.addColorStop(1, WATER_DEEP);
@@ -123,7 +125,7 @@ function drawBuildGrid(ctx: Ctx, f: FrameInput): void {
   for (const p of accessPoints(draft)) { const s = toScreen(view, p.x, p.z); ctx.strokeStyle = draftValid ? '#F2B743' : '#DC533C'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(s.x, s.y, 10 * view.scale, 5 * view.scale, 0, 0, Math.PI * 2); ctx.stroke(); }
 }
 
-function drawDecor(ctx: Ctx, d: Decor, t: number): void {
+export function drawDecor(ctx: Ctx, d: Decor, t: number): void {
   if (d.kind === 'rock') { shadow(ctx, 22, 9); ctx.fillStyle = d.tint > .5 ? '#6B7380' : '#59606C'; ctx.beginPath(); ctx.ellipse(0, -8, 20, 12, 0, Math.PI, 0); ctx.ellipse(0, 0, 20, 7, 0, 0, Math.PI); ctx.fill(); }
   else if (d.kind === 'shell') { ctx.fillStyle = d.tint > .5 ? '#F6D2C0' : '#F1E3C8'; ctx.beginPath(); ctx.moveTo(0, -2); ctx.arc(0, -2, 7, Math.PI * 1.1, Math.PI * 1.9); ctx.closePath(); ctx.fill(); }
   else if (d.kind === 'coral') {
@@ -210,7 +212,7 @@ function drawSign(ctx: Ctx, name: string): void {
   ctx.fillStyle = '#8C6447'; ctx.beginPath(); ctx.roundRect(-w / 2, -44, w, 20, 6); ctx.fill();
   ctx.fillStyle = '#FFF2D7'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(name, 0, -34, w - 12);
 }
-function drawParticles(ctx: Ctx, f: FrameInput): void {
+export function drawParticles(ctx: Ctx, f: Pick<FrameInput, 'width' | 'height' | 'ambience'>): void {
   const { width, height, ambience } = f;
   ctx.save();
   for (const m of ambience.motes) { ctx.fillStyle = 'rgba(235, 250, 255, .35)'; ctx.fillRect(m.x * width, m.y * height, m.size, m.size); }

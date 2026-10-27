@@ -6,7 +6,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 
 > Every number in the game comes from a deterministic simulation: revenue, tips, wages, guest counts, ratings and offline earnings. The game never shows estimated or made-up figures.
 
-> **Status:** Phase 1 of 5 is done (2.5D engine with placeholder art). The art is drawn with code shapes until the generated images are added in Phase 4. See [Roadmap](#roadmap).
+> **Status:** Phases 1 and 2 of 5 are done (2.5D engine and the reef town). Most art is still drawn with code shapes until the generated images arrive in Phase 4. See [Roadmap](#roadmap).
 
 ---
 
@@ -35,6 +35,17 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 ### Offline progress you can trust
 - When you return, the game **replays the elapsed time at 1× through the same simulation step**, with checkpoints.
 - An explicit pause, renovation or too little startup cash stops offline work.
+
+### Reef town
+- A 5×5 map of plots around the restaurant. Unlock neighbouring plots and choose what to build:
+  - **Kelp farm** and **fishery**: cheaper ingredients (50% stronger next to the restaurant)
+  - **Mareen homes**: more crew slots
+  - **Glow garden**: guests arrive more often; crew work faster next to homes
+  - **Workshop**: all construction finishes faster
+- Buildings and the restaurant level up to 15, with a new look at levels 6 and 11.
+- Construction runs in real time, including while you are away: about a minute at first, hours at the top levels. One builder works at a time.
+- **Time skips:** Current charms (−15 min) and Tide charms (−1 h), earned from a daily gift, all three daily challenges and milestones. **Pearls** finish a job instantly and buy a second builder.
+- The pearl shop lists real-money packs, but they can't be bought until a store and payment provider are chosen.
 
 ### Underwater atmosphere
 - Sun shafts from the surface, drifting caustics on the floor, rising bubbles, marine snow and distant fish schools.
@@ -150,7 +161,7 @@ Copy the printed sizes into `src/management/iso/sprites.ts` with each image's `s
 ## Roadmap
 
 1. ✅ **2.5D engine** with placeholder art and the underwater theme.
-2. **An underwater town:** a town map you expand plot by plot, with restaurants, farms, homes and decorations.
+2. ✅ **An underwater town:** plots, building choices, neighbour bonuses, real-time construction and time skips.
 3. **New gameplay:** depth zones, pearls (a second currency), a supply chain, tides and currents, and a day/night glow.
 4. **Generated art** dropped into the sprite slots, plus self-hosted audio (music currently loads from a remote placeholder URL in `src/management/assets.ts`).
 5. **Release prep:** monetization, licensing, store or web hosting, and final checks.

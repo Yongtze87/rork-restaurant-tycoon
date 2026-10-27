@@ -3,6 +3,7 @@ import { CATALOG, DAY_LENGTH, DISHES, SAVE_KEY, capacity, comfort, createRestaur
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitles } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, canUnlock, completeJobs, dayKey, finishCost, jobSeconds, plotAt, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 
 export const GOALS = [
   { id: 'first-service', title: 'A warm welcome', text: 'Serve your first 5 guests', target: 5, reward: 180, value: (s: RestaurantState) => s.lifetimeServed },
@@ -45,6 +46,11 @@ export class RestaurantEngine {
   /** Bounded, session-only receipts. Money is credited before an event is recorded. */
   incomeReceipts: CashReceipt[] = [];
   private incomeSequence = 0;
+  /** Session-only notice of the latest finished construction, for a toast. */
+  lastCompletion: { id: number; text: string } | null = null;
+  private completionSequence = 0;
+  private effects: TownEffects | null = null;
+  private effectsKey = '';
   private revision = 0;
   private accumulator = 0;
   private savedAt = 0;
@@ -93,7 +99,8 @@ export class RestaurantEngine {
     if (this.catchingUp) return;
     const s = this.state, start = s.lastActiveAt;
     let target = this.now();
-    if (!start || target <= start || this.paused || s.phase !== 'service') { this.save(); this.notify(); return; }
+    this.dailyGift(target);
+    if (!start || target <= start || this.paused || s.phase !== 'service') { this.tickTown(target); this.save(); this.notify(); return; }
     let steps = Math.floor((target - start) / 100);
     if (!steps) return;
     const before = { day: s.day, cash: s.cash, served: s.lifetimeServed, clock: s.clock, challengeBonus: s.lifetimeChallengeBonus };
@@ -105,19 +112,21 @@ export class RestaurantEngine {
       target = Math.max(target, this.now()); steps = Math.floor((target - start) / 100);
       if (done >= steps) break;
       const end = Math.min(steps, done + 1000);
-      for (; done < end && s.phase === 'service' && !this.paused; done++) this.step(.1);
+      for (; done < end && s.phase === 'service' && !this.paused; done++) { this.tickTown(start + done * 100); this.step(.1); }
       s.lastActiveAt = start + done * 100;
       this.catchUpProgress = done / steps;
       this.save(); this.notify();
       if (done < steps && s.phase === 'service' && !this.paused) await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     if (this.state !== s) return;
+    this.tickTown(target);
     s.lastActiveAt = Math.max(s.lastActiveAt, target);
     this.awaySummary = s.clock - before.clock >= 1 ? { seconds: Math.round(s.clock - before.clock), days: s.day - before.day, served: s.lifetimeServed - before.served, cashChange: s.cash - before.cash, challengeBonus: s.lifetimeChallengeBonus - before.challengeBonus } : null;
     if (this.pauseAfterCatchUp !== null) { this.paused = this.pauseAfterCatchUp; this.pauseAfterCatchUp = null; }
     this.catchUpProgress = 1; this.save(); this.catchingUp = false; this.savedAt = s.clock; this.notify();
   }
   update(dt: number): void {
+    if (!this.backgrounded && !this.catchingUp) this.tickTown(this.now());
     if (this.backgrounded || this.catchingUp || this.state.phase !== 'service' || this.paused || !Number.isFinite(dt) || dt <= 0) return;
     this.accumulator += Math.min(dt, .25) * this.speed;
     let changed = false;
@@ -164,7 +173,7 @@ export class RestaurantEngine {
   }
   hire(role: Role): string | null {
     if (this.state.phase !== 'planning') return 'Hire before opening for the day.';
-    if (this.state.staff.length >= 6) return 'Your crew is limited to 6 Mareen.';
+    if (this.state.staff.length >= this.crewLimit()) return `Your crew is limited to ${this.crewLimit()} Mareen. Build Mareen homes for more.`;
     if (this.state.cash < 150) return 'Recruitment costs $150.';
     const names = role === 'chef' ? ['Marlo', 'Nerin', 'Coralie', 'Kai', 'Delphine', 'Ondine'] : ['Pearl', 'Tidus', 'Maris', 'Shelly', 'Reef', 'Calyx'];
     const name = names.find(n => !this.state.staff.some(s => s.name === n)) ?? names[0];
@@ -199,7 +208,8 @@ export class RestaurantEngine {
   claim(id: string): string | null {
     const goal = GOALS.find(g => g.id === id);
     if (!goal || this.state.claimed.includes(id) || goal.value(this.state) < goal.target) return 'Complete this milestone first.';
-    this.state.claimed.push(id); this.state.cash += goal.reward; this.recordIncome(goal.reward, 'milestone'); this.changed(`Milestone complete: ${goal.title}. +$${goal.reward}`); return null;
+    this.state.claimed.push(id); this.state.cash += goal.reward; this.state.town.charms.tide++; this.state.town.pearls += 5;
+    this.recordIncome(goal.reward, 'milestone'); this.changed(`Milestone complete: ${goal.title}. +$${goal.reward}, a Tide charm and 5 pearls.`); return null;
   }
   loan(): string | null {
     if (this.state.phase !== 'planning' || this.state.cash >= 200 || this.state.debt > 0) return 'A $600 recovery loan is available below $200, with no existing loan.';
@@ -273,10 +283,11 @@ export class RestaurantEngine {
       if (member.role === 'chef') {
         for (const guest of s.guests.filter(g => g.stage === 'waiting')) {
           const station = s.furniture.find(f => f.kind === DISHES[guest.dish].station && !s.staff.some(worker => worker.stationId === f.id && worker.role === 'chef' && worker.task !== 'idle'));
-          if (!station || s.cash < DISHES[guest.dish].cost) continue;
+          const cost = this.dishCost(guest.dish);
+          if (!station || s.cash < cost) continue;
           const route = this.route(member, accessPoints(station)[0]); if (!route) continue;
           guest.stage = 'cooking'; guest.stationId = station.id; member.guestId = guest.id; member.stationId = station.id; member.task = 'toKitchen'; member.route = route;
-          s.cash -= DISHES[guest.dish].cost; s.totals.ingredients += DISHES[guest.dish].cost; break;
+          s.cash -= cost; s.totals.ingredients += cost; break;
         }
       } else {
         const guest = s.guests.find(g => g.stage === 'ready');
@@ -296,7 +307,7 @@ export class RestaurantEngine {
   }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
-    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2; }
+    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + (Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2) / (1 + this.townEffects().arrivalBonus); }
     for (const guest of s.guests) {
       if (guest.stage === 'arriving' && walk(guest, dt, 1.7)) {
         guest.stage = 'waiting'; const table = s.furniture.find(f => f.id === guest.tableId); guest.yaw = Math.PI - (table?.rotation ?? 0) * Math.PI / 2;
@@ -312,9 +323,10 @@ export class RestaurantEngine {
     this.assignJobs();
     for (const staff of s.staff) {
       if (staff.task === 'idle') continue;
-      if (!walk(staff, dt, 2 + (staff.level - 1) * .4)) continue;
+      const pace = this.townEffects().crewSpeed;
+      if (!walk(staff, dt, (2 + (staff.level - 1) * .4) * pace)) continue;
       if (staff.task === 'clean') {
-        staff.timer -= dt / (1 - (staff.level - 1) * .17);
+        staff.timer -= dt * pace / (1 - (staff.level - 1) * .17);
         if (staff.timer <= 0) { s.dirty = s.dirty.filter(key => key !== `${staff.stationId}:${staff.guestId}`); resetStaff(staff); }
         continue;
       }
@@ -323,7 +335,7 @@ export class RestaurantEngine {
       if (staff.task === 'toKitchen') {
         staff.task = 'cooking'; staff.timer = DISHES[guest.dish].seconds * (1 - (staff.level - 1) * .2);
         const station = s.furniture.find(f => f.id === staff.stationId); staff.yaw = Math.PI - (station?.rotation ?? 0) * Math.PI / 2;
-      } else if (staff.task === 'cooking') { staff.timer -= dt; if (staff.timer <= 0) { guest.stage = 'ready'; resetStaff(staff); } }
+      } else if (staff.task === 'cooking') { staff.timer -= dt * pace; if (staff.timer <= 0) { guest.stage = 'ready'; resetStaff(staff); } }
       else if (staff.task === 'collect') {
         const table = s.furniture.find(f => f.id === guest.tableId), route = table ? this.route(staff, accessPoints(table)[guest.seat]) : null;
         if (route) { staff.route = route; staff.task = 'deliver'; }
@@ -339,12 +351,81 @@ export class RestaurantEngine {
             this.recordIncome(challenge.reward, 'challenge');
             this.event = `Daily challenge complete: ${challengeTitles[challenge.kind]}. +$${challenge.reward} automatically added.`;
             if (!this.catchingUp) this.rewardSavePending = true;
+            if (s.dailyChallenges.length === 3 && s.dailyChallenges.every(c => c.rewarded)) { s.town.charms.current++; s.town.pearls++; this.event = 'All three daily challenges done: a Current charm and a pearl are yours.'; }
           }
         }
         resetStaff(staff);
       }
     }
     if (s.elapsed >= DAY_LENGTH && (s.guests.length === 0 && s.dirty.length === 0 || s.elapsed >= DAY_LENGTH + 90)) this.finish();
+  }
+  /** Town effects, cached until a building changes. */
+  townEffects(): TownEffects {
+    const key = JSON.stringify(this.state.town.plots.map(p => [p.building, p.level, p.job?.kind ?? '']));
+    if (!this.effects || key !== this.effectsKey) { this.effects = townEffects(this.state.town); this.effectsKey = key; }
+    return this.effects;
+  }
+  crewLimit(): number { return 6 + this.townEffects().extraCrew; }
+  dishCost(dish: Dish): number { return Math.max(1, Math.round(DISHES[dish].cost * (dish === 'salad' ? this.townEffects().saladCost : this.townEffects().burgerCost))); }
+  /** Finish construction whose end time has passed (wall-clock time, also while away). */
+  private tickTown(at: number): void {
+    const done = completeJobs(this.state.town, at); if (!done.length) return;
+    const last = done[done.length - 1], text = `${BUILDINGS[last.building!].name} ${last.level === 1 ? 'is built' : `reached level ${last.level}`}.`;
+    this.lastCompletion = { id: ++this.completionSequence, text }; this.changed(text);
+  }
+  /** One Current charm per calendar day (UTC), granted on the first visit of the day. */
+  private dailyGift(now: number): void {
+    const day = dayKey(now), town = this.state.town; if (town.lastGiftDay === day) return;
+    town.lastGiftDay = day; town.charms.current++; this.event = 'Daily gift: a Current charm. It skips 15 minutes of building.';
+  }
+  private plot(x: number, z: number) { return plotAt(this.state.town, x, z); }
+  unlockPlot(x: number, z: number): string | null {
+    const town = this.state.town, plot = this.plot(x, z); if (!plot) return 'Choose a plot first.';
+    if (plot.owned) return 'You already own this plot.';
+    if (!canUnlock(town, plot)) return 'Unlock a plot next to your town first.';
+    const cost = unlockCost(town); if (this.state.cash < cost) return `Unlocking costs ${cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.`;
+    this.state.cash -= cost; plot.owned = true; this.changed('New plot unlocked. Choose what to build.'); return null;
+  }
+  build(x: number, z: number, kind: BuildingKind): string | null {
+    const town = this.state.town, plot = this.plot(x, z);
+    if (!plot?.owned) return 'Unlock this plot first.';
+    if (plot.building) return 'This plot already has a building.';
+    if (kind === 'restaurant') return 'You already have a restaurant.';
+    if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
+    const info = BUILDINGS[kind]; if (this.state.cash < info.buildCost) return `${info.name} costs $${info.buildCost}.`;
+    const now = this.now(), seconds = jobSeconds(town, kind, 1);
+    this.state.cash -= info.buildCost; Object.assign(plot, { building: kind, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
+    this.changed(`Building a ${info.name.toLowerCase()}.`); return null;
+  }
+  upgrade(x: number, z: number): string | null {
+    const town = this.state.town, plot = this.plot(x, z);
+    if (!plot?.building) return 'Build something here first.';
+    if (plot.job) return 'This building is already under construction.';
+    if (plot.level >= MAX_LEVEL) return 'Already at the highest level.';
+    if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
+    const cost = upgradeCost(plot.building, plot.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
+    const now = this.now(); this.state.cash -= cost;
+    plot.job = { kind: 'upgrade', startedAt: now, endsAt: now + jobSeconds(town, plot.building, plot.level + 1) * 1000 };
+    this.changed(`Upgrading ${BUILDINGS[plot.building].name.toLowerCase()} to level ${plot.level + 1}.`); return null;
+  }
+  useCharm(x: number, z: number, charm: CharmKind): string | null {
+    const town = this.state.town, plot = this.plot(x, z); if (!plot?.job) return 'Nothing is being built here.';
+    if (town.charms[charm] < 1) return `You have no ${CHARMS[charm].name}s.`;
+    town.charms[charm]--; plot.job.endsAt -= CHARMS[charm].seconds * 1000;
+    this.event = `${CHARMS[charm].name} used.`; this.tickTown(this.now()); this.changed(); return null;
+  }
+  finishNow(x: number, z: number): string | null {
+    const town = this.state.town, plot = this.plot(x, z); if (!plot?.job) return 'Nothing is being built here.';
+    const now = this.now(), cost = finishCost(plot.job, now); if (town.pearls < cost) return `Finishing now needs ${cost} pearls.`;
+    town.pearls -= cost; plot.job.endsAt = now; this.tickTown(now); return null;
+  }
+  buy(item: keyof typeof SHOP): string | null {
+    const town = this.state.town, offer = SHOP[item];
+    if (item === 'builder' && town.builders >= MAX_BUILDERS) return 'You already have every builder.';
+    if (town.pearls < offer.pearls) return `${offer.name} costs ${offer.pearls} pearls.`;
+    town.pearls -= offer.pearls;
+    if (item === 'builder') town.builders++; else town.charms.current += 3;
+    this.changed(`${offer.name} added.`); return null;
   }
   private finish(): void {
     const s = this.state;

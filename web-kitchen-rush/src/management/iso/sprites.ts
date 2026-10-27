@@ -1,4 +1,5 @@
 import type { FurnitureKind, Guest, Role } from '../types';
+import type { BuildingKind } from '../town';
 
 /**
  * Art slots for generated images. Each image is drawn at w×h art pixels (one floor tile is 64×32),
@@ -16,11 +17,15 @@ export type SpriteKey =
   | 'furniture.table.2' | 'furniture.table.3'
   | `guest.${Look}.${'front' | 'back'}`
   | `staff.${Role}.${'front' | 'back'}`
-  | 'meal.salad' | 'meal.burger' | 'meal.dirty';
+  | 'meal.salad' | 'meal.burger' | 'meal.dirty'
+  | `building.${BuildingKind}.${1 | 2 | 3}`;
 
 const furniture = (w: number, h: number, ay: number): SpriteSlot => ({ w, h, ax: w / 2, ay });
 const person: SpriteSlot = { w: 48, h: 64, ax: 24, ay: 60 };
 const meal: SpriteSlot = { w: 24, h: 16, ax: 12, ay: 10 };
+// Town buildings: one plot is 64 art px wide; tall looks reach about 80 px above the ground.
+const building: SpriteSlot = { w: 80, h: 96, ax: 40, ay: 84 };
+const buildingSlots = Object.fromEntries((['restaurant', 'kelpFarm', 'fishery', 'homes', 'garden', 'workshop'] as const).flatMap(kind => [1, 2, 3].map(look => [`building.${kind}.${look}`, building]))) as Record<`building.${BuildingKind}.${1 | 2 | 3}`, SpriteSlot>;
 
 export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   'furniture.table': { src: '/art/furniture/table-1.webp', w: 79.5, h: 67.5, ax: 39.8, ay: 64.1, surface: 41 },
@@ -34,6 +39,7 @@ export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   'guest.lagoon.front': person, 'guest.lagoon.back': person, 'guest.dusk.front': person, 'guest.dusk.back': person,
   'staff.chef.front': person, 'staff.chef.back': person, 'staff.server.front': person, 'staff.server.back': person,
   'meal.salad': meal, 'meal.burger': meal, 'meal.dirty': meal,
+  ...buildingSlots,
 };
 
 const images = new Map<string, HTMLImageElement>();

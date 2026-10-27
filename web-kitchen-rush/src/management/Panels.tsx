@@ -10,7 +10,7 @@ import { challengeBonus } from './daily-challenges';
 import { money } from './format';
 import { WeeklyRevenue } from './WeeklyRevenue';
 const furnitureIcons = { table: Armchair, prep: ChefHat, grill: Flame, plant: Flower2, divider: Sprout, lamp: Lamp };
-export type Panel = 'build' | 'team' | 'menu' | 'ledger';
+export type Panel = 'build' | 'team' | 'menu' | 'ledger' | 'town';
 export type Action = (error: string | null) => void;
 export function SmallButton({ children, onClick, disabled, className, label }: { children: ReactNode; onClick: () => void; disabled?: boolean; className?: string; label?: string }) {
   return <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className={cn('flex min-h-11 items-center justify-center gap-2 rounded-xl border border-ink/15 bg-ink/[.06] px-3 text-sm font-extrabold transition hover:bg-ink/10 active:scale-95 disabled:opacity-40', className)}>{children}</button>;

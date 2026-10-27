@@ -20,6 +20,7 @@ describe('continuous local restaurant', () => {
   });
   it('offline replay is identical to live 1x service across multiple days and reload is idempotent', async () => {
     const h = harness(), offline = new RestaurantEngine(h.storage, h.now), online = new RestaurantEngine(undefined, h.now);
+    await online.resume(); // the visible session also received today's daily gift
     offline.open(); online.open(); advance(offline, 21); advance(online, 21); offline.suspend();
     h.advance(900); advance(online, 900);
     const restored = new RestaurantEngine(h.storage, h.now); await restored.resume();
