@@ -6,7 +6,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 
 > Every number in the game comes from a deterministic simulation: revenue, tips, wages, guest counts, ratings and offline earnings. The game never shows estimated or made-up figures.
 
-> **Status:** Phases 1 and 2 of 5 are done (2.5D engine and the reef town). Most art is still drawn with code shapes until the generated images arrive in Phase 4. See [Roadmap](#roadmap).
+> **Status:** Phases 1–3 of 5 are done (2.5D engine, reef town, and progression: furniture upgrades, daily tides, evening glow, depth zones and an eight-dish menu). Most art is still drawn with code shapes until the generated images arrive in Phase 4. See [Roadmap](#roadmap).
 
 ---
 
@@ -168,7 +168,7 @@ Copy the printed sizes into `src/management/iso/sprites.ts` with each image's `s
 
 1. ✅ **2.5D engine** with placeholder art and the underwater theme.
 2. ✅ **An underwater town:** plots, building choices, neighbour bonuses, real-time construction and time skips.
-3. **New gameplay:** depth zones, pearls (a second currency), a supply chain, tides and currents, and a day/night glow.
+3. ✅ **Progression:** furniture upgrade tiers, daily tides, the evening glow, depth zones and an eight-dish menu (pearls and the supply chain arrived with the town).
 4. **Generated art** dropped into the sprite slots, plus self-hosted audio (music currently loads from a remote placeholder URL in `src/management/assets.ts`).
 5. **Release prep:** monetization, licensing, store or web hosting, and final checks.
 

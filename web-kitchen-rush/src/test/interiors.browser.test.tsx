@@ -26,7 +26,7 @@ it('filters the catalog and shows real prices, included chairs, footprints and p
   await expect.element(screen.getByRole('button', { name: /Preview Glow-jelly lantern/ })).toHaveTextContent('1 × 1 tiles · 1 placed');
   await expect.element(screen.getByRole('button', { name: /Preview Kelp screen/ })).toHaveTextContent('$80');
   await screen.getByRole('button', { name: 'Kitchen', exact: true }).click();
-  await expect.element(screen.getByRole('button', { name: /Preview Kelp counter/ })).toHaveTextContent('Prepares kelp salads');
+  await expect.element(screen.getByRole('button', { name: /Preview Kelp counter/ })).toHaveTextContent('Prepares kelp-counter dishes');
   await expect.element(screen.getByRole('button', { name: /Preview Vent grill/ })).toHaveTextContent('$360');
   expect(restaurant.state.cash).toBe(1250);
 });

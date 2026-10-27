@@ -39,7 +39,7 @@ export function MenuPanel({ state, action }: { state: RestaurantState; action: A
   })}
     {locked.length > 0 && <section aria-label="Locked dishes" className="space-y-2"><h3 className="text-lg">Deeper dishes</h3>{locked.map(dish => {
       const recipe = DISHES[dish];
-      return <div key={dish} aria-label={`${recipe.name}: unlocks in ${ZONES[recipe.zone].name}`} className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-ink/[.04] p-3 opacity-60 grayscale"><DishIcon dish={dish} small /><div className="min-w-0 flex-1"><h4 className="font-display text-base leading-tight">{recipe.name}</h4><p className="text-[11px] text-ink/65">{stationName[recipe.station]} · suggested {money(recipe.fair)}</p></div><span className="flex shrink-0 items-center gap-1 rounded-full bg-ink/10 px-2 py-1 text-[10px] font-extrabold"><LockKeyhole size={11} aria-hidden="true" />Unlocks in {ZONES[recipe.zone].name}</span></div>;
+      return <div key={dish} aria-label={`${recipe.name}: unlocks in ${ZONES[recipe.zone].name}`} className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-ink/[.04] p-3 opacity-60 grayscale"><DishIcon dish={dish} small /><div className="min-w-0 flex-1"><h4 className="font-display text-base leading-tight">{recipe.name}</h4><p className="text-[11px] text-ink/65">{stationName[recipe.station]} · suggested {money(recipe.fair)}</p><span className="mt-1 inline-flex items-center gap-1 rounded-full bg-ink/10 px-2 py-0.5 text-[10px] font-extrabold"><LockKeyhole size={11} aria-hidden="true" />Unlocks in {ZONES[recipe.zone].name}</span></div></div>;
     })}</section>}
   </div></>;
 }
