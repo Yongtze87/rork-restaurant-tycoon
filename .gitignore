@@ -2,3 +2,6 @@ node_modules
 .env
 .expo
 .rork
+
+# Agent worktrees (temporary)
+.claude/worktrees/
