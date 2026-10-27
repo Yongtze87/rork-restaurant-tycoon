@@ -24,55 +24,95 @@ function rock(ctx: Ctx, rx: number, ry: number, color = '#5B6470'): void {
   ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, -ry * .6, rx, ry, 0, Math.PI, 0); ctx.lineTo(rx, 0); ctx.ellipse(0, 0, rx, ry * .55, 0, 0, Math.PI); ctx.closePath(); ctx.fill();
 }
 
-/** Furniture stand-ins. `t` is seconds for idle sway; `active` lights a working station. */
-export function drawFurniture(ctx: Ctx, kind: FurnitureKind, t: number, active = false): void {
+type FurnitureLook = 1 | 2 | 3;
+/** Per-look colours: look 1 is the starter piece, 2 brighter, 3 the richest. */
+const TABLE = [['#B4584A', '#C9634F', '#EE8D73', '#F7B39B'], ['#B65A73', '#D06F86', '#F59AAE', '#FFD0DA'], ['#B07A3A', '#D49A4C', '#FFC978', '#FFF0C4']];
+const PREP = [['#E3DCC8', '#9AA5A0', '#7B8884'], ['#EAF4EE', '#8FB8B0', '#6F9C95'], ['#F7F1E4', '#B9A4D8', '#9A82C0']];
+const GRILL = [['#4A4552', '#2F2C36', '#25222B'], ['#5A4A48', '#8A5A3C', '#6E452E'], ['#3E3A5A', '#B07A3A', '#8C5E2A']];
+const PLANT = [['#E26B9C', '#C9508A', '#FFC4DC'], ['#FF7FB0', '#E25C9E', '#FFE0EE'], ['#B58CFF', '#8F66E8', '#9FFFF4']];
+const KELP = [['#4FA45A', '#357F45', '#9BCB6A'], ['#5FC06A', '#3E9A50', '#C6EB86'], ['#4DD9B0', '#2FA88C', '#BFFFF0']];
+const JELLY = [['rgba(190, 240, 255, .55)', 'rgba(214, 246, 255, .92)'], ['rgba(255, 200, 240, .6)', 'rgba(255, 226, 246, .94)'], ['rgba(255, 230, 150, .7)', 'rgba(255, 244, 206, .96)']];
+/** A row of pearls along the front half of an ellipse: the look-2 and look-3 trim. */
+function pearlTrim(ctx: Ctx, cy: number, rx: number, ry: number, count: number): void {
+  for (let i = 0; i < count; i++) {
+    const a = Math.PI * (i + .5) / count, x = Math.cos(a) * rx, y = cy + Math.sin(a) * ry;
+    ctx.fillStyle = '#FFF6E8'; ctx.beginPath(); ctx.arc(x, y, 2.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, .9)'; ctx.beginPath(); ctx.arc(x - .7, y - .7, .7, 0, Math.PI * 2); ctx.fill();
+  }
+}
+/** The soft look-3 halo behind a piece. */
+function softGlow(ctx: Ctx, cy: number, r: number, color = '120, 240, 230'): void {
+  const g = ctx.createRadialGradient(0, cy, 2, 0, cy, r); g.addColorStop(0, `rgba(${color}, .35)`); g.addColorStop(1, `rgba(${color}, 0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, cy, r, 0, Math.PI * 2); ctx.fill();
+}
+
+/** Furniture stand-ins. `t` is seconds for idle sway; `active` lights a working station; `look` is the upgrade look (1–3). */
+export function drawFurniture(ctx: Ctx, kind: FurnitureKind, t: number, active = false, look: FurnitureLook = 1): void {
+  const i3 = look - 1;
   if (kind === 'table') {
+    const [leg, rim, top, spot] = TABLE[i3];
+    if (look === 3) softGlow(ctx, -22, 58, '255, 214, 140');
     shadow(ctx, 44, 20, .18);
-    ctx.fillStyle = '#B4584A'; ctx.fillRect(-6, -20, 12, 20);
-    ctx.fillStyle = '#C9634F'; ctx.beginPath(); ctx.ellipse(0, -19, 46, 22, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#EE8D73'; ctx.beginPath(); ctx.ellipse(0, -24, 46, 22, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#F7B39B'; for (const [x, y, r] of [[-18, -28, 4], [10, -18, 3], [22, -30, 2.5], [-4, -34, 2]]) { ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = leg; ctx.fillRect(-6, -20, 12, 20);
+    ctx.fillStyle = rim; ctx.beginPath(); ctx.ellipse(0, -19, 46, 22, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = top; ctx.beginPath(); ctx.ellipse(0, -24, 46, 22, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = spot; for (const [x, y, r] of [[-18, -28, 4], [10, -18, 3], [22, -30, 2.5], [-4, -34, 2]]) { ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r, 0, 0, Math.PI * 2); ctx.fill(); }
+    if (look > 1) pearlTrim(ctx, -21, 45, 21, look === 3 ? 13 : 9);
   } else if (kind === 'prep') {
+    const [top, left, right] = PREP[i3];
+    if (look === 3) softGlow(ctx, -24, 40);
     shadow(ctx, 30, 14);
-    isoBlock(ctx, .85, 26, '#E3DCC8', '#9AA5A0', '#7B8884');
-    ctx.fillStyle = '#C79A62'; diamondPath(ctx, -4, -27, 12, 6); ctx.fill();
-    ctx.strokeStyle = '#3E8E4E'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    for (const dx of [8, 14]) { ctx.beginPath(); ctx.moveTo(dx - 6, -24); ctx.quadraticCurveTo(dx, -34, dx + 4, -26); ctx.stroke(); }
+    isoBlock(ctx, .85, 26, top, left, right);
+    ctx.fillStyle = look === 3 ? '#E3B36A' : '#C79A62'; diamondPath(ctx, -4, -27, 12, 6); ctx.fill();
+    ctx.strokeStyle = KELP[i3][1]; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (const dx of look > 1 ? [6, 11, 16] : [8, 14]) { ctx.beginPath(); ctx.moveTo(dx - 6, -24); ctx.quadraticCurveTo(dx, -34, dx + 4, -26); ctx.stroke(); }
+    if (look > 1) pearlTrim(ctx, -26, 26, 13, look === 3 ? 9 : 6);
   } else if (kind === 'grill') {
+    const [top, left, right] = GRILL[i3];
+    if (look === 3) softGlow(ctx, -22, 42, '255, 170, 100');
     shadow(ctx, 30, 14);
-    isoBlock(ctx, .85, 20, '#4A4552', '#2F2C36', '#25222B');
-    const glow = active ? .75 + Math.sin(t * 6) * .2 : .45;
-    const g = ctx.createRadialGradient(0, -21, 2, 0, -21, 22); g.addColorStop(0, `rgba(255, 214, 120, ${glow})`); g.addColorStop(1, 'rgba(240, 110, 60, 0)');
+    isoBlock(ctx, .85, 20, top, left, right);
+    const glow = (active ? .75 + Math.sin(t * 6) * .2 : .45) + i3 * .1;
+    const g = ctx.createRadialGradient(0, -21, 2, 0, -21, 22 + i3 * 4); g.addColorStop(0, `rgba(255, 214, 120, ${glow})`); g.addColorStop(1, 'rgba(240, 110, 60, 0)');
     ctx.fillStyle = g; diamondPath(ctx, 0, -21, 24, 12); ctx.fill();
     ctx.strokeStyle = `rgba(255, 150, 80, ${glow})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-12, -22); ctx.lineTo(-2, -19); ctx.lineTo(6, -24); ctx.lineTo(13, -20); ctx.stroke();
+    if (look > 1) pearlTrim(ctx, -20, 26, 13, look === 3 ? 9 : 6);
     if (active) { ctx.fillStyle = 'rgba(220, 245, 255, .7)'; for (let i = 0; i < 3; i++) { const k = (t * .8 + i / 3) % 1; ctx.beginPath(); ctx.arc(Math.sin(t * 3 + i) * 4, -26 - k * 26, 1.5 + k * 1.5, 0, Math.PI * 2); ctx.fill(); } }
   } else if (kind === 'plant') {
-    shadow(ctx, 20, 9); rock(ctx, 16, 8, '#6A6F7C');
+    const [a1, a2, tip] = PLANT[i3], fronds = 9 + i3 * 2;
+    if (look === 3) softGlow(ctx, -26, 36, '170, 140, 255');
+    shadow(ctx, 20, 9); rock(ctx, 16, 8, look === 1 ? '#6A6F7C' : '#7A7F8E');
     ctx.lineCap = 'round';
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 8 - .5) * 1.9, sway = Math.sin(t * 1.4 + i * .7) * 3, tipX = Math.sin(a) * 18 + sway, tipY = -14 - Math.cos(a) * 22;
-      ctx.strokeStyle = i % 2 ? '#E26B9C' : '#C9508A'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(Math.sin(a) * 4, -8); ctx.quadraticCurveTo(Math.sin(a) * 10, -16, tipX, tipY); ctx.stroke();
-      ctx.fillStyle = '#FFC4DC'; ctx.beginPath(); ctx.arc(tipX, tipY, 2.6, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < fronds; i++) {
+      const a = (i / (fronds - 1) - .5) * 1.9, sway = Math.sin(t * 1.4 + i * .7) * 3, tipX = Math.sin(a) * (18 + i3 * 2) + sway, tipY = -14 - Math.cos(a) * (22 + i3 * 3);
+      ctx.strokeStyle = i % 2 ? a1 : a2; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(Math.sin(a) * 4, -8); ctx.quadraticCurveTo(Math.sin(a) * 10, -16, tipX, tipY); ctx.stroke();
+      ctx.fillStyle = tip; ctx.beginPath(); ctx.arc(tipX, tipY, 2.6 + i3 * .4, 0, Math.PI * 2); ctx.fill();
     }
+    if (look > 1) pearlTrim(ctx, -3, 16, 7, look === 3 ? 7 : 5);
   } else if (kind === 'divider') {
-    shadow(ctx, 24, 11); rock(ctx, 20, 9, '#5E6672');
+    const [k1, k2, leaf] = KELP[i3], blades = 4 + i3;
+    if (look === 3) softGlow(ctx, -48, 46);
+    shadow(ctx, 24, 11); rock(ctx, 20, 9, look === 1 ? '#5E6672' : '#6E7684');
     ctx.lineCap = 'round';
-    for (let i = 0; i < 4; i++) {
-      const x = -15 + i * 10, h = 70 + (i % 2) * 14, sway = Math.sin(t * 1.1 + i) * 6;
-      ctx.strokeStyle = i % 2 ? '#4FA45A' : '#357F45'; ctx.lineWidth = 6;
+    for (let i = 0; i < blades; i++) {
+      const x = -15 + i * 30 / (blades - 1), h = 70 + (i % 2) * 14, sway = Math.sin(t * 1.1 + i) * 6;
+      ctx.strokeStyle = i % 2 ? k1 : k2; ctx.lineWidth = 6 - i3;
       ctx.beginPath(); ctx.moveTo(x, -6); ctx.bezierCurveTo(x - 6, -h * .35, x + 6 + sway * .5, -h * .7, x + sway, -h); ctx.stroke();
-      ctx.fillStyle = '#9BCB6A'; ctx.beginPath(); ctx.ellipse(x + sway * .6 + 3, -h * .62, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = leaf; ctx.beginPath(); ctx.ellipse(x + sway * .6 + 3, -h * .62, 3 + i3 * .5, 2 + i3 * .5, 0, 0, Math.PI * 2); ctx.fill();
     }
+    if (look > 1) pearlTrim(ctx, -4, 20, 9, look === 3 ? 8 : 6);
   } else {
+    const [halo, bell] = JELLY[i3], r = 34 + i3 * 6;
     shadow(ctx, 18, 8); rock(ctx, 12, 6, '#5E6672');
     const bob = Math.sin(t * 1.6) * 2;
-    ctx.strokeStyle = '#2B3F4A'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, -62 + bob); ctx.stroke();
-    const glow = ctx.createRadialGradient(0, -72 + bob, 2, 0, -72 + bob, 34); glow.addColorStop(0, 'rgba(190, 240, 255, .55)'); glow.addColorStop(1, 'rgba(120, 220, 255, 0)');
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, -72 + bob, 34, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = look === 3 ? '#B07A3A' : '#2B3F4A'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, -62 + bob); ctx.stroke();
+    const glow = ctx.createRadialGradient(0, -72 + bob, 2, 0, -72 + bob, r); glow.addColorStop(0, halo); glow.addColorStop(1, 'rgba(120, 220, 255, 0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, -72 + bob, r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(200, 240, 255, .8)'; ctx.lineWidth = 1.5;
     for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 4, -68 + bob); ctx.quadraticCurveTo(i * 4 + Math.sin(t * 2 + i) * 3, -60 + bob, i * 4, -54 + bob); ctx.stroke(); }
-    ctx.fillStyle = 'rgba(214, 246, 255, .92)'; ctx.beginPath(); ctx.ellipse(0, -70 + bob, 13, 10, 0, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = bell; ctx.beginPath(); ctx.ellipse(0, -70 + bob, 13 + i3, 10 + i3, 0, Math.PI, 0); ctx.closePath(); ctx.fill();
     ctx.fillStyle = 'rgba(255, 255, 255, .8)'; ctx.beginPath(); ctx.ellipse(-4, -75 + bob, 4, 2.5, -.4, 0, Math.PI * 2); ctx.fill();
+    if (look > 1) pearlTrim(ctx, -70 + bob, 13 + i3, 3, look === 3 ? 7 : 5);
   }
 }
 export function drawStool(ctx: Ctx): void {

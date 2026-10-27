@@ -1,10 +1,10 @@
 import { accessPoints, findPath, layoutError, placementError, seatPoint } from './layout';
-import { CATALOG, DAY_LENGTH, DISHES, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshTotals, guestPatienceSeconds, restaurantSchema, staffWage, width, type Dish, type Furniture, type Guest, type Point, type RestaurantState, type Role, type Staff } from './types';
+import { CATALOG, DAY_LENGTH, DISHES, FURNITURE_MAX_LEVEL, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitles } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
 import { TIDES, rollTide, type TideEffects } from './tides';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, canUnlock, completeJobs, dayKey, finishCost, jobSeconds, plotAt, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, canUnlock, completeJobs, dayKey, finishCost, jobSeconds, lookFor, plotAt, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 
 export const GOALS = [
   { id: 'first-service', title: 'A warm welcome', text: 'Serve your first 5 guests', target: 5, reward: 180, value: (s: RestaurantState) => s.lifetimeServed },
@@ -155,14 +155,14 @@ export class RestaurantEngine {
       staff.x = safe.x; staff.z = safe.z;
     });
   }
-  place(item: Furniture): string | null {
+  place(item: Placement): string | null {
     if (this.state.phase !== 'planning') return 'Rearrange the restaurant between service days.';
     const existing = this.state.furniture.find(f => f.id === item.id);
     if (existing && existing.kind !== item.kind) return 'Move the selected furniture without changing its type.';
     if (!existing && this.state.cash < CATALOG[item.kind].price) return 'Not enough cash. Serve a day or sell something you no longer need.';
     const error = placementError(this.state, item); if (error) return error;
-    if (existing) Object.assign(existing, item);
-    else { this.state.cash -= CATALOG[item.kind].price; this.state.furniture.push({ ...item, id: this.state.nextId++ }); }
+    if (existing) Object.assign(existing, item, { level: existing.level });
+    else { this.state.cash -= CATALOG[item.kind].price; this.state.furniture.push({ ...item, id: this.state.nextId++, level: 1 }); }
     this.relocateStaff(); this.changed(`${CATALOG[item.kind].name} ${existing ? 'moved' : 'built'}. A little more you.`); return null;
   }
   sell(id: number): string | null {
@@ -172,6 +172,15 @@ export class RestaurantEngine {
     this.state.furniture = this.state.furniture.filter(f => f.id !== id); this.state.cash += Math.floor(CATALOG[item.kind].price * .7);
     this.recordIncome(Math.floor(CATALOG[item.kind].price * .7), 'sale');
     this.relocateStaff(); this.changed('Sold for 70% of the original price.'); return null;
+  }
+  /** Instant, planning-only upgrade of one placed piece. Selling still refunds 70% of the base price. */
+  upgradeFurniture(id: number): string | null {
+    if (this.state.phase !== 'planning') return 'Upgrade furniture between service days.';
+    const item = this.state.furniture.find(f => f.id === id); if (!item) return 'Select a piece of furniture first.';
+    if (item.level >= FURNITURE_MAX_LEVEL) return 'Already at the highest level.';
+    const cost = furnitureUpgradeCost(item.kind, item.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
+    this.state.cash -= cost; item.level++;
+    this.changed(`${CATALOG[item.kind].name} is now level ${item.level}.${lookFor(item.level) > lookFor(item.level - 1) ? ' A whole new look!' : ''}`); return null;
   }
   hire(role: Role): string | null {
     if (this.state.phase !== 'planning') return 'Hire before opening for the day.';
@@ -338,8 +347,8 @@ export class RestaurantEngine {
       const guest = s.guests.find(g => g.id === staff.guestId);
       if (!guest || guest.stage === 'leaving') { resetStaff(staff); continue; }
       if (staff.task === 'toKitchen') {
-        staff.task = 'cooking'; staff.timer = DISHES[guest.dish].seconds * (1 - (staff.level - 1) * .2);
-        const station = s.furniture.find(f => f.id === staff.stationId); staff.yaw = Math.PI - (station?.rotation ?? 0) * Math.PI / 2;
+        const station = s.furniture.find(f => f.id === staff.stationId);
+        staff.task = 'cooking'; staff.timer = DISHES[guest.dish].seconds * (1 - (staff.level - 1) * .2) * (1 - stationSpeedup(station?.level ?? 1)); staff.yaw = Math.PI - (station?.rotation ?? 0) * Math.PI / 2;
       } else if (staff.task === 'cooking') { staff.timer -= dt * pace; if (staff.timer <= 0) { guest.stage = 'ready'; resetStaff(staff); } }
       else if (staff.task === 'collect') {
         const table = s.furniture.find(f => f.id === guest.tableId), route = table ? this.route(staff, accessPoints(table)[guest.seat]) : null;
@@ -347,7 +356,8 @@ export class RestaurantEngine {
       } else if (staff.task === 'deliver') {
         guest.stage = 'eating'; guest.timer = 10; guest.happy = true;
         if (!guest.paid) {
-          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips));
+          const table = s.furniture.find(f => f.id === guest.tableId);
+          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1)) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips));
           const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; guest.paid = true;
           this.recordIncome(earned, 'service', guest.id, tip);
           this.event = `${DISHES[guest.dish].name} served. +$${earned}${tip ? ` including $${tip} tip` : ''}`;

@@ -1,10 +1,11 @@
 import { accessPoints, localPoint, seatPoint } from '../layout';
-import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type RestaurantState } from '../types';
+import { lookFor } from '../town';
+import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type Placement, type RestaurantState } from '../types';
 import { sceneNight } from '../light';
 import type { Ambience } from './ambience';
 import { diamondPath, drawFurniture, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
 import { depthOf, facing, toScreen, TILE_H, TILE_W, type ScreenPoint, type View } from './projection';
-import { drawSprite, spriteImage, SPRITES, type SpriteKey } from './sprites';
+import { drawSprite, furnitureSprite, spriteImage, SPRITES, type SpriteKey } from './sprites';
 
 /** Smoothed on-screen position for one agent; the engine moves in 0.1 s steps. */
 export interface Tracked { x: number; z: number; walk: number; seen: number; }
@@ -14,7 +15,7 @@ export interface FrameInput {
   /** Where this canvas sits in the window, so the water gradient lines up with the page behind it. */
   windowTop: number; windowHeight: number;
   time: number; ambience: Ambience; reduced: boolean;
-  building: boolean; draft: Furniture | null; draftValid: boolean; selected: number | null;
+  building: boolean; draft: Placement | null; draftValid: boolean; selected: number | null;
   tracked: Map<string, Tracked>;
 }
 export interface FrameOutput { anchors: Map<string, ScreenPoint>; hits: HitBox[]; }
@@ -155,7 +156,7 @@ function track(f: FrameInput, id: string, x: number, z: number, dt: number): Tra
 /** Draw one complete frame. Reads simulation state; never changes it. */
 export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   const { state, view, columns, time, reduced, building, draft } = f, t = reduced ? 0 : time;
-  const anchors = new Map<string, ScreenPoint>(), hits: HitBox[] = [], items: Drawable[] = [];
+  const anchors = new Map<string, ScreenPoint>(), hits: HitBox[] = [], items: Drawable[] = [], badges: (() => void)[] = [];
   drawWater(ctx, f); drawGround(ctx, f); if (building) drawBuildGrid(ctx, f);
   let decor = decorCache.get(columns); if (!decor) { decor = seabedDecor(columns); decorCache.set(columns, decor); }
   for (const d of decor) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t)) });
@@ -163,10 +164,11 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   const night = sceneNight(state), glows: Glow[] = [];
   for (const item of state.furniture) {
     if (item.id === draft?.id) continue;
-    const n = CATALOG[item.kind].size, cx = item.x + (n - 1) / 2, cz = item.z + (n - 1) / 2, slot = SPRITES[`furniture.${item.kind}`];
+    const n = CATALOG[item.kind].size, cx = item.x + (n - 1) / 2, cz = item.z + (n - 1) / 2, key = furnitureSprite(item.kind, item.level), slot = SPRITES[key];
     if (night > 0 && item.kind === 'lamp') glows.push({ ...toScreen(view, cx, cz, 72), r: 74 * view.scale, color: '150, 230, 255', strength: .55 });
     if (night > 0 && item.kind === 'grill') glows.push({ ...toScreen(view, cx, cz, 22), r: 44 * view.scale, color: '255, 170, 90', strength: working.has(item.id) ? .6 : .32 });
-    items.push({ depth: depthOf(cx, cz), draw: () => at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, `furniture.${item.kind}`)) drawFurniture(ctx, item.kind, t, working.has(item.id)); }) });
+    items.push({ depth: depthOf(cx, cz), draw: () => at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, key)) drawFurniture(ctx, item.kind, t, working.has(item.id), lookFor(item.level)); }) });
+    if (building) badges.push(() => at(ctx, view, cx, cz, 0, () => drawLevelBadge(ctx, item.level, n)));
     const p = toScreen(view, cx, cz);
     hits.push({ id: item.id, left: p.x - n * TILE_W / 2 * view.scale, right: p.x + n * TILE_W / 2 * view.scale, top: p.y - slot.ay * view.scale, bottom: p.y + n * TILE_H / 2 * view.scale });
     if (item.kind === 'table') for (const seat of [0, 1]) { const s = seatPoint(item, seat); items.push({ depth: depthOf(s.x, s.z) - .01, draw: () => at(ctx, view, s.x, s.z, 0, () => { if (!drawSprite(ctx, 'furniture.stool')) drawStool(ctx); }) }); }
@@ -174,14 +176,14 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   hits.sort((a, b) => a.bottom - b.bottom);
   const tableTop = (table: Furniture, seat: number) => localPoint(table, seat ? .82 : .18, .4);
   // Plates sit on the drawn tabletop: the art's surface height, or the placeholder's.
-  const tableSurface = () => spriteImage('furniture.table') ? SPRITES['furniture.table'].surface ?? 24 : 24;
+  const tableSurface = (table: Furniture) => { const key = furnitureSprite('table', table.level); return spriteImage(key) ? SPRITES[key].surface ?? 24 : 24; };
   for (const guest of state.guests) if (guest.stage === 'eating') {
     const table = state.furniture.find(item => item.id === guest.tableId); if (!table) continue;
-    const p = tableTop(table, guest.seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(), () => { if (!drawSprite(ctx, `meal.${guest.dish}`)) drawMeal(ctx, guest.dish); }) });
+    const p = tableTop(table, guest.seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(table), () => { if (!drawSprite(ctx, `meal.${guest.dish}`)) drawMeal(ctx, guest.dish); }) });
   }
   for (const key of state.dirty) {
     const [id, seat] = key.split(':').map(Number), table = state.furniture.find(item => item.id === id); if (!table) continue;
-    const p = tableTop(table, seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(), () => { if (!drawSprite(ctx, 'meal.dirty')) drawMeal(ctx, 'dirty'); }) });
+    const p = tableTop(table, seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(table), () => { if (!drawSprite(ctx, 'meal.dirty')) drawMeal(ctx, 'dirty'); }) });
   }
   const seated = (g: Guest) => g.stage !== 'arriving' && g.stage !== 'leaving';
   for (const guest of state.guests) {
@@ -200,11 +202,20 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   items.push({ depth: depthOf(1.2, HEIGHT - .5 + .9), draw: () => at(ctx, view, 1.2, HEIGHT - .5 + .9, 0, () => drawSign(ctx, state.name)) });
   items.sort((a, b) => a.depth - b.depth).forEach(item => item.draw());
   if (night > 0) { glows.push({ ...toScreen(view, entrance.x, entrance.z + .62, 56), r: 34 * view.scale, color: '255, 226, 150', strength: .35 }); drawNight(ctx, f, night, glows); }
-  if (draft) { const n = CATALOG[draft.kind].size, cx = draft.x + (n - 1) / 2, cz = draft.z + (n - 1) / 2; at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, `furniture.${draft.kind}`)) drawFurniture(ctx, draft.kind, t); }, .72); }
+  badges.forEach(draw => draw());
+  if (draft) { const n = CATALOG[draft.kind].size, cx = draft.x + (n - 1) / 2, cz = draft.z + (n - 1) / 2, level = draft.level ?? 1, key = furnitureSprite(draft.kind, level); at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, key)) drawFurniture(ctx, draft.kind, t, false, lookFor(level)); }, .72); }
   drawParticles(ctx, f);
   return { anchors, hits };
 }
 
+/** A small level pill at the front corner of a piece's footprint, shown only while building. */
+function drawLevelBadge(ctx: Ctx, level: number, cells: number): void {
+  const y = cells * TILE_H / 2 - 4, look = lookFor(level);
+  ctx.font = '700 9px "Baloo 2", sans-serif'; const label = `${level}`, w = Math.max(14, ctx.measureText(label).width + 8);
+  ctx.fillStyle = look === 3 ? '#F2B743' : look === 2 ? '#A57BFF' : '#1B4F5C'; ctx.strokeStyle = '#FFF2D7'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(-w / 2, y - 6, w, 12, 6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = look === 3 ? '#0B1A2E' : '#FFF2D7'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, 0, y + .5);
+}
 function drawArch(ctx: Ctx, t: number): void {
   for (const side of [-1, 1]) { ctx.save(); ctx.translate(side * 15, side * 7.5); shadow(ctx, 8, 4); ctx.fillStyle = '#E7846F'; ctx.beginPath(); ctx.roundRect(-4, -46, 8, 46, 4); ctx.fill(); ctx.restore(); }
   ctx.strokeStyle = '#F2B743'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-15, -50); ctx.quadraticCurveTo(0, -70, 15, -35); ctx.stroke();
