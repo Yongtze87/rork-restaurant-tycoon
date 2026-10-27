@@ -22,7 +22,7 @@ const tap = (element: Element, x: number, z: number) => {
 
 it('paints the reef and reports the tapped floor cell while placing furniture', async () => {
   const onTile = vi.fn(), onSelect = vi.fn();
-  const screen = await render(<Host draft={{ id: -1, kind: 'plant', x: 0, z: 7, rotation: 0 }} building onTile={onTile} onSelect={onSelect} />);
+  const screen = await render(<Host draft={{ id: -1, kind: 'plant', x: 0, z: 7, rotation: 0, level: 1 }} building onTile={onTile} onSelect={onSelect} />);
   const host = screen.getByTestId('reef-view').element();
   await expect.element(screen.getByRole('img', { name: /Little Reef: an underwater restaurant/ })).toBeVisible();
   await new Promise(resolve => setTimeout(resolve, 100));

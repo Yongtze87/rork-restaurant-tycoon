@@ -33,7 +33,7 @@ describe('management customer satisfaction', () => {
   it('uses the unchanged atmosphere bonus from the actual departure deadline', () => {
     const state = createRestaurant(); expect(guestPatienceSeconds(state)).toBe(55.2);
     const before = guestSatisfaction({ ...waiting, waiting: 40 }, guestPatienceSeconds(state));
-    state.furniture.push({ id: 99, kind: 'lamp', x: 8, z: 8, rotation: 0 });
+    state.furniture.push({ id: 99, kind: 'lamp', x: 8, z: 8, rotation: 0, level: 1 });
     expect(guestPatienceSeconds(state)).toBe(56.64);
     expect(guestSatisfaction({ ...waiting, waiting: 40 }, guestPatienceSeconds(state))).toBeGreaterThan(before);
   });
