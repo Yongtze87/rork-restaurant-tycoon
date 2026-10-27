@@ -1,6 +1,6 @@
-# Vast Ocean — Mareen Restaurant Tales
+# Vast Ocean: Mareen Tales
 
-*Working title.* A cozy 2.5D restaurant tycoon set beneath a vast ocean. Build a reef restaurant on an isometric grid, hire a crew of **Mareen** (a human tribe with small fin-like ears), set your menu and prices, and watch guests arrive, order, eat, tip and leave. Then reinvest the profit, one service day at a time.
+A cozy 2.5D restaurant tycoon set beneath a vast ocean. Build a reef restaurant on an isometric grid, hire a crew of **Mareen** (a human tribe with small fin-like ears), set your menu and prices, and watch guests arrive, order, eat, tip and leave. Then reinvest the profit, one service day at a time.
 
 Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric renderer. No backend, no accounts. All progress is saved locally in the browser.
 
