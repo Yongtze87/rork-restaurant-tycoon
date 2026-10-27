@@ -116,6 +116,19 @@ web-kitchen-rush/
 
 ---
 
+## Adding art
+
+Art is generated as sprite sheets: several objects on one image, on a flat pure green, magenta or blue background, with gaps between them.
+
+```bash
+bun tools/slice-sheet.ts sheet.jpg cut/ table-1,table-2,table-3           # cut objects out, in reading order; writes cut/_preview.png
+bun tools/prepare-sprites.ts cut/ public/art/furniture 84 table-1,table-2,table-3   # resize to game size, print slot sizes
+```
+
+Copy the printed sizes into `src/management/iso/sprites.ts` with each image's `src`.
+
+---
+
 ## Game rules and economy
 
 | Item | Value |

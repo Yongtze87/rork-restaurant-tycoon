@@ -5,13 +5,15 @@ import type { FurnitureKind, Guest, Role } from '../types';
  * with its anchor (ax, ay) placed on the object's floor point. Slots without `src` use the
  * built-in placeholder drawing, so the game stays playable while art is being produced.
  * Character slots face down-right ("front") or up-right ("back"); the renderer mirrors them.
+ * `surface` is how far above the anchor a tabletop sits, so plates land on it.
  */
-export interface SpriteSlot { src?: string; w: number; h: number; ax: number; ay: number; }
+export interface SpriteSlot { src?: string; w: number; h: number; ax: number; ay: number; surface?: number; }
 
 export type Look = Guest['look'];
 export type SpriteKey =
   | `furniture.${FurnitureKind}`
   | 'furniture.stool'
+  | 'furniture.table.2' | 'furniture.table.3'
   | `guest.${Look}.${'front' | 'back'}`
   | `staff.${Role}.${'front' | 'back'}`
   | 'meal.salad' | 'meal.burger' | 'meal.dirty';
@@ -21,7 +23,11 @@ const person: SpriteSlot = { w: 48, h: 64, ax: 24, ay: 60 };
 const meal: SpriteSlot = { w: 24, h: 16, ax: 12, ay: 10 };
 
 export const SPRITES: Record<SpriteKey, SpriteSlot> = {
-  'furniture.table': furniture(128, 96, 80), 'furniture.prep': furniture(64, 72, 56), 'furniture.grill': furniture(64, 72, 56),
+  'furniture.table': { src: '/art/furniture/table-1.webp', w: 79.5, h: 67.5, ax: 39.8, ay: 64.1, surface: 41 },
+  // Upgrade tiers, ready for the progression system.
+  'furniture.table.2': { src: '/art/furniture/table-2.webp', w: 79.9, h: 66.8, ax: 39.9, ay: 63.4, surface: 37 },
+  'furniture.table.3': { src: '/art/furniture/table-3.webp', w: 92.7, h: 78.5, ax: 46.4, ay: 70.1, surface: 39 },
+  'furniture.prep': furniture(64, 72, 56), 'furniture.grill': furniture(64, 72, 56),
   'furniture.plant': furniture(64, 72, 56), 'furniture.divider': furniture(64, 112, 96), 'furniture.lamp': furniture(64, 112, 96),
   'furniture.stool': furniture(32, 28, 20),
   'guest.coral.front': person, 'guest.coral.back': person, 'guest.pearl.front': person, 'guest.pearl.back': person,

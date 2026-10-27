@@ -3,7 +3,7 @@ import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type RestaurantS
 import type { Ambience } from './ambience';
 import { diamondPath, drawFurniture, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
 import { depthOf, facing, toScreen, TILE_H, TILE_W, type ScreenPoint, type View } from './projection';
-import { drawSprite, SPRITES, type SpriteKey } from './sprites';
+import { drawSprite, spriteImage, SPRITES, type SpriteKey } from './sprites';
 
 /** Smoothed on-screen position for one agent; the engine moves in 0.1 s steps. */
 export interface Tracked { x: number; z: number; walk: number; seen: number; }
@@ -167,13 +167,15 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   }
   hits.sort((a, b) => a.bottom - b.bottom);
   const tableTop = (table: Furniture, seat: number) => localPoint(table, seat ? .82 : .18, .4);
+  // Plates sit on the drawn tabletop: the art's surface height, or the placeholder's.
+  const tableSurface = () => spriteImage('furniture.table') ? SPRITES['furniture.table'].surface ?? 24 : 24;
   for (const guest of state.guests) if (guest.stage === 'eating') {
     const table = state.furniture.find(item => item.id === guest.tableId); if (!table) continue;
-    const p = tableTop(table, guest.seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, 24, () => { if (!drawSprite(ctx, `meal.${guest.dish}`)) drawMeal(ctx, guest.dish); }) });
+    const p = tableTop(table, guest.seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(), () => { if (!drawSprite(ctx, `meal.${guest.dish}`)) drawMeal(ctx, guest.dish); }) });
   }
   for (const key of state.dirty) {
     const [id, seat] = key.split(':').map(Number), table = state.furniture.find(item => item.id === id); if (!table) continue;
-    const p = tableTop(table, seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, 24, () => { if (!drawSprite(ctx, 'meal.dirty')) drawMeal(ctx, 'dirty'); }) });
+    const p = tableTop(table, seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(), () => { if (!drawSprite(ctx, 'meal.dirty')) drawMeal(ctx, 'dirty'); }) });
   }
   const seated = (g: Guest) => g.stage !== 'arriving' && g.stage !== 'leaving';
   for (const guest of state.guests) {
