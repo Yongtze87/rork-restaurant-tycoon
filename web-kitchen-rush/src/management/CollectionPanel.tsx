@@ -15,7 +15,7 @@ export function CollectionPanel({ state, action }: { state: RestaurantState; act
     {FAMILY_IDS.map(family => {
       const all = ACHIEVEMENTS.filter(a => a.family === family), done = all.filter(a => isClaimed(state, a)).length, ready = all.filter(a => isClaimable(state, a)).length;
       return <section key={family} aria-label={FAMILIES[family].name} className="space-y-2">
-        <div className="flex items-end justify-between gap-2"><div className="min-w-0"><h3 className="text-lg leading-tight">{FAMILIES[family].name}</h3><p className="text-xs text-ink/60">{FAMILIES[family].description}</p></div>
+        <div className="flex items-end justify-between gap-2"><div className="min-w-0"><h3 className="text-base leading-tight">{FAMILIES[family].name}</h3><p className="text-xs text-ink/60">{FAMILIES[family].description}</p></div>
           <p className="shrink-0 text-xs font-bold tabular-nums text-ink/70">{ready > 0 && <span className="mr-2 rounded-full bg-violet px-2 py-0.5 text-abyss">{ready} ready</span>}{done}/{all.length}</p></div>
         {visibleSteps(state, family).map(a => <AchievementCard key={a.chain} state={state} item={a} action={action} />)}
       </section>;

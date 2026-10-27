@@ -11,9 +11,9 @@ const iconFor = (c: DailyChallenge) => c.kind === 'dish' ? (c.dish && DISHES[c.d
 /** Read-only challenge board: real service credits rewards automatically, including offline. */
 export function DailyChallenges({ challenges, day, archived = false, pendingUntilTomorrow = false }: { challenges: readonly DailyChallenge[]; day: number; archived?: boolean; pendingUntilTomorrow?: boolean }) {
   const bonus = challengeBonus(challenges), done = challenges.filter(c => c.rewarded).length;
-  return <section aria-label={`Day ${day} challenges`} className="mb-5 rounded-2xl border border-gold/50 bg-gold/10 p-3">
+  return <section aria-label={`Day ${day} challenges`} className="mb-3 rounded-2xl border border-gold/50 bg-gold/10 p-3">
     <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-teal"><Target size={15} />Daily challenges</span><span className="rounded-full bg-paper px-2 py-1 text-[10px] font-extrabold">Day {day}</span></div>
-    <h3 className="mt-2 text-xl">{archived ? 'The day’s little victories' : 'A little extra ambition'}</h3>
+    <h3 className="mt-2 text-base">{archived ? 'The day’s little victories' : 'A little extra ambition'}</h3>
     {!challenges.length ? <p className="mt-2 text-xs leading-relaxed text-ink/65">{pendingUntilTomorrow ? 'Your saved service is already underway. Three fresh challenges will start next service day; today’s progress is unchanged.' : 'Open the restaurant to reveal 3 random challenges, chosen for your menu. Rewards are added automatically when you complete them.'}</p> : <>
       <p className="mb-3 mt-1 text-xs leading-relaxed text-ink/65">{archived ? 'Final progress. Unfinished challenges expired at closing.' : 'Finish before this service day ends. Rewards are paid automatically, even offline.'}</p>
       <ul className="space-y-2">{challenges.map(challenge => {

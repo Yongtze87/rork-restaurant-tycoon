@@ -153,8 +153,8 @@ export function renderTown(ctx: Ctx, f: TownFrame): RegionLabel[] {
   }));
   // Badges after the buildings so they are never hidden: level, construction progress, unlock price.
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // Zoomed far out only construction bars stay; the region labels carry the information.
-  const detail = s >= .6;
+  // Zoomed far out only construction bars stay; the region labels carry the information. Prices need a closer look.
+  const detail = s >= .6, close = s >= .9;
   for (const plot of plots) {
     const p = toScreen(view, plot.x, plot.z);
     if (plot.job) {
@@ -166,10 +166,12 @@ export function renderTown(ctx: Ctx, f: TownFrame): RegionLabel[] {
       const y = p.y + 14 * s;
       ctx.fillStyle = 'rgba(18,15,46,.85)'; ctx.beginPath(); ctx.roundRect(p.x - 15 * s, y - 6 * s, 30 * s, 12 * s, 6 * s); ctx.fill();
       if (detail) { ctx.fillStyle = '#FFE27A'; ctx.font = `700 ${Math.max(8, 8 * s)}px Quicksand, sans-serif`; ctx.fillText(`Lv ${plot.level}`, p.x, y + .5 * s); }
-    } else if (openPlots.has(plot) && detail) {
-      const cost = price(plot); ctx.fillStyle = f.cash >= cost ? '#E9E6FF' : 'rgba(233,230,255,.6)'; ctx.font = `700 ${Math.max(9, 10 * s)}px "Baloo 2", sans-serif`; ctx.fillText(fmt(cost), p.x, p.y);
-    } else if (plot.owned && detail) {
-      ctx.fillStyle = 'rgba(18,15,46,.6)'; ctx.font = `700 ${Math.max(8, 8 * s)}px Quicksand, sans-serif`; ctx.fillText('Empty plot', p.x, p.y);
+    } else if (openPlots.has(plot) && close) {
+      const cost = price(plot); ctx.fillStyle = f.cash >= cost ? '#E9E6FF' : 'rgba(233,230,255,.6)'; ctx.font = `700 ${Math.max(9, 9 * s)}px "Baloo 2", sans-serif`; ctx.fillText(fmt(cost), p.x, p.y);
+    } else if (plot.owned && !plot.building && detail) {
+      // An empty plot of your own: a small + inviting a building.
+      ctx.fillStyle = 'rgba(18,15,46,.45)'; ctx.beginPath(); ctx.arc(p.x, p.y, 7 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4DF0FF'; ctx.font = `800 ${Math.max(9, 11 * s)}px "Baloo 2", sans-serif`; ctx.fillText('+', p.x, p.y + .5 * s);
     }
   }
   if (cells.some(c => c.status === 'home')) for (const [id, spot] of Object.entries(ZONE_LABEL) as [Exclude<ZoneId, 'shallows'>, { x: number; z: number }][]) {

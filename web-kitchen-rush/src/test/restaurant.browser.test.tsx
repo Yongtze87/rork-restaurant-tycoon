@@ -35,11 +35,11 @@ it('charges only confirmed placements and supports keyboard cancellation', async
   await expect.element(screen.getByRole('region', { name: 'Furniture placement' })).not.toBeInTheDocument();
   expect(restaurant.state.cash).toBe(1185);
 });
-it('freezes business changes during service, but allows speed and pause', async () => {
+it('freezes business changes during service and has no speed or pause controls', async () => {
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: /Open restaurant/ }).click();
-  await screen.getByRole('button', { name: '3x speed' }).click(); expect(restaurant.speed).toBe(3);
-  await screen.getByRole('button', { name: 'Pause service' }).click(); expect(restaurant.paused).toBe(true);
+  await expect.element(screen.getByText('0 served')).toBeVisible();
+  expect(document.querySelector('[aria-label="3x speed"],[aria-label="Pause service"]')).toBeNull(); expect(restaurant.speed).toBe(1);
   await screen.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect.element(screen.getByRole('button', { name: 'Raise Kelp salad price' })).toBeDisabled();
   await screen.getByRole('button', { name: 'Build', exact: true }).click();

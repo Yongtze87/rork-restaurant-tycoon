@@ -31,15 +31,15 @@ function Stars({ n, label }: { n: number; label?: string }) {
 /** Depth zones: what each one needs, with progress, and the button for the next one. */
 function ZoneSection({ action }: { action: Action }) {
   const state = restaurant.state, town = state.town;
-  return <section aria-label="Depth zones" className="mb-4 space-y-2">
-    <h3 className="flex items-center gap-1.5 text-lg"><Mountain size={17} className="text-teal" aria-hidden="true" />Depth zones</h3>
+  return <section aria-label="Depth zones" className="mb-3 space-y-2">
+    <h3 className="flex items-center gap-1.5 text-base"><Mountain size={17} className="text-teal" aria-hidden="true" />Depth zones</h3>
     {ZONE_IDS.map(id => {
       const info = ZONES[id], reached = hasZone(town, id), prev = previousZone(id), next = !reached && (!prev || hasZone(town, prev));
       const dishes = DISH_IDS.filter(dish => DISHES[dish].zone === id).map(dish => DISHES[dish].name).join(' · ');
       if (reached) return <div key={id} className="flex min-h-11 items-center gap-2 rounded-xl bg-teal/10 px-3 text-sm font-bold"><Check size={16} className="shrink-0 text-teal" aria-hidden="true" /><span className="min-w-0 flex-1">{info.name}</span><span className="text-[11px] font-extrabold text-teal">Reached</span></div>;
       const price = restaurant.zonePrice(id), requirements = zoneRequirements(state, id, price), ready = requirements.every(r => r.met);
       return <div key={id} aria-label={info.name} role="group" className={cn('rounded-2xl border p-3', next ? 'border-teal/40 bg-ink/[.06]' : 'border-ink/10 bg-ink/[.03] opacity-70')}>
-        <div className="flex items-start justify-between gap-2"><h4 className="font-display text-lg leading-tight">{info.name}</h4><span className="font-display text-lg tabular-nums text-teal">{money(price)}</span></div>
+        <div className="flex items-start justify-between gap-2"><h4 className="font-display text-base leading-tight">{info.name}</h4><span className="font-display text-base tabular-nums text-teal">{money(price)}</span></div>
         <p className="mt-0.5 text-[11px] text-ink/65">{info.description}</p>
         <p className="mt-1 text-[11px] font-bold text-teal">New dishes: {dishes} · guests arrive {Math.round(ZONE_ARRIVAL_BONUS * 100)}% more often{id === 'reef' ? ' · claim the first ring of regions' : id === 'twilight' ? ' · claim a second ring' : ' · claim the open ocean'}</p>
         <ul className="mt-2 space-y-1 text-[11px]">{requirements.map(r => <li key={r.label} className={cn('flex items-center gap-1.5', r.met ? 'text-teal' : 'text-ink/70')}>{r.met ? <Check size={13} aria-label="Done" /> : <X size={13} aria-label="Not yet" className="text-danger" />}<span>{r.label}</span></li>)}</ul>
@@ -52,8 +52,8 @@ function ZoneSection({ action }: { action: Action }) {
 /** Claimed regions with their branch income, and the regions that can be claimed next with their price. */
 function RegionsSection({ onRegion }: { onRegion: (id: string) => void }) {
   const state = restaurant.state, ocean = state.ocean, claimable = claimableRegions(ocean);
-  return <section aria-label="Regions" className="mb-4 space-y-2">
-    <h3 className="flex items-center gap-1.5 text-lg"><MapPinned size={17} className="text-teal" aria-hidden="true" />Regions</h3>
+  return <section aria-label="Regions" className="mb-3 space-y-2">
+    <h3 className="flex items-center gap-1.5 text-base"><MapPinned size={17} className="text-teal" aria-hidden="true" />Regions</h3>
     <p className="text-[11px] text-ink/65"><span className="font-extrabold text-gold">{ocean.fame} fame</span>{ocean.fame ? ` · ${fameText(restaurant.fameBonuses())}` : ' · Claim regions and grow their branches to earn fame: lasting bonuses for everything.'}</p>
     {ocean.regions.map(id => {
       const region = regionById(id)!, branch = branchIn(state.town, id), income = branch ? restaurant.branchIncomeAt(branch.x, branch.z) : 0;
@@ -76,7 +76,7 @@ function RegionDetails({ id, back, onSelect, action, summary }: { id: string; ba
   const error = status === 'claimable' ? restaurant.claimError(id) : null, price = restaurant.claimPrice(id), info = BIOMES[region.biome];
   const branch = branchIn(state.town, id), owned = status === 'claimed' ? ownedCount(state.town, id) : 0, steps = masterySteps(region);
   return <section aria-label="Region details">{back}{summary}
-    <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><h3 className="text-xl leading-tight">{region.name}</h3><p className="text-xs text-ink/60">{info.name} · {status === 'claimed' ? 'your region' : status === 'claimable' ? 'can be claimed' : 'unexplored'}</p></div>
+    <div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><h3 className="text-base leading-tight">{region.name}</h3><p className="text-xs text-ink/60">{info.name} · {status === 'claimed' ? 'your region' : status === 'claimable' ? 'can be claimed' : 'unexplored'}</p></div>
       <p className="flex items-center gap-1.5 text-xs font-extrabold"><Stars n={region.stars} label={`Difficulty ${region.stars} of 5`} /><span className="text-ink/60">Difficulty</span></p></div>
     <p className="mt-1 text-xs text-ink/65">{info.description}</p>
     <p className="mt-2 rounded-xl bg-teal/10 p-2 text-[11px] font-bold"><span className="text-teal">Good for: </span>{info.goodFor}</p>
@@ -86,7 +86,7 @@ function RegionDetails({ id, back, onSelect, action, summary }: { id: string; ba
     </div>
     <p className="mt-1 text-[10px] text-ink/55">These apply only to plots and buildings in {region.name}. Town-wide limits still apply.</p>
     {status === 'claimable' && <div className="mt-3 rounded-2xl border border-teal/40 bg-ink/[.06] p-3">
-      <div className="flex items-center justify-between gap-2"><h4 className="font-display text-lg">Claim {region.name}</h4><span className="font-display text-lg tabular-nums text-teal">{money(price)}</span></div>
+      <div className="flex items-center justify-between gap-2"><h4 className="font-display text-base">Claim {region.name}</h4><span className="font-display text-base tabular-nums text-teal">{money(price)}</span></div>
       <p className="text-[11px] text-ink/65">Its {REGION_SIZE * REGION_SIZE} plots join your world here, with the middle plot ready for a branch restaurant. Everything you built stays.</p>
       <p className="mt-1 text-[11px] font-bold text-gold">Claiming earns +{steps[0].fame} fame · {region.fame} fame in all for mastering it</p>
       <SmallButton className="mt-2 w-full bg-tomato text-paper" disabled={Boolean(error)} onClick={() => action(restaurant.claimRegion(id))}><MapPinned size={15} />{error ? 'Not yet' : `Claim · ${money(price)}`}</SmallButton>
@@ -94,8 +94,8 @@ function RegionDetails({ id, back, onSelect, action, summary }: { id: string; ba
     </div>}
     {status === 'claimed' && <div className="mt-3 space-y-2">
       <div className="grid grid-cols-2 gap-2 text-center text-[11px] font-bold">
-        <div className="rounded-xl bg-ink/[.06] p-2"><p className="font-display text-lg tabular-nums">{owned}/{REGION_SIZE * REGION_SIZE}</p>plots owned</div>
-        <div className="rounded-xl bg-gold/15 p-2"><p className="font-display text-lg tabular-nums">{branch ? money(restaurant.branchIncomeAt(branch.x, branch.z)) : '—'}</p>branch income per day</div>
+        <div className="rounded-xl bg-ink/[.06] p-2"><p className="font-display text-base tabular-nums">{owned}/{REGION_SIZE * REGION_SIZE}</p>plots owned</div>
+        <div className="rounded-xl bg-gold/15 p-2"><p className="font-display text-base tabular-nums">{branch ? money(restaurant.branchIncomeAt(branch.x, branch.z)) : '—'}</p>branch income per day</div>
       </div>
       <SmallButton className="w-full" onClick={() => onSelect(branch ?? regionCenter(region.x, region.y))}><Store size={15} />{branch ? `Branch restaurant · Lv ${branch.level}` : 'Build a branch restaurant'}</SmallButton>
     </div>}
@@ -136,7 +136,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
       <p className="mb-3 text-xs leading-relaxed text-ink/65">Unlock plots next to your town and choose what to build. Claim ocean regions around it to grow your world. What you build, and where, shapes how your restaurant grows.</p>
       <ZoneSection action={action} />
       {onRegion && <RegionsSection onRegion={onRegion} />}
-      <h3 className="mb-2 text-lg">Plots</h3>
+      <h3 className="mb-2 text-base">Plots</h3>
       {groups.map(group => <div key={group.id} role="group" aria-label={`${group.name} plots`} className="mb-3">
         {groups.length > 1 && <h4 className="mb-1.5 text-xs font-extrabold uppercase tracking-wider text-ink/55">{group.name}</h4>}
         <div className="space-y-2">{group.plots.map(p => <button type="button" key={`${p.x},${p.z}`} data-tutorial={!p.owned ? 'plot-locked' : p.job ? 'plot-busy' : p.building ? undefined : 'plot-empty'} onClick={() => select(p)} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-ink/10 bg-ink/[.06] px-3 text-left text-sm font-bold hover:bg-ink/10">
@@ -148,17 +148,17 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
   const where = inHome(plot) ? null : <p className="text-[11px] font-bold text-teal">{regionName(plot)} · {BIOMES[regionById(plotRegion(plot))!.biome].name}{onRegion && <button type="button" className="ml-1.5 underline" onClick={() => { onSelect(null); onRegion(plotRegion(plot)); }}>Region details</button>}</p>;
   if (!plot.owned) {
     const cost = restaurant.plotPrice(plot.x, plot.z), open = canUnlock(town, plot), reason = plotLockReason(town, plot), zone = ZONES[plotZone(plot)];
-    return <section aria-label="Locked plot">{back}{summary}<h3 className="text-xl">Wild seabed</h3><p className="text-xs text-ink/60">{inHome(plot) ? zone.name : regionName(plot)}</p>{where}
+    return <section aria-label="Locked plot">{back}{summary}<h3 className="text-base">Wild seabed</h3><p className="text-xs text-ink/60">{inHome(plot) ? zone.name : regionName(plot)}</p>{where}
       {open ? <><p className="my-2 text-xs text-ink/65">Claim this plot for your town. Each new plot in a region costs more than the last.</p>{afterSpend(cost)}<SmallButton tutorial="unlock-plot" className="mt-2 w-full bg-teal text-paper" disabled={state.cash < cost} onClick={() => action(restaurant.unlockPlot(plot.x, plot.z))}><LockKeyhole size={16} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Unlock · ${money(cost)}`}</SmallButton></>
         : <Notice>{reason}{!inHome(plot) || hasZone(town, plotZone(plot)) ? ' Plots grow outward from the ones you own.' : ' See Depth zones under All plots.'}</Notice>}
     </section>;
   }
-  if (!plot.building) return <section aria-label="Empty plot">{back}{summary}<h3 className="text-xl">Choose a building</h3>{where}
+  if (!plot.building) return <section aria-label="Empty plot">{back}{summary}<h3 className="text-base">Choose a building</h3>{where}
     {busy && <Notice>Your builder is busy. Wait, speed it up with a charm, or <button type="button" className="font-extrabold text-teal underline" onClick={onShop}>hire a second builder</button>.</Notice>}
-    <div className="mt-3 space-y-3">{buildableAt(town, plot).map(kind => {
+    <div className="mt-3 space-y-2">{buildableAt(town, plot).map(kind => {
       const info = BUILDINGS[kind], price = restaurant.buildPrice(kind, plot.x, plot.z), affordable = state.cash >= price, bonus = (kind === 'kelpFarm' || kind === 'fishery' || kind === 'garden') && nextToHub(town, plot), special = boostNote(plot, kind);
       return <div key={kind} className={cn('rounded-2xl border p-3', kind === 'branch' ? 'border-gold/50 bg-gold/10' : 'border-ink/10 bg-ink/[.06]')}>
-        <div className="flex items-start justify-between gap-2"><div><h4 className="font-display text-lg leading-tight">{info.name}</h4><p className="mt-0.5 text-[11px] text-ink/65">{info.description}</p></div><span className="font-display text-lg tabular-nums text-teal">{money(price)}</span></div>
+        <div className="flex items-start justify-between gap-2"><div><h4 className="font-display text-base leading-tight">{info.name}</h4><p className="mt-0.5 text-[11px] text-ink/65">{info.description}</p></div><span className="font-display text-base tabular-nums text-teal">{money(price)}</span></div>
         <p className="mt-1.5 text-[11px] font-bold text-teal">{effectText(town, plot, kind, 1, fame.branch)}</p>
         {special && <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-gold"><Sparkles size={12} aria-hidden="true" />{special}</p>}
         {info.adjacency && <p className={cn('mt-1 flex items-center gap-1 text-[11px]', bonus ? 'font-bold text-gold' : 'text-ink/55')}><Sparkles size={12} aria-hidden="true" />{bonus ? 'Neighbour bonus active here. ' : ''}{info.adjacency}</p>}
@@ -167,7 +167,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
     })}</div></section>;
   const kind = plot.building, info = BUILDINGS[kind], job = plot.job, next = plot.level + 1, cost = restaurant.upgradePrice(kind, next, plot.x, plot.z), special = boostNote(plot, kind);
   return <section aria-label={info.name}>{back}{summary}
-    <div className="flex items-start justify-between gap-2"><div><h3 className="text-xl leading-tight">{info.name}</h3><p className="text-xs text-ink/60">{info.looks[lookFor(plot.level) - 1]} · Level {plot.level} of {MAX_LEVEL}</p>{where}</div>
+    <div className="flex items-start justify-between gap-2"><div><h3 className="text-base leading-tight">{info.name}</h3><p className="text-xs text-ink/60">{info.looks[lookFor(plot.level) - 1]} · Level {plot.level} of {MAX_LEVEL}</p>{where}</div>
       {kind === 'restaurant' && <SmallButton className="shrink-0" onClick={onEnterRestaurant}><Store size={15} />Enter</SmallButton>}</div>
     {kind === 'branch' && <p data-testid="branch-income" className="mt-2 rounded-xl bg-gold/15 p-2 text-xs font-extrabold">{job?.kind === 'build' ? `Opens when built: ${money(restaurant.branchIncomeAt(plot.x, plot.z, 1))} per service day` : `Earns ${money(restaurant.branchIncomeAt(plot.x, plot.z))} per service day`}<span className="block text-[11px] font-semibold text-ink/65">Paid at every closing, also while you are away. Shown as “Branch income” on your receipts.</span></p>}
     <p className="mt-2 text-xs font-bold text-teal">{job?.kind === 'build' ? 'Ready when built: ' : 'Now: '}{effectText(town, plot, kind, plot.level, fame.branch)}</p>
@@ -182,7 +182,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
     </div>
     : plot.level >= MAX_LEVEL ? <Notice>Fully upgraded. A true reef landmark.</Notice>
     : <div className="mt-3 rounded-2xl border border-ink/10 bg-ink/[.06] p-3">
-      <div className="flex items-center justify-between"><h4 className="font-display text-lg">Upgrade to level {next}</h4><span className="font-display text-lg tabular-nums text-teal">{money(cost)}</span></div>
+      <div className="flex items-center justify-between"><h4 className="font-display text-base">Upgrade to level {next}</h4><span className="font-display text-base tabular-nums text-teal">{money(cost)}</span></div>
       <p className="text-[11px] font-bold text-teal">{effectText(town, plot, kind, next, fame.branch)}</p>
       {lookFor(next) !== lookFor(plot.level) && <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-gold"><Sparkles size={12} aria-hidden="true" />New look: {info.looks[lookFor(next) - 1]}</p>}
       {busy && <p className="mt-1 text-[11px] text-ink/60">Your builder is busy with another job.</p>}

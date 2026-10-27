@@ -17,19 +17,19 @@ export const WeeklyRevenue = memo(function WeeklyRevenue({ history, onReport }: 
   const week = weeks[index], saved = week.days.filter(day => day.report !== null);
   const detail = saved.find(day => day.day === selectedDay) ?? saved[saved.length - 1];
   const changeWeek = (next: number) => { setSelectedWeek(next === weeks.length - 1 ? null : weeks[next].number); setSelectedDay(null); };
-  return <section aria-label="Weekly revenue" className="mb-5 min-w-0">
+  return <section aria-label="Weekly revenue" className="mb-3 min-w-0">
     <div className="flex items-center justify-between gap-2">
-      <div><h3 className="text-xl">Weekly revenue</h3><p className="text-[11px] text-ink/60">A little growth, day by day.</p></div>
+      <h3 className="text-base">Weekly revenue</h3>
       <div className="flex shrink-0 gap-1">
         <button type="button" aria-label="Previous revenue week" disabled={index === 0} onClick={() => changeWeek(index - 1)} className="grid size-11 place-items-center rounded-xl border border-ink/10 bg-ink/[.06] transition hover:bg-ink/10 disabled:opacity-30 motion-reduce:transition-none"><ChevronLeft size={18} /></button>
         <button type="button" aria-label="Next revenue week" disabled={index === weeks.length - 1} onClick={() => changeWeek(index + 1)} className="grid size-11 place-items-center rounded-xl border border-ink/10 bg-ink/[.06] transition hover:bg-ink/10 disabled:opacity-30 motion-reduce:transition-none"><ChevronRight size={18} /></button>
       </div>
     </div>
-    <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
       <p data-testid="revenue-week-label" className="text-xs font-extrabold text-teal">Week {week.number} <span className="font-semibold text-ink/60">· Days {week.start}–{week.end}</span></p>
       <span className="text-[10px] font-bold text-ink/60">{week.count}/7 days recorded</span>
     </div>
-    <p data-testid="revenue-week-total" className="mt-1 break-words font-display text-4xl tabular-nums text-teal">{week.count ? money(week.total) : '—'}</p>
+    <p data-testid="revenue-week-total" className="break-words font-display text-xl leading-tight tabular-nums text-teal">{week.count ? money(week.total) : '—'}</p>
     <p className="text-[10px] text-ink/60">{week.unavailable ? 'Saved-day subtotal' : week.count === 7 ? 'Full week' : 'Week to date'} · meal sales + tips</p>
     <RevenueComparison week={week} />
     <RevenueBars week={week} selectedDay={detail?.day ?? null} />

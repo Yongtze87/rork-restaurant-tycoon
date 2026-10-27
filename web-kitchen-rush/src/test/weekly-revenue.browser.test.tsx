@@ -27,7 +27,7 @@ it.each([320, 390, 768, 1280])('shows the weekly chart immediately in Ledger at 
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   if (width < 1024) {
     expect(screen.getByTestId('restaurant-scene').element().getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top);
-    expect(bounds.bottom).toBeLessThanOrEqual(screen.getByText('Saved on this device', { exact: true }).element().getBoundingClientRect().top);
+    expect(bounds.bottom).toBeLessThanOrEqual(screen.getByRole('navigation', { name: 'Restaurant management' }).element().getBoundingClientRect().top);
   }
   for (const control of section.querySelectorAll('button,select')) {
     const rect = control.getBoundingClientRect(); expect(rect.height).toBeGreaterThanOrEqual(44); expect(rect.width).toBeGreaterThanOrEqual(44);

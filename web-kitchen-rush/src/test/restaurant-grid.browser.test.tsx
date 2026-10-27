@@ -67,7 +67,7 @@ it.each([320, 390, 768])('keeps the grid readout, preview area and placement con
   expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width);
   expect(region.scrollWidth).toBeLessThanOrEqual(region.clientWidth);
   expect(scene.bottom).toBeLessThanOrEqual(rect.top); expect(scene.height).toBeGreaterThan(160);
-  if (width < 640) expect(rect.bottom).toBeLessThan(screen.getByText('Saved on this device').element().getBoundingClientRect().top);
+  if (width < 640) expect(rect.bottom).toBeLessThan(screen.getByRole('navigation', { name: 'Restaurant management' }).element().getBoundingClientRect().top);
   for (const button of region.querySelectorAll('button')) {
     const bounds = button.getBoundingClientRect();
     expect(bounds.width).toBeGreaterThanOrEqual(44); expect(bounds.height).toBeGreaterThanOrEqual(44);

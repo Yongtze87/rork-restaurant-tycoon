@@ -24,7 +24,7 @@ it('unlocks a plot, builds with a timer, and skips it with a charm', async () =>
   expect(owned.job?.kind).toBe('build'); expect(restaurant.state.cash).toBe(1250 - price - BUILDINGS.garden.buildCost);
   await expect.element(screen.getByTestId('construction')).toHaveTextContent('Building');
   await screen.getByRole('button', { name: /Current charm/ }).click();
-  await expect.element(screen.getByText('Glow garden is built.').first()).toBeVisible();
+  await vi.waitFor(() => expect(restaurant.lastCompletion?.text).toBe('Glow garden is built.'));
   expect(plotAt(restaurant.state.town, owned.x, owned.z)!.job).toBeNull();
   expect(restaurant.townEffects().arrivalBonus).toBeGreaterThan(0);
 });

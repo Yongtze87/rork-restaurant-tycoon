@@ -45,11 +45,10 @@ export const CashRegister = memo(function CashRegister({ engine = restaurant }: 
   }, [view.notice, engine, reduced]);
   return <div className="pointer-events-none relative flex items-center gap-1.5 sm:gap-2" data-testid="cash-register">
     <span key={`bill-${view.notice?.id ?? 'idle'}`} className={cn('inline-flex', view.notice && 'animate-cash-pulse motion-reduce:animate-none', frozen && '[animation-play-state:paused]')}><DollarBill /></span>
-    <div><p className={cn('text-[9px] font-extrabold uppercase tracking-wider text-ink/50', view.notice && 'invisible sm:visible')}>Cash</p><p className={cn('whitespace-nowrap font-display text-xl tabular-nums', view.notice && 'text-teal')} data-testid="cash" aria-label={`Cash ${money(cash)}`}><span aria-hidden="true">{money(view.displayed)}</span></p></div>
-    {view.notice && <div key={`income-${view.notice.id}`} data-testid="cash-income" aria-hidden="true" className={cn('absolute left-[34px] top-0 flex w-max max-w-[145px] flex-row-reverse items-center gap-1 rounded bg-teal px-1 text-paper sm:left-1/2 sm:top-full sm:mt-3 sm:-translate-x-1/2 sm:flex-col sm:gap-0 sm:rounded-xl sm:border-2 sm:border-paper sm:px-3 sm:py-1.5 sm:shadow-md sm:motion-safe:animate-cash-arrive', frozen && '[animation-play-state:paused]')}>
-      <span className="absolute -top-1.5 hidden size-2 rotate-45 sm:block border-l-2 border-t-2 border-paper bg-teal" />
-      <span className="font-body text-[9px] font-extrabold leading-[12px] tabular-nums text-abyss sm:font-display sm:text-xl sm:font-normal sm:leading-none">+{money(view.notice.amount)}</span>
-      <span className="text-center text-[9px] font-extrabold leading-[12px] sm:mt-1 sm:leading-tight"><span className="sm:hidden">{{ service: 'Paid', sale: 'Sale', milestone: 'Bonus', challenge: 'Quest', loan: 'Loan', income: 'In' }[view.notice.source]}</span><span className="hidden sm:inline">{incomeLabels[view.notice.source]}</span></span>
+    <div><p className={cn('whitespace-nowrap font-display text-base tabular-nums leading-none', view.notice && 'text-teal')} data-testid="cash" aria-label={`Cash ${money(cash)}`}><span aria-hidden="true">{money(view.displayed)}</span></p></div>
+    {view.notice && <div key={`income-${view.notice.id}`} data-testid="cash-income" aria-hidden="true" className={cn('absolute left-0 top-full mt-0.5 flex w-max items-center gap-1 rounded bg-teal px-1 text-paper motion-safe:animate-cash-arrive', frozen && '[animation-play-state:paused]')}>
+      <span className="text-[10px] font-extrabold leading-[14px] tabular-nums text-abyss">+{money(view.notice.amount)}</span>
+      <span className="text-[9px] font-extrabold leading-[14px]">{{ service: 'Paid', sale: 'Sale', milestone: 'Bonus', challenge: 'Quest', loan: 'Loan', income: 'In' }[view.notice.source]}</span>
     </div>}
     <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">{view.notice ? `${incomeLabels[view.notice.source]}: ${money(view.notice.amount)} received${view.notice.tip ? `, including ${money(view.notice.tip)} tip` : ''}.` : ''}</span>
   </div>;

@@ -76,15 +76,14 @@ export function TutorialCoach(ui: TutorialView) {
     if (ui.panel === 'menu') sawMenu.current = true; else if (sawMenu.current) next('menu')();
   }, [step, ui.panel]);
   if (index === null || !step || !info) return null;
-  const docked = (ui.panel || ui.placing || ui.inspecting) && step !== 'wrap';
-  return <section aria-label="Tutorial" data-testid="tutorial" data-step={step} className={cn('paper pointer-events-auto absolute z-[35] p-3 sm:left-6 sm:right-auto sm:w-[300px] sm:p-4', ui.capitalWarning ? 'left-3 right-[68px] top-3' : 'left-3 right-[68px] top-[140px] sm:top-[112px]', docked && 'max-sm:top-2')}>
+  return <section aria-label="Tutorial" data-testid="tutorial" data-step={step} className="paper pointer-events-auto absolute left-2 right-[56px] top-2 z-[35] p-2.5 sm:left-3 sm:right-auto sm:w-[280px] sm:p-3">
     <div className="flex items-center justify-between gap-2">
       <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-teal"><Shell size={13} aria-hidden="true" />Getting started</span>
       <button type="button" onClick={() => restaurant.welcome()} className="-mr-1 min-h-11 px-1 text-xs font-bold text-ink/65 underline-offset-2 hover:text-ink hover:underline">Skip tutorial</button>
     </div>
     <div aria-live="polite">
-      <h2 className="font-display text-lg leading-tight sm:text-xl">{info.title}</h2>
-      <p className="mt-1 text-xs leading-relaxed text-ink/75">{info.text}</p>
+      <h2 className="font-display text-base leading-tight">{info.title}</h2>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink/75">{info.text}</p>
     </div>
     <div className="mt-2 flex items-center gap-2">
       <ol aria-label={`Step ${index + 1} of ${TUTORIAL_STEPS.length}`} className="flex flex-1 gap-1">{TUTORIAL_STEPS.map((id, i) => <li key={id} className={cn('h-1.5 flex-1 rounded-full', i < index ? 'bg-gold' : i === index ? 'bg-teal' : 'bg-ink/15')} />)}</ol>

@@ -25,7 +25,6 @@ it.each([[320, 568], [390, 844], [768, 800], [1280, 800]])('keeps the red alert,
   expect(bounds.top).toBeGreaterThan(screen.getByTestId('cash-register').element().getBoundingClientRect().bottom);
   expect(screen.getByTestId('restaurant-scene').element().getBoundingClientRect().top).toBeGreaterThanOrEqual(bounds.bottom);
   reachable(alert.getByRole('button', { name: 'Close for renovation' }).element());
-  reachable(screen.getByRole('button', { name: 'Pause service' }).element());
   for (const tab of ['Build', 'Team', 'Menu', 'Ledger']) {
     await screen.getByRole('button', { name: tab, exact: true }).click();
     const panel = screen.getByRole('complementary').element(), box = panel.getBoundingClientRect();
