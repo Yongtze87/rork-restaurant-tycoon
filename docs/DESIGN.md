@@ -33,14 +33,12 @@ bun run build
 ```
 Browser tests: `bunx vitest run --config vitest.browser.config.ts`. In the cloud sandbox Chromium lives at `/opt/pw-browsers/chromium`; use a temporary copy of the config with `playwright({ launchOptions: { executablePath: '/opt/pw-browsers/chromium' } })`, and delete it (plus `.vitest-attachments`, `src/test/__screenshots__`) afterwards.
 
-## The Ocean: colonies and endless expansion
-The Abyss ends a **chapter**, not the game. After reaching the Abyss the player can **found a new colony** in another region of an endless Ocean map.
-- **Ocean map.** Regions on a grid around the Home Reef, expanding in every direction. Only regions next to explored ones can be colonised, so routes branch. The first ring is hand-designed; everything beyond is generated deterministically from the region's coordinates, so the map never runs out. Hand-made landmark regions can be added in updates.
-- **Biomes.** Kelp forest, volcanic vents, ice shelf, coral atoll, sunken city, open trench (more later). Each biome has a look (water and ground palette, decor) and modifiers.
-- **Difficulty is not a straight line.**
-  1. *Sawtooth across colonies:* each colony restarts, but permanent fame makes the early game faster; difficulty then ramps to that colony's Abyss.
-  2. *Route choice:* every region mixes upsides and downsides (e.g. ice shelf: slower crew, guests pay more; volcanic vents: cheaper fish, impatient guests; calm lagoon: easy and lower rewards). Distance raises difficulty on average, but there are always easier and harder neighbours.
-  3. *Rewards grow faster than difficulty* so moving outward always feels worth it.
-- **Kept on founding:** pearls, charms, extra builders, collections (claims and counters), tutorial state, fame. **Reset:** cash, restaurant layout and staff, town, zones, history.
-- **Fame** is permanent and earned per founded colony (more for harder regions); it grants clear, capped bonuses (for example tips, starting cash, guest arrival) shown before founding.
-- **Where it lives:** `ocean.ts` (regions, biomes, palettes, fame, the save record), `RestaurantEngine.colonyEffects` / `foundColony`, `OceanMap.tsx`. Numbers and simulator results: `docs/BALANCE.md`.
+## The Ocean: one ever-growing world
+There is **no separate map screen and no restart**. The Town view *is* the world: the Home Reef town in the middle, the neighbouring ocean regions drawn as real seabed around it in the same isometric scene, and fog beyond. The player drags and zooms across all of it.
+- **Regions.** The world is an endless grid of regions around the Home Reef. Each region is a block of plots with a biome (kelp forest, volcanic vents, ice shelf, coral atoll, sunken city, open trench, calm lagoon) generated deterministically from its coordinates; the first ring is hand-designed. Regions next to claimed ones can be **claimed** in the scene; then their plots are unlocked and built on in place, like the home town. Everything built stays forever.
+- **Regions specialise.** A region's biome makes certain buildings placed in it stronger (e.g. kelp farms in a kelp forest, fisheries in volcanic vents, gardens on a coral atoll, branch tips in an ice shelf) and applies its downsides inside that region (e.g. dearer or slower building). Where you build matters.
+- **Branch restaurants.** One per non-home region: a building visible in the scene, levels 1–15 with 3 looks. Each branch earns automatically every service day from its level and its region (deterministic, included in offline replay and daily receipts). The Home Reef restaurant remains the one the player runs in detail.
+- **Difficulty is not a straight line.** Regions further out cost more to claim and have tougher downsides on average, but every ring offers easier and harder choices (calm lagoons are easy and modest; trenches are hard and lucrative). Rewards grow faster than difficulty.
+- **Fame** is permanent and earned by **mastering regions** (claiming them and reaching milestones in them, e.g. a branch at level 6 / 11). It grants the clear, capped bonuses (tips, cheaper building, more guests) shown in the region panel. Nothing ever resets.
+- **Depth zones** (Shallows → Coral Reef → Twilight → Abyss) stay the home town's chapters and dish unlocks; reaching them also gates how far out regions can be claimed.
+- **Where it lives:** `ocean.ts` (regions, biomes, palettes, fame), `town.ts` (plots across the world), the town renderer (`iso/town-render.ts`), engine methods for claiming regions and branch income. Numbers and simulator results: `docs/BALANCE.md`.
