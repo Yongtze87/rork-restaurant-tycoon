@@ -2,17 +2,19 @@ import { BUILDABLE, BUILDINGS, activeLevel } from './town';
 import { DISHES, DISH_IDS, type Collections, type DishId, type Report, type RestaurantState } from './types';
 import { TIDES, TIDE_KINDS, type TideKind } from './tides';
 import { ZONES, ZONE_IDS } from './zones';
+import { BIOMES, VISITABLE_BIOMES, biomesVisited, coloniesFounded } from './ocean';
 
 /**
  * Collections: long-term achievements that pay out pearls (and a few Tide charms), claimed by hand.
  * Pure data and checks. The engine moves the counters in `Collections` at the moment each real event
  * happens (a dish served, a day closed, a furniture upgrade); everything else is read from the save.
  */
-export type FamilyId = 'dish' | 'builder' | 'explorer' | 'tide' | 'host' | 'craft';
+export type FamilyId = 'dish' | 'builder' | 'explorer' | 'ocean' | 'tide' | 'host' | 'craft';
 export const FAMILIES: Record<FamilyId, { name: string; description: string }> = {
   dish: { name: 'Dish mastery', description: 'Serve every dish again and again.' },
   builder: { name: 'Builder', description: 'Grow your reef town.' },
   explorer: { name: 'Explorer', description: 'Reach every depth zone.' },
+  ocean: { name: 'Ocean voyager', description: 'Found colonies across the Ocean and see every biome.' },
   tide: { name: 'Tide watcher', description: 'Serve guests under every tide.' },
   host: { name: 'Host', description: 'Keep your guests happy.' },
   craft: { name: 'Craft', description: 'Upgrade your furniture.' },
@@ -51,6 +53,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   ]),
   ...chain('builder', 'building-count', [5, 10, 20].map((n, i) => ({ id: `buildings-${n}`, title: ['Little village', 'Busy town', 'Reef city'][i], text: `Have ${n} finished buildings in town`, target: n, reward: reward([5, 10, 20][i]), value: (s: RestaurantState) => finished(s).filter(p => p.building !== 'restaurant').length }))),
   ...chain('explorer', 'zones', ZONE_IDS.filter(id => id !== 'shallows').map((id, i) => ({ id: `zone-${id}`, title: ZONES[id].name, text: `Reach ${ZONES[id].place}`, target: 1, reward: reward([15, 25, 40][i], 1), value: (s: RestaurantState) => flag(s.town.zones.includes(id)) }))),
+  ...chain('ocean', 'colonies', [1, 3, 10].map((n, i) => ({ id: `colonies-${n}`, title: ['First colony', 'Island hopper', 'Ocean empire'][i], text: `Found ${n} new ${n === 1 ? 'colony' : 'colonies'}`, target: n, reward: reward([20, 40, 80][i], [1, 1, 2][i]), value: (s: RestaurantState) => coloniesFounded(s.ocean) }))),
+  ...VISITABLE_BIOMES.map(biome => single('ocean', { id: `biome-${biome}`, title: BIOMES[biome].name, text: `Found a colony in a ${BIOMES[biome].name.toLowerCase()}`, target: 1, reward: reward(10), value: s => flag(biomesVisited(s.ocean).includes(biome)) })).flat(),
   ...TIDE_KINDS.map(kind => single('tide', { id: `tide-${kind}`, title: TIDES[kind].name, text: `Serve a day under ${TIDES[kind].name.toLowerCase()}`, target: 1, reward: reward(3), value: s => flag(s.collections.tides.includes(kind)) })).flat(),
   ...chain('host', 'served', [100, 500, 2000].map((n, i) => ({ id: `served-${n}`, title: ['Friendly face', 'Reef regular', 'Legend of the reef'][i], text: `Serve ${n.toLocaleString('en-US')} guests in total`, target: n, reward: reward([5, 10, 25][i]), value: (s: RestaurantState) => s.lifetimeServed }))),
   ...single('host', { id: 'perfect-day', title: 'Perfect day', text: `Close a day with no missed guests and at least ${PERFECT_DAY_MIN_SERVED} served`, target: 1, reward: reward(10), value: s => flag(s.collections.perfectDays > 0) }),

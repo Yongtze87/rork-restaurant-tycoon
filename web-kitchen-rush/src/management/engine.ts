@@ -7,6 +7,7 @@ import { LAST_TUTORIAL_STEP } from './tutorial';
 import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
 import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
+import { colonySeed, creditFame, currentColony, currentRegion, fameBonuses, pendingFame, isFoundable, regionById, type FameBonuses, type Region, type RegionModifiers } from './ocean';
 import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, completeJobs, dayKey, finishCost, jobSeconds, lookFor, plotAt, plotLockReason, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 
 export const GOALS = [
@@ -57,6 +58,9 @@ export class RestaurantEngine {
   private completionSequence = 0;
   private effects: TownEffects | null = null;
   private effectsKey = '';
+  private colony: RegionModifiers | null = null;
+  private colonyKey = '';
+  private fame: FameBonuses | null = null;
   private revision = 0;
   private accumulator = 0;
   private savedAt = 0;
@@ -347,7 +351,7 @@ export class RestaurantEngine {
   }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
-    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + (Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2) / ((1 + this.townEffects().arrivalBonus) * this.tideEffects().arrival); }
+    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + (Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2) / ((1 + this.townEffects().arrivalBonus) * this.tideEffects().arrival * this.colonyEffects().arrival); }
     for (const guest of s.guests) {
       if (guest.stage === 'arriving' && walk(guest, dt, 1.7)) {
         guest.stage = 'waiting'; const table = s.furniture.find(f => f.id === guest.tableId); guest.yaw = Math.PI - (table?.rotation ?? 0) * Math.PI / 2;
@@ -356,14 +360,14 @@ export class RestaurantEngine {
         guest.timer -= dt;
         if (guest.timer <= 0) { s.dirty.push(seatKey(guest)); this.leave(guest, true); }
       } else if (['waiting', 'cooking', 'ready', 'delivering'].includes(guest.stage)) {
-        guest.waiting += dt; if (guest.waiting > guestPatienceSeconds(s, this.tideEffects().patience)) this.leave(guest, false);
+        guest.waiting += dt; if (guest.waiting > guestPatienceSeconds(s, this.tideEffects().patience * this.colonyEffects().patience)) this.leave(guest, false);
       }
     }
     s.guests = s.guests.filter(g => g.stage !== 'leaving' || g.route.length > 0);
     this.assignJobs();
     for (const staff of s.staff) {
       if (staff.task === 'idle') continue;
-      const pace = this.townEffects().crewSpeed * this.tideEffects().crewSpeed;
+      const pace = this.townEffects().crewSpeed * this.tideEffects().crewSpeed * this.colonyEffects().crewSpeed;
       if (!walk(staff, dt, (2 + (staff.level - 1) * .4) * pace)) continue;
       if (staff.task === 'clean') {
         staff.timer -= dt * pace / (1 - (staff.level - 1) * .17);
@@ -383,7 +387,7 @@ export class RestaurantEngine {
         guest.stage = 'eating'; guest.timer = 10; guest.happy = true;
         if (!guest.paid) {
           const table = s.furniture.find(f => f.id === guest.tableId);
-          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1)) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips));
+          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1) + this.fameBonuses().tips) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips * this.colonyEffects().tips));
           const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; recordServed(s.collections, guest.dish); guest.paid = true;
           this.recordIncome(earned, 'service', guest.id, tip);
           this.event = `${DISHES[guest.dish].name} served. +$${earned}${tip ? ` including $${tip} tip` : ''}`;
@@ -408,7 +412,58 @@ export class RestaurantEngine {
   }
   crewLimit(): number { return 6 + this.townEffects().extraCrew; }
   /** Exact ingredient cost per dish, to the cent; charges carry the fraction so every discount counts. */
-  dishCost(dish: Dish): number { const kelp = DISHES[dish].ingredient === 'kelp', town = this.townEffects(), tide = this.tideEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (kelp ? town.kelpCost * tide.kelpCost : town.fishCost * tide.fishCost) * 100) / 100); }
+  dishCost(dish: Dish): number { const kelp = DISHES[dish].ingredient === 'kelp', town = this.townEffects(), tide = this.tideEffects(), colony = this.colonyEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (kelp ? town.kelpCost * tide.kelpCost * colony.kelpCost : town.fishCost * tide.fishCost * colony.fishCost) * 100) / 100); }
+  /** The current colony's region. */
+  region(): Region { return currentRegion(this.state.ocean); }
+  /** Permanent fame bonuses (capped). */
+  fameBonuses(): FameBonuses { this.colonyEffects(); return this.fame!; }
+  /** Region modifiers with the fame guest and building bonuses folded in, cached until the colony or fame changes. */
+  colonyEffects(): RegionModifiers {
+    const key = `${currentColony(this.state.ocean).region}|${this.state.ocean.fame}`;
+    if (!this.colony || key !== this.colonyKey) {
+      const m = this.region().modifiers; this.fame = fameBonuses(this.state.ocean.fame);
+      this.colony = { ...m, arrival: m.arrival * (1 + this.fame.arrival), buildCost: m.buildCost * (1 - this.fame.build) }; this.colonyKey = key;
+    }
+    return this.colony;
+  }
+  /** Town and zone prices in this colony: base price × the region's build cost, to $10. */
+  private scaled(base: number): number { const k = this.colonyEffects().buildCost; return k === 1 || base === 0 ? base : Math.max(10, Math.round(base * k / 10) * 10); }
+  plotPrice(): number { return this.scaled(unlockCost(this.state.town)); }
+  buildPrice(kind: BuildingKind): number { return this.scaled(BUILDINGS[kind].buildCost); }
+  upgradePrice(kind: BuildingKind, nextLevel: number): number { return this.scaled(upgradeCost(kind, nextLevel)); }
+  zonePrice(id: ZoneId): number { return this.scaled(ZONES[id].price); }
+  /** Cash the next colony starts with: fame bonus included, with this colony's fame once it reaches the Abyss. */
+  startingCash(): number { return createRestaurant().cash + fameBonuses(this.state.ocean.fame + pendingFame(this.state.ocean)).startCash; }
+  /** Why a colony can't be founded in this region now, or null. Founding needs the current colony's Abyss. */
+  foundingError(id: string): string | null {
+    if (this.catchingUp) return 'Wait until your crew has caught up.';
+    const region = regionById(id); if (!region) return 'Choose a region first.';
+    if (!hasZone(this.state.town, 'abyss')) return `Reach the Abyss in ${currentColony(this.state.ocean).name} first.`;
+    if (currentColony(this.state.ocean).region === id || this.state.ocean.colonies.some(c => c.region === id)) return 'You already have a colony here.';
+    if (!isFoundable(this.state.ocean, id)) return 'Explore a region next to this one first.';
+    return null;
+  }
+  /**
+   * Found a new colony: a fresh restaurant, town, zones, cash, menu and history in the new region.
+   * Kept: pearls, charms, extra builders and the daily gift, collections, milestones, tutorial, name, music,
+   * lifetime guests, fame and the ocean record. A colony's fame counts once it reaches its Abyss; the new region's fame arrives at its own Abyss.
+   */
+  foundColony(id: string): string | null {
+    const error = this.foundingError(id); if (error) return error;
+    const old = this.state, region = regionById(id)!, ocean = structuredClone(old.ocean), last = currentColony(ocean);
+    last.days = old.day - 1; last.served = old.lifetimeServed - last.startServed;
+    const cash = this.startingCash(); creditFame(ocean);
+    ocean.colonies.push({ region: id, name: region.name, fame: region.fame, abyss: false, days: 0, served: 0, startServed: old.lifetimeServed });
+    const next = createRestaurant(), seed = colonySeed(old.seed, id);
+    Object.assign(next, {
+      name: old.name, music: old.music, welcomed: old.welcomed, tutorial: old.tutorial, collections: old.collections, claimed: old.claimed, lifetimeServed: old.lifetimeServed,
+      lastActiveAt: old.lastActiveAt, seed, tide: rollTide(seed, 1), cash, ocean,
+    });
+    Object.assign(next.town, { pearls: old.town.pearls, charms: { ...old.town.charms }, builders: old.town.builders, lastGiftDay: old.town.lastGiftDay });
+    this.rewardSavePending = false; this.pauseAfterCatchUp = null; this.awaySummary = null; this.incomeReceipts = []; this.accumulator = 0; this.savedAt = 0; this.speed = 1;
+    this.state = next; this.paused = false;
+    this.changed(`${region.name} is your new colony. A fresh start, with everything you learned.`); return null;
+  }
   /** Finish construction whose end time has passed (wall-clock time, also while away). */
   private tickTown(at: number): void {
     const done = completeJobs(this.state.town, at); if (!done.length) return;
@@ -429,16 +484,17 @@ export class RestaurantEngine {
   unlockPlot(x: number, z: number): string | null {
     const town = this.state.town, plot = this.plot(x, z); if (!plot) return 'Choose a plot first.';
     const locked = plotLockReason(town, plot); if (locked) return locked;
-    const cost = unlockCost(town); if (this.state.cash < cost) return `Unlocking costs ${cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.`;
+    const cost = this.plotPrice(); if (this.state.cash < cost) return `Unlocking costs ${cost.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}.`;
     const reserve = this.reserveError(cost); if (reserve) return reserve;
     this.state.cash -= cost; plot.owned = true; this.changed('New plot unlocked. Choose what to build.'); return null;
   }
   /** Reach a deeper zone: opens its ring of plots and its dishes once every requirement is met. */
   unlockZone(id: ZoneId): string | null {
     const info = ZONES[id]; if (!info) return 'Choose a zone first.';
-    const error = zoneError(this.state, id); if (error) return error;
-    this.state.cash -= info.price; this.state.town.zones.push(id);
-    this.changed(`You reached ${info.place}. New dishes are ready for the menu${id === 'abyss' ? '' : ', and new plots for your town'}.`); return null;
+    const price = this.zonePrice(id), error = zoneError(this.state, id, price); if (error) return error;
+    this.state.cash -= price; this.state.town.zones.push(id);
+    const fame = id === 'abyss' ? creditFame(this.state.ocean) : 0;
+    this.changed(`You reached ${info.place}. New dishes are ready for the menu${id === 'abyss' ? `${fame ? `, and your colony earned ${fame} fame` : ''}. A new colony awaits on the Ocean map` : ', and new plots for your town'}.`); return null;
   }
   build(x: number, z: number, kind: BuildingKind): string | null {
     const town = this.state.town, plot = this.plot(x, z);
@@ -446,10 +502,10 @@ export class RestaurantEngine {
     if (plot.building) return 'This plot already has a building.';
     if (kind === 'restaurant') return 'You already have a restaurant.';
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
-    const info = BUILDINGS[kind]; if (this.state.cash < info.buildCost) return `${info.name} costs $${info.buildCost}.`;
-    const reserve = this.reserveError(info.buildCost); if (reserve) return reserve;
+    const info = BUILDINGS[kind], price = this.buildPrice(kind); if (this.state.cash < price) return `${info.name} costs $${price}.`;
+    const reserve = this.reserveError(price); if (reserve) return reserve;
     const now = this.now(), seconds = jobSeconds(town, kind, 1);
-    this.state.cash -= info.buildCost; Object.assign(plot, { building: kind, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
+    this.state.cash -= price; Object.assign(plot, { building: kind, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
     this.changed(`Building a ${info.name.toLowerCase()}.`); return null;
   }
   upgrade(x: number, z: number): string | null {
@@ -458,7 +514,7 @@ export class RestaurantEngine {
     if (plot.job) return 'This building is already under construction.';
     if (plot.level >= MAX_LEVEL) return 'Already at the highest level.';
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
-    const cost = upgradeCost(plot.building, plot.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
+    const cost = this.upgradePrice(plot.building, plot.level + 1); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
     const reserve = this.reserveError(cost); if (reserve) return reserve;
     const now = this.now(); this.state.cash -= cost;
     plot.job = { kind: 'upgrade', startedAt: now, endsAt: now + jobSeconds(town, plot.building, plot.level + 1) * 1000 };

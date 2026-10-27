@@ -1,6 +1,7 @@
 import { TOWN_SIZE, activeLevel, canUnlock, lookFor, plotZone, unlockCost, type Town } from '../town';
 import { ZONES, hasZone, type ZoneId } from '../zones';
 import type { Ambience } from './ambience';
+import { PALETTES, type BiomeId } from '../ocean';
 import { depthOf, toScreen, type View } from './projection';
 import { at, drawDecor, drawNight, drawParticles, drawWater, floorPolygon, type Decor, type Glow } from './render';
 import { drawSprite } from './sprites';
@@ -11,19 +12,26 @@ export interface TownFrame {
   time: number; now: number; ambience: Ambience; reduced: boolean; selected: { x: number; z: number } | null;
   /** Evening darkness, 0 (dusk) to 1 (night); visual only. */
   night?: number;
+  /** The colony's plot price (region and fame applied); defaults to the base price. */
+  price?: number;
+  /** The colony's biome look (default: the Home Reef). */
+  biome?: BiomeId;
 }
 type Ctx = CanvasRenderingContext2D;
 const MARGIN = 2, GAP = .07;
 
-const decor: Decor[] = (() => {
+const decorCache = new Map<BiomeId, Decor[]>();
+function townDecor(biome: BiomeId): Decor[] {
+  const hit = decorCache.get(biome); if (hit) return hit;
+  const kinds = biome === 'home' ? (['kelp', 'rock', 'coral', 'shell', 'coral'] as const) : PALETTES[biome].decor;
   const list: Decor[] = []; let seed = 77;
   const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
   for (let i = 0; i < 40; i++) {
     const x = -MARGIN + rnd() * (TOWN_SIZE + MARGIN * 2) - .5, z = -MARGIN + rnd() * (TOWN_SIZE + MARGIN * 2) - .5;
-    if (x < -.7 || z < -.7 || x > TOWN_SIZE - .3 || z > TOWN_SIZE - .3) list.push({ x, z, kind: (['kelp', 'rock', 'coral', 'shell', 'coral'] as const)[Math.floor(rnd() * 5)], tint: rnd() });
+    if (x < -.7 || z < -.7 || x > TOWN_SIZE - .3 || z > TOWN_SIZE - .3) list.push({ x, z, kind: kinds[Math.floor(rnd() * kinds.length)], tint: rnd() });
   }
-  return list;
-})();
+  decorCache.set(biome, list); return list;
+}
 
 /** Seabed colour per depth zone. The Abyss is the dark drop-off around the town. */
 const ZONE_GROUND: Record<ZoneId, string> = { shallows: '#D9C49A', reef: '#E0A184', twilight: '#2F4C7C', abyss: '#12101C' };
@@ -31,7 +39,7 @@ const LOCKED_DIM = 'rgba(8,10,26,.5)';
 /** Where each locked zone's name is drawn once: a corner of its ring, or beside the town for the Abyss. */
 const C = (TOWN_SIZE - 1) / 2;
 const ZONE_LABEL: Record<Exclude<ZoneId, 'shallows'>, { x: number; z: number }> = { reef: { x: C - 3, z: C + 3 }, twilight: { x: C + 4, z: C + 4 }, abyss: { x: -1.4, z: C } };
-const abyssGlow = decor.filter((_, i) => i % 3 === 0).map((d, i) => ({ x: d.x + .3, z: d.z - .2, phase: i * 1.7 }));
+const abyssGlow = townDecor('home').filter((_, i) => i % 3 === 0).map((d, i) => ({ x: d.x + .3, z: d.z - .2, phase: i * 1.7 }));
 
 const fmt = (n: number) => `$${n.toLocaleString('en-US')}`;
 export function formatDuration(ms: number): string {
@@ -41,8 +49,9 @@ export function formatDuration(ms: number): string {
 
 /** Draw the town map. Reads town state only. */
 export function renderTown(ctx: Ctx, f: TownFrame): void {
-  const { town, view, time, now, reduced, selected } = f, t = reduced ? 0 : time, price = unlockCost(town);
-  drawWater(ctx, f);
+  const { town, view, time, now, reduced, selected } = f, t = reduced ? 0 : time, price = f.price ?? unlockCost(town);
+  const biome = f.biome ?? 'home', palette = PALETTES[biome], decor = townDecor(biome), ground = (zone: ZoneId) => zone === 'shallows' ? palette.sand : ZONE_GROUND[zone];
+  drawWater(ctx, { ...f, palette });
   // Zone ground: the Abyss surrounds the grid, each ring of plots takes its zone's colour.
   const abyss = hasZone(town, 'abyss');
   floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fillStyle = ZONE_GROUND.abyss; ctx.fill();
@@ -52,9 +61,9 @@ export function renderTown(ctx: Ctx, f: TownFrame): void {
     ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
   }
   if (!abyss) { floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fillStyle = LOCKED_DIM; ctx.fill(); }
-  for (const plot of town.plots) { floorPolygon(ctx, view, plot.x - .5, plot.z - .5, plot.x + .5, plot.z + .5); ctx.fillStyle = ZONE_GROUND[plotZone(plot)]; ctx.fill(); }
+  for (const plot of town.plots) { floorPolygon(ctx, view, plot.x - .5, plot.z - .5, plot.x + .5, plot.z + .5); ctx.fillStyle = ground(plotZone(plot)); ctx.fill(); }
   const c = toScreen(view, (TOWN_SIZE - 1) / 2, (TOWN_SIZE - 1) / 2), r = (TOWN_SIZE + MARGIN * 2) * 64 * .62 * view.scale;
-  const fog = ctx.createRadialGradient(c.x, c.y, r * .35, c.x, c.y, r); fog.addColorStop(0, 'rgba(42,143,176,0)'); fog.addColorStop(1, 'rgba(18,88,122,.95)');
+  const fog = ctx.createRadialGradient(c.x, c.y, r * .35, c.x, c.y, r); fog.addColorStop(0, `rgba(${palette.fog},0)`); fog.addColorStop(1, `rgba(${palette.fog},.95)`);
   ctx.fillStyle = fog; floorPolygon(ctx, view, -MARGIN - .5, -MARGIN - .5, TOWN_SIZE - .5 + MARGIN, TOWN_SIZE - .5 + MARGIN); ctx.fill();
   // Locked rings are dimmed until the player reaches their zone.
   for (const plot of town.plots) if (!hasZone(town, plotZone(plot))) { floorPolygon(ctx, view, plot.x - .5, plot.z - .5, plot.x + .5, plot.z + .5); ctx.fillStyle = LOCKED_DIM; ctx.fill(); }
@@ -66,7 +75,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): void {
     if (open) { ctx.setLineDash([5, 4]); ctx.strokeStyle = f.cash >= price ? '#4DF0FF' : 'rgba(233,230,255,.6)'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
     if (selected && selected.x === plot.x && selected.z === plot.z) { ctx.strokeStyle = '#FFE27A'; ctx.lineWidth = 3; floorPolygon(ctx, view, x0, z0, x1, z1); ctx.stroke(); }
   }
-  const items: { depth: number; draw: () => void }[] = decor.map(d => ({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t)) }));
+  const items: { depth: number; draw: () => void }[] = decor.map(d => ({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette)) }));
   for (const plot of town.plots) {
     if (!plot.building) continue;
     const look = lookFor(plot.level), building = plot.building, job = plot.job;

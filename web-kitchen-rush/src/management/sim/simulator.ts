@@ -8,7 +8,8 @@
 import { GOALS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
 import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, busyBuilders, neighbours, plotLockReason, unlockCost, upgradeCost, type BuildingKind, type Plot } from '../town';
+import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, busyBuilders, neighbours, plotLockReason, type BuildingKind, type Plot } from '../town';
+import { currentRegion, isFoundable, mapBounds, regionAt, regionId, type Region } from '../ocean';
 import { ZONE_IDS, ZONES, hasZone, zoneError, zoneRequirements, type ZoneId } from '../zones';
 
 export type StrategyName = 'cautious' | 'builder' | 'balanced';
@@ -26,8 +27,21 @@ export interface SimOptions {
   charms?: boolean;
   /** Stop once this many service days are complete (for short test horizons). */
   maxServiceDays?: number;
+  /** Play this many colonies in a row: found the next one as soon as the current colony reaches the Abyss. */
+  colonies?: number;
+  /** How the owner picks the next region among the foundable ones. */
+  region?: RegionStrategy;
+  /** Fixed region ids to found, in order (overrides `region` while they last). */
+  route?: string[];
 }
-export interface DayRow { day: number; realDay: number; activeHours: number; cash: number; profit: number; bonus: number; served: number; missed: number; reputation: number; buildings: number; }
+export type RegionStrategy = 'easiest' | 'richest' | 'balanced';
+export const REGION_STRATEGIES: RegionStrategy[] = ['easiest', 'richest', 'balanced'];
+/** One colony's pacing, in real days since the run started (and since the colony was founded). */
+export interface ColonyRun {
+  index: number; region: string; name: string; biome: string; difficulty: number; fame: number; totalFame: number;
+  start: ZoneTiming; unlockable: Partial<Record<ZoneId, ZoneTiming>>; unlocked: Partial<Record<ZoneId, ZoneTiming>>; founded?: ZoneTiming;
+}
+export interface DayRow { colony: number; day: number; realDay: number; activeHours: number; cash: number; profit: number; bonus: number; served: number; missed: number; reputation: number; buildings: number; }
 export interface ZoneTiming { day: number; realDay: number; activeHours: number; }
 export interface SimResult {
   strategy: StrategyName; seed: number; rows: DayRow[];
@@ -38,6 +52,7 @@ export interface SimResult {
   pearlsEarned: number; charmsEarned: { current: number; tide: number }; charmsUsed: { current: number; tide: number };
   buildings: { kind: BuildingKind; level: number }[]; furniture: { kind: FurnitureKind; level: number }[]; staff: number; trainedLevels: number;
   activeHours: number; serviceDays: number; spent: Record<string, number>;
+  colonies: ColonyRun[];
 }
 
 interface Params { reserveDays: number; townFirst: boolean; smartAdjacency: boolean; restaurantFirst: boolean; extraBuildings: number; decorTarget: number; plan: BuildingKind[]; }
@@ -73,13 +88,17 @@ export class Simulation {
   private lastCharms = { current: 0, tide: 0 };
   private lastPearls = 0;
   private lastDay = 1;
+  private colony!: ColonyRun;
 
   constructor(readonly options: SimOptions) {
     this.engine = new RestaurantEngine(undefined, () => this.now);
     const seed = options.seed ?? 91273;
     this.engine.state.seed = seed;
     this.p = PARAMS[options.strategy];
-    this.result = { strategy: options.strategy, seed, rows: [], unlockable: {}, unlocked: {}, requirements: {}, reserveBlocks: 0, loans: 0, bankruptDays: 0, minCash: this.s.cash, finalCash: 0, pearlsEarned: 0, charmsEarned: { current: 0, tide: 0 }, charmsUsed: { current: 0, tide: 0 }, buildings: [], furniture: [], staff: 0, trainedLevels: 0, activeHours: 0, serviceDays: 0, spent: {} };
+    this.result = { strategy: options.strategy, seed, rows: [], unlockable: {}, unlocked: {}, requirements: {}, reserveBlocks: 0, loans: 0, bankruptDays: 0, minCash: this.s.cash, finalCash: 0, pearlsEarned: 0, charmsEarned: { current: 0, tide: 0 }, charmsUsed: { current: 0, tide: 0 }, buildings: [], furniture: [], staff: 0, trainedLevels: 0, activeHours: 0, serviceDays: 0, spent: {}, colonies: [] };
+    this.startColony();
+    // Colony 1's timings are also the run's headline timings.
+    this.result.unlockable = this.colony.unlockable; this.result.unlocked = this.colony.unlocked;
     this.lastCharms = { ...this.s.town.charms }; this.lastPearls = this.s.town.pearls;
   }
   get s(): RestaurantState { return this.engine.state; }
@@ -110,6 +129,7 @@ export class Simulation {
         else if (this.s.phase === 'service' && !this.checkedToday && this.s.elapsed >= DAY_LENGTH - .5) { this.checkedToday = true; if (this.wantsPlanning()) { this.renovating = true; this.engine.closeEarly(); } }
         if (i % 100 === 0) this.act();
         if (this.options.maxServiceDays && this.result.serviceDays >= this.options.maxServiceDays) break outer;
+        if (this.done) break outer;
       }
       if (this.s.phase === 'service') this.engine.pause(true);
       this.engine.suspend();
@@ -152,7 +172,7 @@ export class Simulation {
     this.lastDay = this.s.day;
     this.pressure.push(this.live); this.live = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 };
     const report = this.s.history[this.s.history.length - 1];
-    this.result.rows.push({ day: report.day, realDay: this.realDay, activeHours: +(this.activeSeconds / 3600).toFixed(2), cash: Math.round(this.s.cash), profit: Math.round(report.profit), bonus: report.challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0), served: report.served, missed: report.missed, reputation: this.s.reputation, buildings: this.builtCount() });
+    this.result.rows.push({ colony: this.colony.index, day: report.day, realDay: this.realDay, activeHours: +(this.activeSeconds / 3600).toFixed(2), cash: Math.round(this.s.cash), profit: Math.round(report.profit), bonus: report.challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0), served: report.served, missed: report.missed, reputation: this.s.reputation, buildings: this.builtCount() });
     this.result.serviceDays++;
     if (this.s.phase === 'planning' && !this.renovating) this.result.reserveBlocks++;
     this.renovating = false; this.checkedToday = false;
@@ -169,15 +189,17 @@ export class Simulation {
   private act(): void {
     const e = this.engine, s = this.s;
     for (const goal of GOALS) if (!s.claimed.includes(goal.id) && goal.value(s) >= goal.target) e.claim(goal.id);
-    for (const id of ZONE_IDS) if (!hasZone(s.town, id) && !this.result.unlockable[id] && zoneError(s, id) === null) this.result.unlockable[id] = this.timing();
+    this.maybeFound();
+    for (const id of ZONE_IDS) if (!hasZone(s.town, id) && !this.colony.unlockable[id] && zoneError(s, id, e.zonePrice(id)) === null) this.colony.unlockable[id] = this.timing();
     const next = this.nextZone();
-    if (next) for (const [i, req] of zoneRequirements(s, next).entries()) {
-      const key = `${next}:${req.label.split(' · ')[0].replace(/^\$[\d,]+$/, 'price')}`;
+    if (next) for (const [i, req] of zoneRequirements(s, next, e.zonePrice(next)).entries()) {
+      const key = `${this.colony.index > 1 ? `c${this.colony.index}:` : ''}${next}:${req.label.split(' · ')[0].replace(/^\$[\d,]+$/, 'price')}`;
       if (req.met && !this.result.requirements[key]) this.result.requirements[key] = { ...this.timing(), index: i };
     }
     const zone = this.nextZone();
-    if (zone && zoneError(s, zone) === null && s.cash - ZONES[zone].price >= this.engine.operatingCost() + 30) {
-      if (e.unlockZone(zone) === null) { this.result.unlocked[zone] = this.timing(); this.spend('zones', ZONES[zone].price); }
+    if (zone && zoneError(s, zone, e.zonePrice(zone)) === null && s.cash - e.zonePrice(zone) >= this.engine.operatingCost() + 30) {
+      const price = e.zonePrice(zone);
+      if (e.unlockZone(zone) === null) { this.colony.unlocked[zone] = this.timing(); this.spend('zones', price); if (zone === 'abyss') this.maybeFound(); }
     }
     if (s.town.pearls >= SHOP.builder.pearls && s.town.builders < MAX_BUILDERS && this.options.strategy !== 'cautious') e.buy('builder');
     if (this.p.townFirst || s.phase !== 'planning') this.townTurn();
@@ -261,7 +283,7 @@ export class Simulation {
     const zone = this.nextZone(); if (!zone) return 0;
     const info = ZONES[zone], best = Math.max(...this.s.town.plots.filter(p => p.building && p.job?.kind !== 'build').map(p => p.level));
     const ready = this.builtCount() >= info.buildings && best >= info.topLevel;
-    return ready ? info.price : 0;
+    return ready ? this.engine.zonePrice(zone) : 0;
   }
 
   private findSpot(kind: FurnitureKind): Furniture | null { return findSpot(this.s, kind); }
@@ -292,14 +314,14 @@ export class Simulation {
     let target: Plot | undefined;
     if (info && best < info.topLevel) {
       const leaders = this.p.restaurantFirst ? plots.filter(p => p.building === 'restaurant') : plots.filter(p => p.level === best || p.level === best - 1);
-      target = (leaders.length ? leaders : plots).sort((a, b) => upgradeCost(a.building!, a.level + 1) - upgradeCost(b.building!, b.level + 1))[0];
+      target = (leaders.length ? leaders : plots).sort((a, b) => e.upgradePrice(a.building!, a.level + 1) - e.upgradePrice(b.building!, b.level + 1))[0];
     } else {
       // More guests only help while the dining room keeps up: hold arrival upgrades after a rough day.
       const last = s.history[s.history.length - 1], overrun = last && last.missed > (last.served + last.missed) * .12;
       target = plots.filter(p => !(overrun && (p.building === 'garden' || p.building === 'restaurant'))).sort((a, b) => this.upgradeValue(a) - this.upgradeValue(b))[0];
-      if (!target || upgradeCost(target.building!, target.level + 1) > budget * (zone ? .5 : 1)) return false;
+      if (!target || e.upgradePrice(target.building!, target.level + 1) > budget * (zone ? .5 : 1)) return false;
     }
-    const cost = upgradeCost(target.building!, target.level + 1);
+    const cost = e.upgradePrice(target.building!, target.level + 1);
     if (cost > budget) return false;
     if (e.upgrade(target.x, target.z) !== null) return false;
     this.spend('upgrades', cost); return true;
@@ -307,22 +329,23 @@ export class Simulation {
   /** Lower is better: price, with workshops and spare homes ranked behind earning buildings. */
   private upgradeValue(p: Plot): number {
     const weight = p.building === 'garden' || p.building === 'restaurant' ? 1 : p.building === 'workshop' ? 2 : p.building === 'homes' ? 3 : 1.5;
-    return upgradeCost(p.building!, p.level + 1) * weight * (this.p.restaurantFirst && p.building === 'restaurant' ? .5 : 1);
+    return this.engine.upgradePrice(p.building!, p.level + 1) * weight * (this.p.restaurantFirst && p.building === 'restaurant' ? .5 : 1);
   }
   private buildKind(kind: BuildingKind, budget: number): boolean {
     const e = this.engine, town = this.s.town;
     const owned = town.plots.filter(p => p.owned && !p.building).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
     const fresh = town.plots.filter(p => plotLockReason(town, p) === null).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
     let plot = owned;
-    if (!plot || (fresh && this.plotScore(fresh, kind) > this.plotScore(plot, kind) + 5 && budget >= unlockCost(town) + BUILDINGS[kind].buildCost * 2)) {
+    const price = e.buildPrice(kind);
+    if (!plot || (fresh && this.plotScore(fresh, kind) > this.plotScore(plot, kind) + 5 && budget >= e.plotPrice() + price * 2)) {
       if (!fresh) return false;
-      const cost = unlockCost(town); if (cost + BUILDINGS[kind].buildCost > budget) return false;
+      const cost = e.plotPrice(); if (cost + price > budget) return false;
       if (e.unlockPlot(fresh.x, fresh.z) !== null) return false;
       this.spend('plots', cost); plot = fresh;
-      if (BUILDINGS[kind].buildCost > this.budget() - this.savingFor()) return true;
-    } else if (BUILDINGS[kind].buildCost > budget) return false;
+      if (price > this.budget() - this.savingFor()) return true;
+    } else if (price > budget) return false;
     if (e.build(plot.x, plot.z, kind) !== null) return false;
-    this.spend('buildings', BUILDINGS[kind].buildCost); return true;
+    this.spend('buildings', price); return true;
   }
   private plotScore(plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind): number {
     const town = this.s.town, near = (k: BuildingKind) => neighbours(town, plot).some(p => p.building === k);
@@ -335,6 +358,26 @@ export class Simulation {
     // Keep restaurant-adjacent plots for buildings that profit from them.
     if ((kind === 'homes' || kind === 'workshop') && near('restaurant')) score -= 8;
     return score;
+  }
+  // ---- Colonies ----
+  private done = false;
+  private startColony(): void {
+    const r = currentRegion(this.s.ocean);
+    this.colony = { index: this.s.ocean.colonies.length, region: r.id, name: r.name, biome: r.biome, difficulty: r.difficulty, fame: r.fame, totalFame: this.s.ocean.fame, start: this.timing(), unlockable: {}, unlocked: {} };
+    this.result.colonies.push(this.colony);
+  }
+  /** After the Abyss: found the next colony (or stop once the requested number of colonies reached it). */
+  private maybeFound(): void {
+    if (!this.options.colonies || !hasZone(this.s.town, 'abyss') || this.done) return;
+    if (this.colony.index >= this.options.colonies) { this.done = true; return; }
+    const target = this.options.route?.[this.colony.index - 1] ?? pickRegion(this.s, this.options.region ?? 'balanced').id;
+    const founded = this.timing();
+    if (this.engine.foundColony(target) !== null) { this.done = true; return; }
+    this.colony.founded = founded;
+    this.lastDay = 1; this.pressure = []; this.live = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 }; this.lastMissed = 0;
+    this.stuckDays.clear(); this.checkedToday = false; this.renovating = false;
+    this.lastCharms = { ...this.s.town.charms }; this.lastPearls = this.s.town.pearls;
+    this.startColony();
   }
   private useCharms(): void {
     this.trackRewards();
@@ -362,9 +405,21 @@ export class Simulation {
 
 export const simulate = (options: SimOptions): SimResult => new Simulation(options).run();
 
+/** The owner's region choice among foundable regions: lowest difficulty, most fame, or most fame among the easier half. */
+export function pickRegion(s: RestaurantState, strategy: RegionStrategy): Region {
+  const b = mapBounds(s.ocean), options: Region[] = [];
+  for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) if (isFoundable(s.ocean, regionId(x, y))) options.push(regionAt(x, y));
+  const byFame = (a: Region, c: Region) => c.fame - a.fame || a.difficulty - c.difficulty || a.id.localeCompare(c.id);
+  if (strategy === 'richest') return options.sort(byFame)[0];
+  const easy = [...options].sort((a, c) => a.difficulty - c.difficulty || byFame(a, c));
+  if (strategy === 'easiest') return easy[0];
+  const median = easy[Math.floor((easy.length - 1) / 2)].difficulty;
+  return options.filter(r => r.difficulty <= median).sort(byFame)[0];
+}
+
 /** Average profit (including challenge bonuses) over service days [from, to]. */
-export function averageProfit(result: SimResult, from: number, to: number): number {
-  const rows = result.rows.filter(r => r.day >= from && r.day <= to);
+export function averageProfit(result: SimResult, from: number, to: number, colony = 1): number {
+  const rows = result.rows.filter(r => r.colony === colony && r.day >= from && r.day <= to);
   return rows.length ? Math.round(rows.reduce((sum, r) => sum + r.profit + r.bonus, 0) / rows.length) : 0;
 }
 

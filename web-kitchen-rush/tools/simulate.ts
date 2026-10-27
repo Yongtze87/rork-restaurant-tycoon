@@ -3,11 +3,14 @@
  *
  *   bun tools/simulate.ts [--days N] [--strategy cautious|builder|balanced|all] [--seed S] [--seeds K]
  *                         [--sessions N] [--minutes M] [--no-charms] [--json]
+ *                         [--colonies N] [--region easiest|richest|balanced|all] [--route x,y;x,y]
  *
+ * --colonies plays N colonies in a row (founding the next as soon as the Abyss is reached) and prints
+ * each colony's pacing in real days since it was founded.
  * --days is real calendar days; each day has --sessions play sessions of --minutes at 1×.
  * The model is described in docs/BALANCE.md.
  */
-import { STRATEGIES, Simulation, averageProfit, buildNear, buyFurniture, measurePayback, referenceSnapshot, simulate, upgradeBuilding, type Investment, type SimResult, type StrategyName } from '../src/management/sim/simulator';
+import { REGION_STRATEGIES, STRATEGIES, Simulation, averageProfit, buildNear, buyFurniture, measurePayback, referenceSnapshot, simulate, upgradeBuilding, type Investment, type RegionStrategy, type SimResult, type StrategyName } from '../src/management/sim/simulator';
 import type { RestaurantEngine } from '../src/management/engine';
 import { DISH_IDS, comfort, type FurnitureKind } from '../src/management/types';
 import { ZONE_IDS, type ZoneId } from '../src/management/zones';
@@ -17,6 +20,8 @@ const flag = (name: string) => args.includes(`--${name}`);
 const value = (name: string, fallback: string) => { const i = args.indexOf(`--${name}`); return i >= 0 && args[i + 1] ? args[i + 1] : fallback; };
 const days = Number(value('days', '14')), seed = Number(value('seed', '91273')), seeds = Number(value('seeds', '1'));
 const which = value('strategy', 'all'), strategies = which === 'all' ? STRATEGIES : [which as StrategyName];
+const colonies = Number(value('colonies', '0')), regionArg = value('region', 'balanced'), regions = regionArg === 'all' ? REGION_STRATEGIES : [regionArg as RegionStrategy];
+const route = value('route', '') ? value('route', '').split(';') : undefined;
 const sessions = Number(value('sessions', '3')), minutes = Number(value('minutes', '10')), charms = !flag('no-charms'), quiet = flag('quiet');
 
 const pad = (v: unknown, n: number) => String(v).padStart(n);
@@ -41,6 +46,13 @@ function report(r: SimResult): void {
   console.log(`  reserve blocks ${r.reserveBlocks} · loans ${r.loans} · bankrupt days ${r.bankruptDays} · min cash $${Math.round(r.minCash)} · final cash $${r.finalCash}`);
   console.log(`  pearls earned ${r.pearlsEarned} · charms earned ${r.charmsEarned.current} current / ${r.charmsEarned.tide} tide, used ${r.charmsUsed.current} / ${r.charmsUsed.tide}`);
   console.log(`  spent: ${Object.entries(r.spent).map(([k, v]) => `${k} $${Math.round(v)}`).join(' · ')}`);
+  if (r.colonies.length > 1 || colonies) colonyTable(r);
+}
+/** Per colony: real days since founding to each zone and to founding the next colony (absolute real day in brackets). */
+function colonyTable(r: SimResult): void {
+  const rel = (c: SimResult['colonies'][number], t?: { realDay: number; activeHours: number }) => t ? `${pad(t.realDay - c.start.realDay, 3)}d ${pad((t.activeHours - c.start.activeHours).toFixed(1), 4)}h` : pad('—', 10);
+  console.log('  real days / hours played since founding\n  colony | region                       | ★   | fame earns/had | reef        | twilight    | abyss       | founded next | profit/day d1-10 · d11-80 · d81+');
+  for (const c of r.colonies) console.log(`  ${pad(c.index, 6)} | ${`${c.name} (${c.biome} ${c.region})`.padEnd(28)} | ${c.difficulty.toFixed(1)} | ${pad(c.fame, 4)} / ${pad(c.totalFame, 5)} | ${rel(c, c.unlocked.reef).padEnd(11)} | ${rel(c, c.unlocked.twilight).padEnd(11)} | ${rel(c, c.unlocked.abyss).padEnd(11)} | ${rel(c, c.founded).padEnd(12)} | $${averageProfit(r, 1, 10, c.index)} · $${averageProfit(r, 11, 80, c.index)} · $${averageProfit(r, 81, 9999, c.index)}`);
 }
 
 if (flag('payback')) {
@@ -78,8 +90,9 @@ if (flag('payback')) {
 }
 
 const all: SimResult[] = [];
-for (const strategy of strategies) for (let i = 0; i < seeds; i++) {
-  const t = performance.now(), r = simulate({ strategy, days, seed: seed + i * 7919, sessions, sessionMinutes: minutes, charms });
+for (const strategy of strategies) for (const region of colonies ? regions : [undefined]) for (let i = 0; i < seeds; i++) {
+  const t = performance.now(), r = simulate({ strategy, days, seed: seed + i * 7919, sessions, sessionMinutes: minutes, charms, colonies: colonies || undefined, region, route });
+  if (colonies && !flag('json')) console.log(`\n--- regions: ${route ? `route ${route.join(' → ')}` : region} ---`);
   all.push(r);
   if (flag('json')) continue;
   report(r); console.log(`  (${((performance.now() - t) / 1000).toFixed(1)} s)`);

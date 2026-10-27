@@ -35,8 +35,8 @@ interface ZoneProgress { reputation: number; cash: number; town: Town; }
 const finished = (town: Town) => town.plots.filter(p => p.building && p.job?.kind !== 'build');
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-/** Every requirement for a zone with the player's current progress. Empty for the starting zone. */
-export function zoneRequirements(state: ZoneProgress, id: ZoneId): ZoneRequirement[] {
+/** Every requirement for a zone with the player's current progress. Empty for the starting zone. `price` is the colony's price (region build costs applied). */
+export function zoneRequirements(state: ZoneProgress, id: ZoneId, price = ZONES[id].price): ZoneRequirement[] {
   const info = ZONES[id], prev = previousZone(id), list: ZoneRequirement[] = [];
   if (!prev) return list;
   const built = finished(state.town).filter(p => p.building !== 'restaurant').length, best = Math.max(0, ...finished(state.town).map(p => p.level));
@@ -44,11 +44,11 @@ export function zoneRequirements(state: ZoneProgress, id: ZoneId): ZoneRequireme
   list.push({ label: `Reputation ${info.reputation.toFixed(1)} · now ${state.reputation.toFixed(1)}`, met: state.reputation >= info.reputation, error: `Reach a ${info.reputation.toFixed(1)} reputation first.` });
   list.push({ label: `${info.buildings} buildings in town · ${Math.min(built, info.buildings)}/${info.buildings}`, met: built >= info.buildings, error: `Build ${info.buildings} buildings in town first.` });
   if (info.topLevel) list.push({ label: `A building at level ${info.topLevel} · best Lv ${best}`, met: best >= info.topLevel, error: `Upgrade a building to level ${info.topLevel} first.` });
-  list.push({ label: `${usd(info.price)} · you have ${usd(Math.max(0, Math.floor(state.cash)))}`, met: state.cash >= info.price, error: `Reaching ${info.place} costs ${usd(info.price)}.` });
+  list.push({ label: `${usd(price)} · you have ${usd(Math.max(0, Math.floor(state.cash)))}`, met: state.cash >= price, error: `Reaching ${info.place} costs ${usd(price)}.` });
   return list;
 }
 /** The first unmet requirement's error, or null when the zone can be unlocked now. */
-export function zoneError(state: ZoneProgress, id: ZoneId): string | null {
+export function zoneError(state: ZoneProgress, id: ZoneId, price = ZONES[id].price): string | null {
   if (hasZone(state.town, id)) return `You already reached ${ZONES[id].place}.`;
-  return zoneRequirements(state, id).find(r => !r.met)?.error ?? null;
+  return zoneRequirements(state, id, price).find(r => !r.met)?.error ?? null;
 }

@@ -32,7 +32,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Ledger:** a weekly revenue chart, growth against the previous week, and the last 20 daily receipts.
 - **Daily tides:** each service day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
 - **Daily challenges**, **milestones**, an interest-free **recovery loan** and a **low-capital warning** with one-click **Close for renovation**.
-- **Collection:** 51 long-term achievements in the Ledger (dish mastery, builder, explorer, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
+- **Collection:** 61 long-term achievements in the Ledger (dish mastery, builder, explorer, ocean voyager, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
 
 ### Offline progress you can trust
 - When you return, the game **replays the elapsed time at 1× through the same simulation step**, with checkpoints.
@@ -49,6 +49,13 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Time skips:** Current charms (−15 min) and Tide charms (−1 h), earned from a daily gift, all three daily challenges and milestones. **Pearls** finish a job instantly and buy a second builder.
 - **Depth zones** are the long-term chapters. The middle 5×5 is the **Sunlit Shallows**; the next ring is the **Coral Reef**, the outer ring the **Twilight Zone**, and the dark drop-off around the town is the **Abyss**. Each zone needs reputation, buildings and cash (Coral Reef: 3.8★, 4 buildings, $5,000 · Twilight: 4.2★, 8 buildings, one at level 8, $20,000 · Abyss: 4.6★, 12 buildings, one at level 13, $120,000). Each zone opens two dishes and draws guests 5% more often; the Reef and Twilight also open their ring of plots.
 - The pearl shop lists real-money packs, but they can't be bought until a store and payment provider are chosen.
+
+### The Ocean: colonies
+- The Abyss ends a chapter, not the game. Open the **Ocean map** (compass in the header, or Town → The Ocean) to see an endless grid of regions around your **Home Reef**: explored regions, regions you can found next to them, and fog beyond.
+- Seven biomes, each with upsides and downsides: **kelp forest** (cheap kelp, slower crew), **volcanic vents** (cheap fish, restless guests), **ice shelf** (big tips, slower crew), **coral atoll** (more guests, dearer building), **sunken city** (cheap building, fewer guests), **open trench** (good tips and more fame, but hard) and **calm lagoon** (an easy rest with smaller rewards). Difficulty (1–5 stars) grows with distance, but every ring has easier and harder neighbours.
+- After reaching the Abyss, **found a new colony** in a region next to one you explored. A confirmation lists exactly what carries over (pearls, charms, extra builders, collections, fame, the ocean record, tutorial and milestones) and what starts fresh (cash, restaurant, crew, menu, town, zones, receipts).
+- **Fame** is permanent. Each colony earns fame when it reaches its Abyss (more in harder regions); fame gives capped bonuses to every later colony: extra tips on each bill, cheaper building, more guests and more starting cash. Each new colony starts faster than the last, then ramps to its own Abyss.
+- Each biome has its own water, sand and decor colours in both the restaurant and the town.
 
 ### Underwater atmosphere
 - Sun shafts from the surface, drifting caustics on the floor, rising bubbles, marine snow and distant fish schools.
@@ -96,7 +103,7 @@ The output is a static site for any static host. Configure the host to serve `in
 | `bun run lint` | ESLint |
 | `bun run test` | Unit tests, then browser tests (first run: `bunx playwright install chromium`) |
 | `bunx tsc -p tsconfig.app.json --noEmit` | Type check |
-| `bun tools/simulate.ts --days 56` | Balance simulator: automated owners play the real engine (see [docs/BALANCE.md](docs/BALANCE.md)) |
+| `bun tools/simulate.ts --days 56` | Balance simulator: automated owners play the real engine (see [docs/BALANCE.md](docs/BALANCE.md)); `--colonies 4 --region easiest\|richest\|balanced` plays several colonies in a row |
 
 ---
 
@@ -108,6 +115,7 @@ web-kitchen-rush/
 │   ├── management/          # The game
 │   │   ├── engine.ts        # Deterministic simulation: economy, jobs, days, offline replay, saves
 │   │   ├── types.ts         # Zod save schema, catalog, dishes, constants
+│   │   ├── ocean.ts         # The Ocean: regions, biomes, fame, colonies (pure)
 │   │   ├── layout.ts        # Grid placement rules and pathfinding
 │   │   ├── ManagementGame.tsx  # Owner UI shell: header, dock, panels, dialogs
 │   │   ├── RestaurantScene.tsx # Canvas host: game loop, taps, drag-to-look, labels

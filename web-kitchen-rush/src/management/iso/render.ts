@@ -2,6 +2,7 @@ import { accessPoints, localPoint, seatPoint } from '../layout';
 import { lookFor } from '../town';
 import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type Placement, type RestaurantState } from '../types';
 import { sceneNight } from '../light';
+import { PALETTES, currentRegion, type BiomeId, type BiomePalette } from '../ocean';
 import type { Ambience } from './ambience';
 import { diamondPath, drawFurniture, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
 import { depthOf, facing, toScreen, TILE_H, TILE_W, type ScreenPoint, type View } from './projection';
@@ -21,25 +22,28 @@ export interface FrameInput {
 export interface FrameOutput { anchors: Map<string, ScreenPoint>; hits: HitBox[]; }
 
 export const WATER_TOP = '#7FD3DC', WATER_MID = '#2A8FB0', WATER_DEEP = '#0B3552';
+/** The colony's biome look; the Home Reef keeps the original palette. */
+export const biomeOf = (state: Pick<RestaurantState, 'ocean'>): BiomeId => currentRegion(state.ocean).biome;
 const SEABED_MARGIN = 5;
 type Ctx = CanvasRenderingContext2D;
 interface Drawable { depth: number; draw: () => void; }
 export interface Decor { x: number; z: number; kind: 'kelp' | 'rock' | 'coral' | 'shell'; tint: number; }
 
 /** Deterministic seabed decoration around the restaurant: a reef rim behind it, scattered life in front. */
-export function seabedDecor(columns: number): Decor[] {
+export function seabedDecor(columns: number, palette: BiomePalette = PALETTES.home): Decor[] {
   const list: Decor[] = []; let seed = 1337 + columns;
+  const rimKind = (r: number): Decor['kind'] => palette.decor.includes('coral') && r < .5 ? 'coral' : palette.decor.includes('kelp') ? 'kelp' : palette.decor[0];
   const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
-  for (let x = -1; x < columns + 1; x += .9) list.push({ x: x + rnd() * .3, z: -1.15 - rnd() * .5, kind: rnd() < .5 ? 'coral' : 'kelp', tint: rnd() });
-  for (let z = 0; z < HEIGHT + 1; z += .9) list.push({ x: -1.15 - rnd() * .5, z: z + rnd() * .3, kind: rnd() < .5 ? 'coral' : 'kelp', tint: rnd() });
+  for (let x = -1; x < columns + 1; x += .9) list.push({ x: x + rnd() * .3, z: -1.15 - rnd() * .5, kind: rimKind(rnd()), tint: rnd() });
+  for (let z = 0; z < HEIGHT + 1; z += .9) list.push({ x: -1.15 - rnd() * .5, z: z + rnd() * .3, kind: rimKind(rnd()), tint: rnd() });
   for (let i = 0; i < 26; i++) {
     const x = -SEABED_MARGIN + rnd() * (columns + SEABED_MARGIN * 2), z = -SEABED_MARGIN + rnd() * (HEIGHT + SEABED_MARGIN * 2);
     const inside = x > -2 && x < columns + .8 && z > -2 && z < HEIGHT + .8;
-    if (!inside) list.push({ x, z, kind: (['kelp', 'rock', 'shell', 'coral'] as const)[Math.floor(rnd() * 4)], tint: rnd() });
+    if (!inside) list.push({ x, z, kind: palette.decor[Math.floor(rnd() * palette.decor.length)], tint: rnd() });
   }
   return list;
 }
-const decorCache = new Map<number, Decor[]>();
+const decorCache = new Map<string, Decor[]>();
 
 export function at(ctx: Ctx, view: View, x: number, z: number, lift: number, body: () => void, alpha = 1): void {
   const p = toScreen(view, x, z, lift); ctx.save(); ctx.translate(p.x, p.y); ctx.scale(view.scale, view.scale); if (alpha < 1) ctx.globalAlpha = alpha; body(); ctx.restore();
@@ -50,11 +54,11 @@ export function floorPolygon(ctx: Ctx, view: View, x0: number, z0: number, x1: n
 }
 
 /** Open water behind any scene: gradient matched to the page, sun shafts, reef silhouettes and fish. */
-export type WaterInput = Pick<FrameInput, 'width' | 'height' | 'windowTop' | 'windowHeight' | 'time' | 'ambience' | 'reduced' | 'view'>;
+export type WaterInput = Pick<FrameInput, 'width' | 'height' | 'windowTop' | 'windowHeight' | 'time' | 'ambience' | 'reduced' | 'view'> & { palette?: BiomePalette };
 export function drawWater(ctx: Ctx, f: WaterInput): void {
-  const { width, height, windowTop, windowHeight, time, ambience, reduced, view } = f;
+  const { width, height, windowTop, windowHeight, time, ambience, reduced, view } = f, [top, mid, deep] = (f.palette ?? PALETTES.home).water;
   const g = ctx.createLinearGradient(0, -windowTop, 0, windowHeight - windowTop);
-  g.addColorStop(0, WATER_TOP); g.addColorStop(.45, WATER_MID); g.addColorStop(1, WATER_DEEP);
+  g.addColorStop(0, top); g.addColorStop(.45, mid); g.addColorStop(1, deep);
   ctx.fillStyle = g; ctx.fillRect(0, 0, width, height);
   // Sun shafts from the surface.
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -77,17 +81,17 @@ export function drawWater(ctx: Ctx, f: WaterInput): void {
   }
 }
 
-function drawGround(ctx: Ctx, f: FrameInput): void {
+function drawGround(ctx: Ctx, f: FrameInput, palette: BiomePalette): void {
   const { view, columns, time, reduced, state } = f, m = SEABED_MARGIN;
-  floorPolygon(ctx, view, -m - .5, -m - .5, columns - .5 + m, HEIGHT - .5 + m); ctx.fillStyle = '#D9C49A'; ctx.fill();
+  floorPolygon(ctx, view, -m - .5, -m - .5, columns - .5 + m, HEIGHT - .5 + m); ctx.fillStyle = palette.sand; ctx.fill();
   const center = toScreen(view, (columns - 1) / 2, (HEIGHT - 1) / 2), radius = (columns + m * 2) * TILE_W * .62 * view.scale;
   const fog = ctx.createRadialGradient(center.x, center.y, radius * .35, center.x, center.y, radius);
-  fog.addColorStop(0, 'rgba(42, 143, 176, 0)'); fog.addColorStop(1, 'rgba(18, 88, 122, .95)'); ctx.fillStyle = fog;
+  fog.addColorStop(0, `rgba(${palette.fog}, 0)`); fog.addColorStop(1, `rgba(${palette.fog}, .95)`); ctx.fillStyle = fog;
   floorPolygon(ctx, view, -m - .5, -m - .5, columns - .5 + m, HEIGHT - .5 + m); ctx.fill();
   // Platform: thickness first, then tiles.
   const depth = 12 * view.scale, fl = toScreen(view, -.5, HEIGHT - .5), fr = toScreen(view, columns - .5, HEIGHT - .5), br = toScreen(view, columns - .5, -.5);
-  ctx.fillStyle = '#8C5A4E'; ctx.beginPath(); ctx.moveTo(fl.x, fl.y); ctx.lineTo(fr.x, fr.y); ctx.lineTo(fr.x, fr.y + depth); ctx.lineTo(fl.x, fl.y + depth); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#6E4339'; ctx.beginPath(); ctx.moveTo(fr.x, fr.y); ctx.lineTo(br.x, br.y); ctx.lineTo(br.x, br.y + depth); ctx.lineTo(fr.x, fr.y + depth); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = palette.platform[0]; ctx.beginPath(); ctx.moveTo(fl.x, fl.y); ctx.lineTo(fr.x, fr.y); ctx.lineTo(fr.x, fr.y + depth); ctx.lineTo(fl.x, fl.y + depth); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = palette.platform[1]; ctx.beginPath(); ctx.moveTo(fr.x, fr.y); ctx.lineTo(br.x, br.y); ctx.lineTo(br.x, br.y + depth); ctx.lineTo(fr.x, fr.y + depth); ctx.closePath(); ctx.fill();
   for (let x = 0; x < columns; x++) for (let z = 0; z < HEIGHT; z++) {
     const kitchen = x < 5 && z < 4, p = toScreen(view, x, z);
     ctx.fillStyle = kitchen ? (x + z) % 2 ? '#E7DCC2' : '#F3EBD8' : ['#7CC2BE', '#86CAC3', '#73B9B8'][(x * 17 + z * 3) % 3];
@@ -127,14 +131,14 @@ function drawBuildGrid(ctx: Ctx, f: FrameInput): void {
   for (const p of accessPoints(draft)) { const s = toScreen(view, p.x, p.z); ctx.strokeStyle = draftValid ? '#F2B743' : '#DC533C'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(s.x, s.y, 10 * view.scale, 5 * view.scale, 0, 0, Math.PI * 2); ctx.stroke(); }
 }
 
-export function drawDecor(ctx: Ctx, d: Decor, t: number): void {
-  if (d.kind === 'rock') { shadow(ctx, 22, 9); ctx.fillStyle = d.tint > .5 ? '#6B7380' : '#59606C'; ctx.beginPath(); ctx.ellipse(0, -8, 20, 12, 0, Math.PI, 0); ctx.ellipse(0, 0, 20, 7, 0, 0, Math.PI); ctx.fill(); }
-  else if (d.kind === 'shell') { ctx.fillStyle = d.tint > .5 ? '#F6D2C0' : '#F1E3C8'; ctx.beginPath(); ctx.moveTo(0, -2); ctx.arc(0, -2, 7, Math.PI * 1.1, Math.PI * 1.9); ctx.closePath(); ctx.fill(); }
+export function drawDecor(ctx: Ctx, d: Decor, t: number, palette: BiomePalette = PALETTES.home): void {
+  if (d.kind === 'rock') { shadow(ctx, 22, 9); ctx.fillStyle = palette.rock[d.tint > .5 ? 0 : 1]; ctx.beginPath(); ctx.ellipse(0, -8, 20, 12, 0, Math.PI, 0); ctx.ellipse(0, 0, 20, 7, 0, 0, Math.PI); ctx.fill(); }
+  else if (d.kind === 'shell') { ctx.fillStyle = palette.shell[d.tint > .5 ? 0 : 1]; ctx.beginPath(); ctx.moveTo(0, -2); ctx.arc(0, -2, 7, Math.PI * 1.1, Math.PI * 1.9); ctx.closePath(); ctx.fill(); }
   else if (d.kind === 'coral') {
-    const color = ['#E7746B', '#F2A65A', '#C45AA0', '#EE8DA9'][Math.floor(d.tint * 4)]; ctx.strokeStyle = color; ctx.lineCap = 'round'; ctx.lineWidth = 5;
+    const color = palette.coral[Math.floor(d.tint * palette.coral.length)]; ctx.strokeStyle = color; ctx.lineCap = 'round'; ctx.lineWidth = 5;
     for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 3, 0); ctx.quadraticCurveTo(i * 7, -14, i * 9 + Math.sin(t + i) * 1.5, -24 - (2 - Math.abs(i)) * 6); ctx.stroke(); }
   } else {
-    ctx.strokeStyle = d.tint > .5 ? '#3C8A4A' : '#2F7340'; ctx.lineCap = 'round'; ctx.lineWidth = 6;
+    ctx.strokeStyle = palette.kelp[d.tint > .5 ? 0 : 1]; ctx.lineCap = 'round'; ctx.lineWidth = 6;
     for (let i = 0; i < 3; i++) { const h = 60 + d.tint * 50 + i * 12, sway = Math.sin(t * .9 + d.tint * 6 + i) * 8; ctx.beginPath(); ctx.moveTo(i * 6 - 6, 0); ctx.bezierCurveTo(i * 6 - 12, -h * .4, i * 6 + sway * .4, -h * .7, i * 6 - 6 + sway, -h); ctx.stroke(); }
   }
 }
@@ -157,9 +161,11 @@ function track(f: FrameInput, id: string, x: number, z: number, dt: number): Tra
 export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   const { state, view, columns, time, reduced, building, draft } = f, t = reduced ? 0 : time;
   const anchors = new Map<string, ScreenPoint>(), hits: HitBox[] = [], items: Drawable[] = [], badges: (() => void)[] = [];
-  drawWater(ctx, f); drawGround(ctx, f); if (building) drawBuildGrid(ctx, f);
-  let decor = decorCache.get(columns); if (!decor) { decor = seabedDecor(columns); decorCache.set(columns, decor); }
-  for (const d of decor) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t)) });
+  const biome = biomeOf(state), palette = PALETTES[biome];
+  drawWater(ctx, { ...f, palette }); drawGround(ctx, f, palette); if (building) drawBuildGrid(ctx, f);
+  const decorKey = `${biome}:${columns}`;
+  let decor = decorCache.get(decorKey); if (!decor) { decor = seabedDecor(columns, palette); decorCache.set(decorKey, decor); }
+  for (const d of decor) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette)) });
   const working = new Set(state.staff.filter(s => s.task === 'cooking').map(s => s.stationId));
   const night = sceneNight(state), glows: Glow[] = [];
   for (const item of state.furniture) {

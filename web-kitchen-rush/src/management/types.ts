@@ -3,6 +3,7 @@ import { MAX_LEVEL, createTown, townSchema, type Validated } from './town';
 import { rollTide, tideKind, type TideKind } from './tides';
 import type { ZoneId } from './zones';
 import { migrateTutorial, newTutorial, tutorialSchema } from './tutorial';
+import { createOcean, oceanSchema } from './ocean';
 
 export const furnitureKind = z.enum(['table', 'prep', 'grill', 'plant', 'divider', 'lamp']);
 export type FurnitureKind = z.infer<typeof furnitureKind>;
@@ -83,6 +84,8 @@ export const restaurantSchema = z.preprocess(migrateTutorial, z.object({
   collections: collectionsSchema.default(freshCollections),
   /** Fraction of a dollar of ingredients owed but not yet charged, so small discounts still add up. */
   ingredientCarry: z.number().finite().min(0).max(1).default(0),
+  /** The Ocean exploration record and permanent fame; older saves become colony 1 at the Home Reef. */
+  ocean: oceanSchema.default(createOcean),
 }));
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
@@ -143,6 +146,6 @@ export function createRestaurant(): RestaurantState {
     ], guests: [], dirty: [], menu: createMenu(),
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(), tutorial: newTutorial(),
-    collections: freshCollections(), ingredientCarry: 0,
+    collections: freshCollections(), ingredientCarry: 0, ocean: createOcean(),
   };
 }

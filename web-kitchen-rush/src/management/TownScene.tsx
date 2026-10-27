@@ -7,6 +7,7 @@ import { sceneNight } from './light';
 import { createAmbience, stepAmbience } from './iso/ambience';
 import { cellAt, fitView, type View } from './iso/projection';
 import { renderTown } from './iso/town-render';
+import { biomeOf } from './iso/render';
 import { usePanTap } from './iso/use-pan-tap';
 
 interface TownSceneProps { selected: { x: number; z: number } | null; zoom: number; viewKey?: number; onPlot: (plot: { x: number; z: number }) => void; }
@@ -36,7 +37,7 @@ export default function TownScene(props: TownSceneProps) {
       // Narrow phones start closer in; the outer rings are a drag away.
       const v = fitView(w, h, TOWN_SIZE, TOWN_SIZE, latest.current.zoom * (w < 520 ? 1.3 : 1), pan.current); view.current = v;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      renderTown(ctx, { town: restaurant.state.town, cash: restaurant.state.cash, view: v, width: w, height: h, windowTop: rect.top, windowHeight: window.innerHeight, time: now / 1000, now: Date.now(), ambience, reduced: reduced.matches, selected: latest.current.selected, night: sceneNight(restaurant.state) });
+      renderTown(ctx, { town: restaurant.state.town, cash: restaurant.state.cash, view: v, width: w, height: h, windowTop: rect.top, windowHeight: window.innerHeight, time: now / 1000, now: Date.now(), ambience, reduced: reduced.matches, selected: latest.current.selected, night: sceneNight(restaurant.state), biome: biomeOf(restaurant.state), price: restaurant.plotPrice() });
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);

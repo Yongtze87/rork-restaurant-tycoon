@@ -43,3 +43,4 @@ The Abyss ends a **chapter**, not the game. After reaching the Abyss the player 
   3. *Rewards grow faster than difficulty* so moving outward always feels worth it.
 - **Kept on founding:** pearls, charms, extra builders, collections (claims and counters), tutorial state, fame. **Reset:** cash, restaurant layout and staff, town, zones, history.
 - **Fame** is permanent and earned per founded colony (more for harder regions); it grants clear, capped bonuses (for example tips, starting cash, guest arrival) shown before founding.
+- **Where it lives:** `ocean.ts` (regions, biomes, palettes, fame, the save record), `RestaurantEngine.colonyEffects` / `foundColony`, `OceanMap.tsx`. Numbers and simulator results: `docs/BALANCE.md`.

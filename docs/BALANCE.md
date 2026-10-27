@@ -166,3 +166,71 @@ lives in one place (DESIGN.md: one place per system). Formula shapes are unchang
 - **Glow gardens' combined guest bonus is capped at +50%** (`TOWN_BALANCE.gardenCap`), in line with every other town effect.
 - **Ingredient costs are exact to the cent** (`dishCost`), and the unpaid fraction carries between dishes (`ingredientCarry`), so cash stays in whole dollars while every discount counts.
 - **Town purchases during service keep tonight's wages, rent and loan repayment** in the register (`reserveError` in `engine.ts`).
+
+## The Ocean: colonies, fame and region modifiers
+
+```bash
+bun tools/simulate.ts --days 260 --strategy balanced --colonies 4 --region all --quiet   # easiest / richest / balanced routes
+bun tools/simulate.ts --days 120 --strategy balanced --colonies 2 --route "0,-1"         # a fixed route (region ids "x,y")
+```
+
+The owner founds the next colony as soon as the current one reaches the Abyss, choosing among the foundable
+regions: `easiest` (lowest difficulty), `richest` (most fame) or `balanced` (most fame among the easier half).
+Everything else is the same automated owner as above. The table shows **real days / hours played since that
+colony was founded**; colony 1 is the Home Reef.
+
+### Model (all in `ocean.ts`)
+
+- **Region effects** are multipliers on arrival, patience, crew speed, tips, kelp and fish cost, and town/zone
+  prices (`buildCost` scales plots, buildings, upgrades and zone prices). The biome gives one upside (a little
+  stronger per star) and one or two downsides scaled by `severity(difficulty)` (0.6 at difficulty 1, +0.2 per
+  level, max 1.6). Every region past the Home Reef also pays +6% build cost and −3% arrival per difficulty
+  level above 1 (up to difficulty 6), except on the axis that is the biome's upside. Each multiplier is clamped
+  to 0.7–1.4.
+- **Difficulty**: hand-made for the first ring; generated as `0.8 + 0.6 × ring ± 0.8 + biome shift` (trench +0.5,
+  sunken +0.3, lagoon −1), minimum 1, shown as 1–5 stars.
+- **Fame reward** = `12 × difficulty^1.5 × biome fame` (trench ×1.4, sunken ×1.1, lagoon ×0.5, Home Reef 30). It
+  is added when that colony **reaches its Abyss**, so a hard region is slow for itself and pays off for every
+  colony after it.
+- **Fame bonuses** approach a cap: `cap × fame / (fame + 25)` — tips +25% of each bill, building −35%,
+  guests +20%, starting cash +$6,000. At 30 fame (after the Home Reef): +14% / −19% / +11% / +$3,270.
+
+The first tuning gave fame as tips × and guest arrival × only, credited at founding. Colony 2 was **not**
+faster (lagoon 27, trench 28, ice 27 real days vs 25 for the Home Reef): tips are a small share of income and
+extra guests mostly met full seats, while the binding costs (level-13 upgrades, the $120k Abyss) were
+untouched. Making fame a capped **building discount** plus a tip share of the bill created the sawtooth;
+crediting fame at the Abyss (not at founding) made harder regions slower than easy ones again.
+
+### Results (balanced owner, seed 91273 unless noted)
+
+| Route | Colony 1 Home Reef | Colony 2 | Colony 3 | Colony 4 |
+|---|---|---|---|---|
+| easiest | reef 1 · twilight 11 · **abyss 25** (12.9 h) | Glasswater Lagoon ★1: 1 · 9 · **21** (10.1 h) | Sunburst Atoll ★2: 1 · 10 · **22** (11.0 h) | Sulphur Rise ★2: 1 · 7 · **16** (8.3 h) |
+| balanced | 1 · 11 · **25** | Frostlight Shelf ★2: 2 · 10 · **22** (10.8 h) | Ember Vents ★2: 0 · 8 · **19** (9.5 h) | Sunburst Garden ★2: 1 · 10 · **20** (9.9 h) |
+| richest | 1 · 11 · **25** | Bluefall Trench ★3: 1 · 10 · **22** (11.0 h) | Drowned Spires ★3: 1 · 7 · **15** (7.2 h) | Sunburst Isle ★3: 1 · 8 · **19** (9.4 h) |
+| balanced, seed 5 | 1 · 12 · **27** | Frostlight Shelf: 1 · 9 · **21** | Ember Vents: 0 · 8 · **18** | Sunburst Garden: 1 · 9 · **20** |
+| balanced, seed 77 | 1 · 10 · **25** | Frostlight Shelf: 1 · 10 · **21** | Ember Vents: 1 · 9 · **18** | Sunburst Garden: 1 · 10 · **20** |
+| builder owner | 2 · 14 · **32** | Frostlight Shelf: 1 · 13 · **26** | Ember Vents: 1 · 11 · **23** | — |
+| cautious owner | 2 · 16 · **39** | Frostlight Shelf: 1 · 17 · **43** | Ember Vents: 0 · 14 · **33** | — |
+
+Real days since founding to the Coral Reef · Twilight · Abyss (founding the next colony happens the same day
+as the Abyss). Fame totals at the start of colonies 2/3/4: easiest 30/36/58, balanced 30/64/98, richest 30/117/186.
+
+Same fame (30), different second region (hours played to the Abyss): lagoon ★1 10.1 h · Kelpwood ★2 10.3 h ·
+Frostlight ★2 10.8 h · Bluefall Trench ★3 11.0 h, against 12.9 h for the Home Reef. The trench then pays 87
+fame (vs 6 for the lagoon), and the colony after it reaches its Abyss in 15 real days.
+
+- **Sawtooth:** every colony restarts at day 1 and still takes 2–3 real weeks to its Abyss, but colony 2 is
+  12–22% faster than colony 1 in comparable regions, and colonies 3–4 are 20–40% faster.
+- **Route choice:** harder regions are slower for themselves (more expensive building, fewer or less patient
+  guests) and pay up to 15× more fame, so the richest route is slower once and faster after.
+- **Early game:** Coral Reef in the first 1–2 real days for every colony (0.2–0.8 h played after colony 2);
+  starting cash rises from $1,250 to $4,520 at 30 fame, which is most of the early speed-up.
+- **Solvency:** no colony went bankrupt; a few recovery loans in later colonies (0–3 per 4-colony run) when the
+  bigger starting cash was spent on the town before the first service.
+- **Cautious owner (open question):** its second colony in a ★2 ice shelf was *slower* (43 vs 39 days): it
+  upgrades the restaurant building itself to level 13 (the dearest base price) and the shelf's slower crew
+  hurts a dining-room-first player most. Its third colony is 15% faster. A future knob is a little more
+  starting fame or a smaller crew-speed downside on ★2 regions.
+- **Long run:** bonuses approach their caps (fame 200: tips +22%, building −31%), and regions far out reach
+  difficulty 5+ with build costs up to +40%, so later colonies settle around 2–3 weeks instead of collapsing to days.
