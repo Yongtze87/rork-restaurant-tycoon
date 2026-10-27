@@ -13,7 +13,7 @@ function harness() {
 function advance(e: RestaurantEngine, seconds: number) { for (let i = 0; i < seconds * 10; i++) e.update(.1); }
 const sum = (counts: Record<string, number>) => Object.values(counts).reduce((a, b) => a + b, 0);
 const C = Math.floor(TOWN_SIZE / 2);
-const day = (over: Partial<Report>): Report => ({ revenue: 0, ingredients: 0, served: 20, missed: 0, tips: 0, challenges: [], day: 2, wages: 60, rent: 30, debtPayment: 0, profit: 0, rating: 4, tide: 'feast', ...over });
+const day = (over: Partial<Report>): Report => ({ revenue: 0, ingredients: 0, served: 20, missed: 0, tips: 0, challenges: [], day: 2, wages: 60, rent: 30, debtPayment: 0, profit: 0, rating: 4, tide: 'feast', branch: 0, ...over });
 
 describe('achievement definitions', () => {
   it('have unique ids, positive rewards and cover every dish, building, zone and tide', () => {

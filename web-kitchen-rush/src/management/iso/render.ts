@@ -2,7 +2,7 @@ import { accessPoints, localPoint, seatPoint } from '../layout';
 import { lookFor } from '../town';
 import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type Placement, type RestaurantState } from '../types';
 import { sceneNight } from '../light';
-import { PALETTES, currentRegion, type BiomeId, type BiomePalette } from '../ocean';
+import { PALETTES, type BiomePalette } from '../ocean';
 import type { Ambience } from './ambience';
 import { diamondPath, drawFurniture, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
 import { depthOf, facing, toScreen, TILE_H, TILE_W, type ScreenPoint, type View } from './projection';
@@ -22,8 +22,6 @@ export interface FrameInput {
 export interface FrameOutput { anchors: Map<string, ScreenPoint>; hits: HitBox[]; }
 
 export const WATER_TOP = '#7FD3DC', WATER_MID = '#2A8FB0', WATER_DEEP = '#0B3552';
-/** The colony's biome look; the Home Reef keeps the original palette. */
-export const biomeOf = (state: Pick<RestaurantState, 'ocean'>): BiomeId => currentRegion(state.ocean).biome;
 const SEABED_MARGIN = 5;
 type Ctx = CanvasRenderingContext2D;
 interface Drawable { depth: number; draw: () => void; }
@@ -161,9 +159,10 @@ function track(f: FrameInput, id: string, x: number, z: number, dt: number): Tra
 export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   const { state, view, columns, time, reduced, building, draft } = f, t = reduced ? 0 : time;
   const anchors = new Map<string, ScreenPoint>(), hits: HitBox[] = [], items: Drawable[] = [], badges: (() => void)[] = [];
-  const biome = biomeOf(state), palette = PALETTES[biome];
+  // The flagship restaurant always stands in the Home Reef.
+  const palette = PALETTES.home;
   drawWater(ctx, { ...f, palette }); drawGround(ctx, f, palette); if (building) drawBuildGrid(ctx, f);
-  const decorKey = `${biome}:${columns}`;
+  const decorKey = `home:${columns}`;
   let decor = decorCache.get(decorKey); if (!decor) { decor = seabedDecor(columns, palette); decorCache.set(decorKey, decor); }
   for (const d of decor) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette)) });
   const working = new Set(state.staff.filter(s => s.task === 'cooking').map(s => s.stationId));

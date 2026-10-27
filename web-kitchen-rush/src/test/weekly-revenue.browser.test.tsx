@@ -8,7 +8,7 @@ import { freshTotals, type Report } from '@/management/types';
 import '@/index.css';
 
 vi.mock('@/management/RestaurantScene', () => ({ default: () => <div>Restaurant world</div> }));
-const receipt = (day: number, revenue = day <= 7 ? 100 : 150, tips = 10): Report => ({ ...freshTotals(), day, revenue, tips, wages: 60, rent: 30, debtPayment: 0, profit: revenue + tips - 90, rating: 4, challenges: [], tide: 'calm' });
+const receipt = (day: number, revenue = day <= 7 ? 100 : 150, tips = 10): Report => ({ ...freshTotals(), day, revenue, tips, wages: 60, rent: 30, debtPayment: 0, profit: revenue + tips - 90, rating: 4, challenges: [], tide: 'calm', branch: 0 });
 const history = (count = 10): Report[] => Array.from({ length: count }, (_, i) => receipt(i + 1));
 beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 afterEach(() => vi.restoreAllMocks());

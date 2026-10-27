@@ -3,14 +3,14 @@ export interface CashReceipt {
   id: number;
   amount: number;
   tip: number;
-  source: 'service' | 'sale' | 'milestone' | 'loan' | 'challenge';
+  source: 'service' | 'sale' | 'milestone' | 'loan' | 'challenge' | 'branch';
   guestId: number | null;
   clock: number;
 }
 export const RECEIPT_SECONDS = 2.4;
 export const CASH_COUNT_SECONDS = .7;
 export const CASH_NOTICE_SECONDS = 2;
-export const incomeLabels = { service: 'Payment', sale: 'Furniture sold', milestone: 'Milestone', challenge: 'Daily challenge', loan: 'Loan received', income: 'Cash received' } as const;
+export const incomeLabels = { service: 'Payment', sale: 'Furniture sold', milestone: 'Milestone', challenge: 'Daily challenge', loan: 'Loan received', branch: 'Branch income', income: 'Cash received' } as const;
 export type CashNotice = { id: number; amount: number; tip: number; source: keyof typeof incomeLabels };
 
 /** Visual-only counter. Expenses apply immediately, even during an unfinished income count-up. */

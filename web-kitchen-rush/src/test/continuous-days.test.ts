@@ -50,7 +50,7 @@ describe('continuous local restaurant', () => {
     expect(e.state.phase).toBe('planning'); expect(e.state.history).toHaveLength(1); expect(e.event).toContain('Waiting for the owner');
   });
   it('migrates old report saves once, preserving paid receipts and ignoring unknown offline time', async () => {
-    const s = createRestaurant(); s.phase = 'report'; s.history = [{ ...s.totals, challenges: [], day: 1, wages: 60, rent: 30, debtPayment: 0, profit: -90, rating: 3, tide: 'calm' }]; s.cash = 1160;
+    const s = createRestaurant(); s.phase = 'report'; s.history = [{ ...s.totals, challenges: [], day: 1, wages: 60, rent: 30, debtPayment: 0, profit: -90, rating: 3, tide: 'calm', branch: 0 }]; s.cash = 1160;
     const { lastActiveAt: _, isPaused: _p, renovation: _r, ...legacy } = s;
     const h = harness(); h.storage.setItem(SAVE_KEY, JSON.stringify(legacy)); const e = new RestaurantEngine(h.storage, h.now); await e.resume();
     expect(e.state.day).toBe(2); expect(e.state.phase).toBe('service'); expect(e.state.cash).toBe(1160); expect(e.state.clock).toBe(0); expect(e.state.history).toHaveLength(1);

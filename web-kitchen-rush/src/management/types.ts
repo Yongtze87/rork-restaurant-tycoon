@@ -52,7 +52,9 @@ const challengeSchema = z.preprocess(legacyChallenge, z.object({
 }).refine(c => c.progress <= c.target && c.rewarded === (c.progress === c.target), 'Invalid challenge progress').refine(c => (c.kind === 'dish') === (c.dish !== null), 'A dish challenge names one dish'));
 export type DailyChallenge = Validated<z.infer<typeof challengeSchema>>;
 const challengesSchema = z.array(challengeSchema).max(3).default([]).refine(items => new Set(items.map(c => `${c.kind}:${c.dish}`)).size === items.length, 'Duplicate challenges');
-const reportSchema = totalsSchema.extend({ challenges: challengesSchema, day: z.number().int().positive(), wages: z.number().nonnegative(), rent: z.number().nonnegative(), debtPayment: z.number().nonnegative(), profit: z.number().finite(), rating: z.number().min(1).max(5), tide: tideKind.default('calm') });
+const reportSchema = totalsSchema.extend({ challenges: challengesSchema, day: z.number().int().positive(), wages: z.number().nonnegative(), rent: z.number().nonnegative(), debtPayment: z.number().nonnegative(), profit: z.number().finite(), rating: z.number().min(1).max(5), tide: tideKind.default('calm'),
+  /** Earnings of every finished branch restaurant at this closing (included in profit). */
+  branch: z.number().nonnegative().default(0) });
 export type Report = Validated<z.infer<typeof reportSchema>>;
 const menuItem = (dish: DishId) => z.object({ enabled: z.boolean(), price: priceSchema }).default({ enabled: false, price: DISHES[dish].fair });
 /** One entry per dish; dishes added after a save was made start off the menu at their suggested price. */
@@ -84,7 +86,7 @@ export const restaurantSchema = z.preprocess(migrateTutorial, z.object({
   collections: collectionsSchema.default(freshCollections),
   /** Fraction of a dollar of ingredients owed but not yet charged, so small discounts still add up. */
   ingredientCarry: z.number().finite().min(0).max(1).default(0),
-  /** The Ocean exploration record and permanent fame; older saves become colony 1 at the Home Reef. */
+  /** Claimed ocean regions and permanent fame. Older saves have only the Home Reef; colony-build saves keep their fame and regions. */
   ocean: oceanSchema.default(createOcean),
 }));
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;

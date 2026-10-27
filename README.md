@@ -32,7 +32,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Ledger:** a weekly revenue chart, growth against the previous week, and the last 20 daily receipts.
 - **Daily tides:** each service day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
 - **Daily challenges**, **milestones**, an interest-free **recovery loan** and a **low-capital warning** with one-click **Close for renovation**.
-- **Collection:** 61 long-term achievements in the Ledger (dish mastery, builder, explorer, ocean voyager, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
+- **Collection:** 63 long-term achievements in the Ledger (dish mastery, builder, explorer, ocean voyager, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
 
 ### Offline progress you can trust
 - When you return, the game **replays the elapsed time at 1× through the same simulation step**, with checkpoints.
@@ -50,12 +50,13 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - **Depth zones** are the long-term chapters. The middle 5×5 is the **Sunlit Shallows**; the next ring is the **Coral Reef**, the outer ring the **Twilight Zone**, and the dark drop-off around the town is the **Abyss**. Each zone needs reputation, buildings and cash (Coral Reef: 3.8★, 4 buildings, $5,000 · Twilight: 4.2★, 8 buildings, one at level 8, $20,000 · Abyss: 4.6★, 12 buildings, one at level 13, $120,000). Each zone opens two dishes and draws guests 5% more often; the Reef and Twilight also open their ring of plots.
 - The pearl shop lists real-money packs, but they can't be bought until a store and payment provider are chosen.
 
-### The Ocean: colonies
-- The Abyss ends a chapter, not the game. Open the **Ocean map** (compass in the header, or Town → The Ocean) to see an endless grid of regions around your **Home Reef**: explored regions, regions you can found next to them, and fog beyond.
-- Seven biomes, each with upsides and downsides: **kelp forest** (cheap kelp, slower crew), **volcanic vents** (cheap fish, restless guests), **ice shelf** (big tips, slower crew), **coral atoll** (more guests, dearer building), **sunken city** (cheap building, fewer guests), **open trench** (good tips and more fame, but hard) and **calm lagoon** (an easy rest with smaller rewards). Difficulty (1–5 stars) grows with distance, but every ring has easier and harder neighbours.
-- After reaching the Abyss, **found a new colony** in a region next to one you explored. A confirmation lists exactly what carries over (pearls, charms, extra builders, collections, fame, the ocean record, tutorial and milestones) and what starts fresh (cash, restaurant, crew, menu, town, zones, receipts).
-- **Fame** is permanent. Each colony earns fame when it reaches its Abyss (more in harder regions); fame gives capped bonuses to every later colony: extra tips on each bill, cheaper building, more guests and more starting cash. Each new colony starts faster than the last, then ramps to its own Abyss.
-- Each biome has its own water, sand and decor colours in both the restaurant and the town.
+### The Ocean: one ever-growing world
+- The Town view **is** the world: your Home Reef town in the middle, ocean regions around it as real seabed in the same isometric scene, and fog beyond. Drag to look around and zoom out to see several regions at once; **Reset view** recentres the Home Reef. Nothing ever resets: everything you build stays.
+- **Claim regions** next to the ones you own. Each region is a 7×7 block of plots with a one-plot seabed path around it. Its middle plot comes owned; unlock the rest one by one next to owned plots, and build with the same buildings, builders, timers, charms and pearls as at home. The home town's depth zones gate how far out you can claim: the first ring after the Coral Reef, the second after the Twilight Zone, beyond after the Abyss. Prices grow with distance, difficulty and every region you already own.
+- **Regions specialise.** Seven biomes, each with upsides and downsides for plots and buildings *in that region*: **kelp forest** (kelp farms 55% stronger, slower building), **volcanic vents** (fisheries stronger, dearer building), **coral atoll** (glow gardens stronger, dearer building), **sunken city** (workshops stronger and cheap building, branch earns less), **ice shelf** (branch earns more, slower building), **open trench** (the richest branch and more fame, but dear, slow building) and **calm lagoon** (cheap and quick, modest branch). Difficulty (1–5 stars) grows with distance, but every ring has easier and harder neighbours. Town-wide limits still apply.
+- **Branch restaurants:** one per region outside the Home Reef, levels 1–15 with three looks. Your crew runs them on their own: each finished branch earns at the close of every service day (also offline) from its level, its region and your fame, shown as **Branch income** on every receipt and in the Ledger. Producers and gardens next to a branch are 50% stronger, as next to the restaurant. The Home Reef restaurant stays the one you run yourself.
+- **Fame** is permanent and earned by mastering regions: claiming one, its branch reaching levels 6 and 11, owning all its plots, and reaching the Abyss at home. It gives capped bonuses: extra tips on each bill, cheaper building and claims, more guests, and richer branches.
+- The Town panel lists your regions (with their branch income) and the ones you can claim (with their price); tap one, in the panel or in the scene, for its details.
 
 ### Underwater atmosphere
 - Sun shafts from the surface, drifting caustics on the floor, rising bubbles, marine snow and distant fish schools.
@@ -103,7 +104,7 @@ The output is a static site for any static host. Configure the host to serve `in
 | `bun run lint` | ESLint |
 | `bun run test` | Unit tests, then browser tests (first run: `bunx playwright install chromium`) |
 | `bunx tsc -p tsconfig.app.json --noEmit` | Type check |
-| `bun tools/simulate.ts --days 56` | Balance simulator: automated owners play the real engine (see [docs/BALANCE.md](docs/BALANCE.md)); `--colonies 4 --region easiest\|richest\|balanced` plays several colonies in a row |
+| `bun tools/simulate.ts --days 56` | Balance simulator: automated owners play the real engine, claiming regions and growing branches (see [docs/BALANCE.md](docs/BALANCE.md)); `--region easiest\|richest\|balanced\|all` picks how regions are chosen, `--no-regions` plays the home town only |
 
 ---
 
@@ -115,13 +116,17 @@ web-kitchen-rush/
 │   ├── management/          # The game
 │   │   ├── engine.ts        # Deterministic simulation: economy, jobs, days, offline replay, saves
 │   │   ├── types.ts         # Zod save schema, catalog, dishes, constants
-│   │   ├── ocean.ts         # The Ocean: regions, biomes, fame, colonies (pure)
+│   │   ├── world.ts         # World geometry: the home town and region blocks on one plot grid
+│   │   ├── ocean.ts         # The Ocean: regions, biomes, specialisation, claiming, fame (pure)
+│   │   ├── town.ts          # Plots across the world, buildings, branches, construction (pure)
+│   │   ├── TownScene.tsx    # The world scene: drag, zoom, tap plots and regions
 │   │   ├── layout.ts        # Grid placement rules and pathfinding
 │   │   ├── ManagementGame.tsx  # Owner UI shell: header, dock, panels, dialogs
 │   │   ├── RestaurantScene.tsx # Canvas host: game loop, taps, drag-to-look, labels
 │   │   └── iso/
 │   │       ├── projection.ts   # Isometric math, fitting, depth order, sprite facing
 │   │       ├── render.ts       # Draws one frame from the simulation state
+│   │       ├── town-render.ts  # Draws the whole world: regions, plots, labels and fog, culled to the screen
 │   │       ├── sprites.ts      # Art slots for generated images
 │   │       ├── placeholders.ts # Code-drawn stand-in art used until images exist
 │   │       └── ambience.ts     # Bubbles, motes and fish (visual only)

@@ -9,6 +9,8 @@ cd web-kitchen-rush
 bun tools/simulate.ts --days 56 --seed 91273 --quiet          # all three strategies, 8 real weeks
 bun tools/simulate.ts --days 14 --strategy balanced            # one strategy, per-day table
 bun tools/simulate.ts --days 56 --no-charms                    # never use time skips
+bun tools/simulate.ts --days 56 --no-regions                   # the home town only (no claims, no branches)
+bun tools/simulate.ts --days 120 --strategy balanced --region all   # easiest / richest / balanced region choice
 bun tools/simulate.ts --payback --reference early|mid          # marginal value of each investment
 bun tools/simulate.ts --payback --at 120 --strategy builder    # ...from a strategy's own business
 ```
@@ -16,7 +18,7 @@ bun tools/simulate.ts --payback --at 120 --strategy builder    # ...from a strat
 The core lives in `src/management/sim/simulator.ts` (type-checked and linted with the app, imported only by
 `tools/simulate.ts` and `src/test/balance.test.ts`, never by the app bundle). It drives a real
 `RestaurantEngine` with no storage and an injected wall clock, calling `engine.update(.1)` at 1×. The
-automated owner uses only public engine methods: `claim`, `unlockZone`, `unlockPlot`, `build`, `upgrade`,
+automated owner uses only public engine methods: `claim`, `unlockZone`, `claimRegion`, `unlockPlot`, `build`, `upgrade`,
 `useCharm`, `buy`, `closeEarly`, `place`, `upgradeFurniture`, `hire`, `train`, `dismiss`, `sell`, `setDish`,
 `expand`, `loan`, `open`, `pause`, `suspend`, `resume`.
 
@@ -54,10 +56,14 @@ from a blocked reopening with the recovery loan, then by letting crew go and sel
 - Nobody goes bankrupt by playing normally.
 - Upgrades and buildings pay back in a reasonable number of days.
 - Time skips feel useful but are not required.
+- The first ocean region is claimable around the Coral Reef (real day 2–4); claims come in waves (claim, build up,
+  next ring) and keep giving new goals for many weeks; branch income matters, but the flagship earns most early.
 
 ## Results
 
-Unlock time as **real day (hours played)**, three seeds (91273 / 5 / 77), 56 real days each.
+Unlock time as **real day (hours played)**, three seeds (91273 / 5 / 77), 56 real days each. These tables are
+the home-town tuning pass, before regions existed (`--no-regions` reproduces them); the world model's results,
+with the owner claiming regions and growing branches, are in "The Ocean: one world" below.
 
 ### Before (commit c365fd8)
 
@@ -167,70 +173,128 @@ lives in one place (DESIGN.md: one place per system). Formula shapes are unchang
 - **Ingredient costs are exact to the cent** (`dishCost`), and the unpaid fraction carries between dishes (`ingredientCarry`), so cash stays in whole dollars while every discount counts.
 - **Town purchases during service keep tonight's wages, rent and loan repayment** in the register (`reserveError` in `engine.ts`).
 
-## The Ocean: colonies, fame and region modifiers
+## The Ocean: one world, regions and branches
 
 ```bash
-bun tools/simulate.ts --days 260 --strategy balanced --colonies 4 --region all --quiet   # easiest / richest / balanced routes
-bun tools/simulate.ts --days 120 --strategy balanced --colonies 2 --route "0,-1"         # a fixed route (region ids "x,y")
+bun tools/simulate.ts --days 56 --seed 91273 --quiet                         # all strategies, with regions
+bun tools/simulate.ts --days 120 --strategy balanced --quiet                 # 17 real weeks: claims, branch levels, fame
+bun tools/simulate.ts --days 56 --strategy balanced --region all --quiet     # easiest / richest / balanced region choice
+bun tools/simulate.ts --days 56 --strategy balanced --route "0,1;-1,1"       # a fixed claim order (region ids "x,y")
+bun tools/simulate.ts --days 56 --strategy balanced --no-regions --quiet     # the home town only, for comparison
 ```
 
-The owner founds the next colony as soon as the current one reaches the Abyss, choosing among the foundable
-regions: `easiest` (lowest difficulty), `richest` (most fame) or `balanced` (most fame among the easier half).
-Everything else is the same automated owner as above. The table shows **real days / hours played since that
-colony was founded**; colony 1 is the Home Reef.
+### Model
 
-### Model (all in `ocean.ts`)
+- **Geometry** (`world.ts`): one plot grid. The 9×9 home town is region (0, 0); every other region is the inner
+  **7×7** of a 9×9 cell, so a one-plot seabed path runs between regions and the world stays a regular grid. 49 plots
+  hold a branch and a specialised cluster of 10–20 buildings without becoming a grind, read as one block when zoomed
+  out, and keep a developed world cheap: the renderer only walks the region cells on screen (at most 24×24).
+- **Claiming** (`ocean.ts`): a region next to a claimed one (8 directions, the Home Reef counts) can be claimed,
+  gated by the home town's depth zones: ring 1 after the **Coral Reef**, ring 2 after the **Twilight Zone**, ring 3+
+  after the **Abyss**. Price = `2,500 × difficulty^1.2 × 2.2^(ring − 1) × 1.25^(regions already claimed)`, to $100,
+  then the fame building discount. First ring with nothing claimed yet: lagoon $2,500 · kelp/atoll $4,100 ·
+  ice/vents $5,700 · sunken city/Cinderfield $7,500 · trench $9,300. Claiming adds the 49 plots, the middle one owned.
+- **Region plots** unlock next to owned plots, priced per region: `300 × (1 + 0.35 × (owned − 1))^1.6 × (1 + 0.6 × (ring − 1))`
+  × the region's build cost × the fame discount ($260–$390 for the first plot in ring 1, about $29k for the last at
+  neutral cost). Home plots keep their own curve.
+- **Specialisation** applies only to plots and buildings in that region (upsides +10% per star; downsides scale with
+  difficulty, 0.6 + 0.2 per level). Further out, building costs +6% and branches earn +8% per difficulty level, never
+  cancelling the biome's own upside or downside. Town-wide caps (producers 60%, gardens +50%, workshops 45%) still
+  apply to the sum.
 
-- **Region effects** are multipliers on arrival, patience, crew speed, tips, kelp and fish cost, and town/zone
-  prices (`buildCost` scales plots, buildings, upgrades and zone prices). The biome gives one upside (a little
-  stronger per star) and one or two downsides scaled by `severity(difficulty)` (0.6 at difficulty 1, +0.2 per
-  level, max 1.6). Every region past the Home Reef also pays +6% build cost and −3% arrival per difficulty
-  level above 1 (up to difficulty 6), except on the axis that is the biome's upside. Each multiplier is clamped
-  to 0.7–1.4.
-- **Difficulty**: hand-made for the first ring; generated as `0.8 + 0.6 × ring ± 0.8 + biome shift` (trench +0.5,
-  sunken +0.3, lagoon −1), minimum 1, shown as 1–5 stars.
-- **Fame reward** = `12 × difficulty^1.5 × biome fame` (trench ×1.4, sunken ×1.1, lagoon ×0.5, Home Reef 30). It
-  is added when that colony **reaches its Abyss**, so a hard region is slow for itself and pays off for every
-  colony after it.
-- **Fame bonuses** approach a cap: `cap × fame / (fame + 25)` — tips +25% of each bill, building −35%,
-  guests +20%, starting cash +$6,000. At 30 fame (after the Home Reef): +14% / −19% / +11% / +$3,270.
+| Biome | Upside (1★) | Downside (difficulty 1) | Good for |
+|---|---|---|---|
+| Kelp forest | kelp farms +50% | building time +12% | kelp farms |
+| Volcanic vents | fisheries +50% | building cost +10% | fisheries |
+| Coral atoll | glow gardens +50% | building cost +12% | glow gardens |
+| Sunken city | workshops +50%, building −15% | branch income −15% | workshops, cheap building |
+| Ice shelf | branch income +25% | building time +15% | a branch |
+| Open trench | branch income +45%, fame ×1.4 | building cost +15%, time +10% | the richest branch |
+| Calm lagoon | building cost −12%, time −12% | branch income −15%, fame ×0.5 | an easy, cheap start |
 
-The first tuning gave fame as tips × and guest arrival × only, credited at founding. Colony 2 was **not**
-faster (lagoon 27, trench 28, ice 27 real days vs 25 for the Home Reef): tips are a small share of income and
-extra guests mostly met full seats, while the binding costs (level-13 upgrades, the $120k Abyss) were
-untouched. Making fame a capped **building discount** plus a tip share of the bill created the sawtooth;
-crediting fame at the Abyss (not at founding) made harder regions slower than easy ones again.
+- **Branch restaurants** (`town.ts`): building kind `branch`, one per non-home region, build $1,200 / 4 min, upgrades
+  on the normal curve (L6 $12.7k, L11 $33k, L15 $55k before region and fame). Income at every closing:
+  `30 × level × region branch income × (1 + fame branch bonus)`, to the dollar (L1 $30, L6 $180, L11 $330, L15 $450
+  before modifiers; the level-12 Frostlight branch in the screenshots earns $560). Paid in `finish()`, so offline
+  replay is identical; recorded as `branch` on the receipt and counted in profit. Producers and gardens next to a
+  branch get the same +50% neighbour bonus as next to the restaurant.
+- **Fame** (permanent; `mastery` keys stop double payment): a region's mastery fame `10 × difficulty^1.5 × biome fame`
+  is paid 30% on claiming, 30% when its branch reaches level 6, 25% at level 11 and 15% when every plot is owned;
+  reaching the Abyss at home pays 30. Bonuses approach their caps as `cap × fame / (fame + 60)`: tips +15% of each
+  bill, building and claims −25%, guests +12%, branch income +25%.
 
-### Results (balanced owner, seed 91273 unless noted)
+### The automated owner and regions
 
-| Route | Colony 1 Home Reef | Colony 2 | Colony 3 | Colony 4 |
+Claims come in waves: the owner claims the next region only when **every branch has reached the wave level**
+(balanced 6, builder 4, cautious 7), the depth gate is open, and either it is the first claim, the home town has no
+zone left, or a pause has passed since the last claim (balanced 4 real days, builder 3, cautious 7; sooner only if
+the price is under 30% of spare cash). It saves for a claim only while the price is under about four real days of
+profit, and a zone whose other requirements are met always comes first. In each region it builds the branch on the
+middle plot, then (from branch level 2) the biome's specialised building next to it (balanced 2, builder 3, cautious 1).
+Branch upgrades join the normal upgrade queue, ranked by price per extra dollar a day; a branch below the wave level
+and three levels behind the home town's leader gets the builder first. Region choice: `easiest` (lowest difficulty),
+`richest` (most fame) or `balanced` (most fame among the easier half), among regions whose depth gate is open.
+
+### Results (56 real days, seeds 91273 / 5 / 77)
+
+| Strategy | Coral Reef | Twilight | Abyss | Claims by real day (seed 91273) | Regions | Branch share of profit d41–160 · d161–320 · d321+ | Blocks · loans · bankrupt |
+|---|---|---|---|---|---|---|---|
+| cautious | 3 / 3 / 4 | 19 / 19 / 20 | 48 / 51 / >56 | 4, 26, 33, 40, 50 | 5 / 5 / 4 | 8–9% · 14–18% · 30–33% | 0 · 0 · 0 |
+| builder | 3 / 2 / 2 | 18 / 20 / 18 | 33 / 35 / 35 | 3, 12, 15, 19, 23, 27, 36, 43, 50 | 9 / 10 / 9 | 12–13% · 29–30% · 32–35% | 0–1 · 1 · 0 |
+| balanced | 2 / 2 / 2 | 14 / 13 / 13 | 31 / 29 / 29 | 3, 16, 20, 24, 33, 48, 50, 53 | 8 / 9 / 9 | 11–12% · 29–30% · 33–34% | 0 · 0 · 0 |
+
+Balanced owner, seed 91273, profit per day incl. challenges: d1–10 $569 · d11–40 $889 · d41–160 $1,763 · d161+ $3,867
+(home town only, `--no-regions`: $569 · $873 · $1,612 · $2,735, Twilight rd 12, Abyss rd 26). Branch income per day:
+d1–40 $17 (2%) · d41–160 $200 (11%) · d161–320 $890 (30%) · d321+ $1,518 (33%). Fame after 8 weeks: 198–220.
+
+- **First region:** claimed on real day 3–5 (balanced and builder rd 3, 1.2 h played; cautious rd 4–5), right after
+  the Coral Reef. Its branch opens the same day.
+- **Waves, not a line:** each owner claims a ring-1 region and builds it up, claims a burst of ring-2 regions after
+  the Twilight Zone (balanced rd 16–24), works towards the Abyss, then reaches ring 3 (balanced rd 33) and fills in
+  cheaper gaps (rd 48–53). Prices jump with each ring and each claim: $5.7k → $6.8k → $20k → $27k → $68k (ring 3), then
+  $19k–$58k for the nearer gaps and $167k for the next ring-3 region (rd 58 in the long run).
+- **The flagship stays the main earner early:** branches are 2% of profit in the first 40 service days, ~11% up to
+  service day 160 (real weeks 2–3), ~30% in weeks 3–5 and about a third by week 8.
+- **Depth zones** come a little later than in the home-town-only tuning because money goes to regions: balanced
+  Twilight rd 13–14 (was 12–13), Abyss rd 29–31 (was 25–27); builder Abyss rd 33–35; cautious Abyss rd 48–51, one
+  seed (77) just past week 8. Within or at the edge of the targets.
+- **Solvency:** no bankrupt days; the builder still takes one recovery loan, as before.
+- **Time skips:** with `--no-charms` the balanced owner reaches the Abyss on rd 30 (31 with charms): useful, never required.
+
+Region choice (balanced owner, seed 91273):
+
+| Route | Regions by rd 56 | Fame | Abyss | Branch share d161–320 · d321+ |
 |---|---|---|---|---|
-| easiest | reef 1 · twilight 11 · **abyss 25** (12.9 h) | Glasswater Lagoon ★1: 1 · 9 · **21** (10.1 h) | Sunburst Atoll ★2: 1 · 10 · **22** (11.0 h) | Sulphur Rise ★2: 1 · 7 · **16** (8.3 h) |
-| balanced | 1 · 11 · **25** | Frostlight Shelf ★2: 2 · 10 · **22** (10.8 h) | Ember Vents ★2: 0 · 8 · **19** (9.5 h) | Sunburst Garden ★2: 1 · 10 · **20** (9.9 h) |
-| richest | 1 · 11 · **25** | Bluefall Trench ★3: 1 · 10 · **22** (11.0 h) | Drowned Spires ★3: 1 · 7 · **15** (7.2 h) | Sunburst Isle ★3: 1 · 8 · **19** (9.4 h) |
-| balanced, seed 5 | 1 · 12 · **27** | Frostlight Shelf: 1 · 9 · **21** | Ember Vents: 0 · 8 · **18** | Sunburst Garden: 1 · 9 · **20** |
-| balanced, seed 77 | 1 · 10 · **25** | Frostlight Shelf: 1 · 10 · **21** | Ember Vents: 1 · 9 · **18** | Sunburst Garden: 1 · 10 · **20** |
-| builder owner | 2 · 14 · **32** | Frostlight Shelf: 1 · 13 · **26** | Ember Vents: 1 · 11 · **23** | — |
-| cautious owner | 2 · 16 · **39** | Frostlight Shelf: 1 · 17 · **43** | Ember Vents: 0 · 14 · **33** | — |
+| easiest (lagoon first) | 6, first on rd 2 ($2,500) | 73 | rd 31 | 26% · 26% |
+| richest (trench first) | 5, first on rd 3 ($9,300) | 208 | rd 27 | 25% · 27% |
+| balanced (ice shelf first) | 8, first on rd 3 ($5,700) | 198 | rd 31 | 30% · 33% |
 
-Real days since founding to the Coral Reef · Twilight · Abyss (founding the next colony happens the same day
-as the Abyss). Fame totals at the start of colonies 2/3/4: easiest 30/36/58, balanced 30/64/98, richest 30/117/186.
+Easy regions are cheap and quick but pay little fame and modest branches; the trench-and-ruins route costs more per
+claim, pays almost 3× the fame, and its cheap building (sunken cities) brings the Abyss four days sooner.
 
-Same fame (30), different second region (hours played to the Abyss): lagoon ★1 10.1 h · Kelpwood ★2 10.3 h ·
-Frostlight ★2 10.8 h · Bluefall Trench ★3 11.0 h, against 12.9 h for the Home Reef. The trench then pays 87
-fame (vs 6 for the lagoon), and the colony after it reaches its Abyss in 15 real days.
+Long run (balanced, 120 real days, 59 h played): 15 regions, claimed on rd 3, 16, 20, 24, 33, 48, 50, 53, 58, 64, 65,
+69, 100, 103, 108 (the late ones $230k–$340k, several real days of saving each); the first level-11 branches on rd
+89–92; fame 438. Branch share of profit grows to 39% (service days 321–640) and 59% after service day 640 (about real
+week 10 on), with 15 branches at levels 10–15. New goals keep coming for the whole run: a claim every one to two
+weeks, branch levels 11–15, full regions and fame milestones.
 
-- **Sawtooth:** every colony restarts at day 1 and still takes 2–3 real weeks to its Abyss, but colony 2 is
-  12–22% faster than colony 1 in comparable regions, and colonies 3–4 are 20–40% faster.
-- **Route choice:** harder regions are slower for themselves (more expensive building, fewer or less patient
-  guests) and pay up to 15× more fame, so the richest route is slower once and faster after.
-- **Early game:** Coral Reef in the first 1–2 real days for every colony (0.2–0.8 h played after colony 2);
-  starting cash rises from $1,250 to $4,520 at 30 fame, which is most of the early speed-up.
-- **Solvency:** no colony went bankrupt; a few recovery loans in later colonies (0–3 per 4-colony run) when the
-  bigger starting cash was spent on the town before the first service.
-- **Cautious owner (open question):** its second colony in a ★2 ice shelf was *slower* (43 vs 39 days): it
-  upgrades the restaurant building itself to level 13 (the dearest base price) and the shelf's slower crew
-  hurts a dining-room-first player most. Its third colony is 15% faster. A future knob is a little more
-  starting fame or a smaller crew-speed downside on ★2 regions.
-- **Long run:** bonuses approach their caps (fame 200: tips +22%, building −31%), and regions far out reach
-  difficulty 5+ with build costs up to +40%, so later colonies settle around 2–3 weeks instead of collapsing to days.
+### Tuning notes
+
+- First pass (claim base $4,000 with +12% per claim, branch `45 × level^1.2`, fame branch cap 40%): the first claim
+  waited until rd 15–19 because the owner spent every spare dollar at home; once claims started, 20 regions were taken
+  by rd 56, branches made 70–86% of late profit and the Abyss slipped out of reach.
+- Claim base $4,000 → **$2,500** (ring 1 affordable right after the Reef); growth per claim +12% linear → **×1.25
+  compounding** (claims stay goals instead of a flood); ring factor 2.6 → **2.2**.
+- Branch income `45 × level^1.2` → **`30 × level`**, build cost $1,500 → **$1,200**, fame branch cap 40% → **25%**: late
+  branch share from 69–86% to a third at week 8 (59% from week 10).
+- Regions whose downside is lower branch income (sunken city, lagoon) no longer get the per-difficulty income bonus,
+  so the downside stays visible far out.
+
+### Open questions
+
+- **Late game:** after about 10 real weeks branches out-earn the flagship (59%). Fine as a long-term reward, but a
+  gentler branch curve at levels 11–15 or a per-branch upkeep are the knobs if the flagship should stay ahead.
+- **Cautious owner:** its Abyss lands on rd 48–51 (one seed past week 8). It upgrades the restaurant building itself
+  and claims rarely; a longer pause between claims would pull it back.
+- **Names:** generated names never repeat a first-ring name, but two far regions can share one (e.g. two "Glacier
+  Ledge"); the panel shows the biome and stars next to each name.

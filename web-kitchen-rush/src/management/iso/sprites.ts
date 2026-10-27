@@ -27,7 +27,7 @@ const building: SpriteSlot = { w: 80, h: 96, ax: 40, ay: 84 };
 const mealSlots = Object.fromEntries(DISH_IDS.map(dish => [`meal.${dish}`, meal])) as Record<`meal.${DishId}`, SpriteSlot>;
 /** Upgrade looks 2 and 3 for every furniture kind; they share the look-1 frame until art arrives. */
 const furnitureLooks = (kind: Exclude<FurnitureKind, 'table'>, slot: SpriteSlot) => ({ [`furniture.${kind}`]: slot, [`furniture.${kind}.2`]: slot, [`furniture.${kind}.3`]: slot }) as Record<`furniture.${typeof kind}` | `furniture.${typeof kind}.${2 | 3}`, SpriteSlot>;
-const buildingSlots = Object.fromEntries((['restaurant', 'kelpFarm', 'fishery', 'homes', 'garden', 'workshop'] as const).flatMap(kind => [1, 2, 3].map(look => [`building.${kind}.${look}`, building]))) as Record<`building.${BuildingKind}.${1 | 2 | 3}`, SpriteSlot>;
+const buildingSlots = Object.fromEntries((['restaurant', 'kelpFarm', 'fishery', 'homes', 'garden', 'workshop', 'branch'] as const).flatMap(kind => [1, 2, 3].map(look => [`building.${kind}.${look}`, building]))) as Record<`building.${BuildingKind}.${1 | 2 | 3}`, SpriteSlot>;
 
 export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   'furniture.table': { src: '/art/furniture/table-1.webp', w: 79.5, h: 67.5, ax: 39.8, ay: 64.1, surface: 41 },

@@ -2,14 +2,18 @@ import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObje
 import type { ScreenPoint } from './projection';
 
 const DRAG_THRESHOLD = 6;
+/** Allowed pan offsets in CSS pixels. */
+export interface PanLimits { x0: number; x1: number; y0: number; y1: number; }
 
 /**
  * Drag to look around, tap to act. A press that moves more than a few pixels pans the view
- * (clamped by zoom) and never counts as a tap. `viewKey` changes reset the pan.
+ * and never counts as a tap. The pan is clamped by zoom, or by `limits` (e.g. the extent of a growing world).
+ * `viewKey` changes reset the pan.
  */
-export function usePanTap(host: RefObject<HTMLDivElement | null>, zoom: number, viewKey: number, onTap: (point: ScreenPoint) => void) {
+export function usePanTap(host: RefObject<HTMLDivElement | null>, zoom: number, viewKey: number, onTap: (point: ScreenPoint) => void, limits?: () => PanLimits | null) {
   const pan = useRef<ScreenPoint>({ x: 0, y: 0 }), drag = useRef<{ id: number; x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
   const tap = useRef(onTap); tap.current = onTap;
+  const bounds = useRef(limits); bounds.current = limits;
   useEffect(() => { pan.current = { x: 0, y: 0 }; }, [viewKey]);
   const local = (event: ReactPointerEvent) => { const rect = host.current!.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top }; };
   const handlers = {
@@ -22,7 +26,8 @@ export function usePanTap(host: RefObject<HTMLDivElement | null>, zoom: number, 
       const p = local(event), dx = p.x - d.x, dy = p.y - d.y;
       if (!d.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       d.moved = true; const rect = host.current!.getBoundingClientRect(), limitX = rect.width * .5 * zoom, limitY = rect.height * .5 * zoom;
-      pan.current = { x: Math.max(-limitX, Math.min(limitX, d.panX + dx)), y: Math.max(-limitY, Math.min(limitY, d.panY + dy)) };
+      const l = bounds.current?.() ?? { x0: -limitX, x1: limitX, y0: -limitY, y1: limitY };
+      pan.current = { x: Math.max(l.x0, Math.min(l.x1, d.panX + dx)), y: Math.max(l.y0, Math.min(l.y1, d.panY + dy)) };
     },
     onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => { const d = drag.current; drag.current = null; if (d && !d.moved) tap.current(local(event)); },
     onPointerCancel: () => { drag.current = null; },

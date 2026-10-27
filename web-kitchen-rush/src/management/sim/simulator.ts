@@ -8,8 +8,9 @@
 import { GOALS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
 import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
-import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, busyBuilders, neighbours, plotLockReason, type BuildingKind, type Plot } from '../town';
-import { currentRegion, isFoundable, mapBounds, regionAt, regionId, type Region } from '../ocean';
+import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, activeLevel, branchIn, busyBuilders, neighbours, plotLockReason, plotsIn, type BuildingKind, type Plot } from '../town';
+import { claimGate, claimableRegions, regionById, type BoostKind, type Region } from '../ocean';
+import { inHome, regionCenter } from '../world';
 import { ZONE_IDS, ZONES, hasZone, zoneError, zoneRequirements, type ZoneId } from '../zones';
 
 export type StrategyName = 'cautious' | 'builder' | 'balanced';
@@ -27,21 +28,21 @@ export interface SimOptions {
   charms?: boolean;
   /** Stop once this many service days are complete (for short test horizons). */
   maxServiceDays?: number;
-  /** Play this many colonies in a row: found the next one as soon as the current colony reaches the Abyss. */
-  colonies?: number;
-  /** How the owner picks the next region among the foundable ones. */
+  /** Claim ocean regions, build branches and specialised buildings there (default true). */
+  regions?: boolean;
+  /** How the owner picks the next region among the claimable ones. */
   region?: RegionStrategy;
-  /** Fixed region ids to found, in order (overrides `region` while they last). */
+  /** Fixed region ids to claim, in order (overrides `region` while they last). */
   route?: string[];
 }
 export type RegionStrategy = 'easiest' | 'richest' | 'balanced';
 export const REGION_STRATEGIES: RegionStrategy[] = ['easiest', 'richest', 'balanced'];
-/** One colony's pacing, in real days since the run started (and since the colony was founded). */
-export interface ColonyRun {
-  index: number; region: string; name: string; biome: string; difficulty: number; fame: number; totalFame: number;
-  start: ZoneTiming; unlockable: Partial<Record<ZoneId, ZoneTiming>>; unlocked: Partial<Record<ZoneId, ZoneTiming>>; founded?: ZoneTiming;
+/** One claimed region's pacing: when it was claimed and when its branch reached levels 1, 6 and 11. */
+export interface ClaimRun {
+  index: number; region: string; name: string; biome: string; ring: number; difficulty: number; price: number;
+  claimed: ZoneTiming; branch1?: ZoneTiming; branch6?: ZoneTiming; branch11?: ZoneTiming;
 }
-export interface DayRow { colony: number; day: number; realDay: number; activeHours: number; cash: number; profit: number; bonus: number; served: number; missed: number; reputation: number; buildings: number; }
+export interface DayRow { day: number; realDay: number; activeHours: number; cash: number; profit: number; bonus: number; branch: number; served: number; missed: number; reputation: number; buildings: number; fame: number; regions: number; }
 export interface ZoneTiming { day: number; realDay: number; activeHours: number; }
 export interface SimResult {
   strategy: StrategyName; seed: number; rows: DayRow[];
@@ -52,16 +53,17 @@ export interface SimResult {
   pearlsEarned: number; charmsEarned: { current: number; tide: number }; charmsUsed: { current: number; tide: number };
   buildings: { kind: BuildingKind; level: number }[]; furniture: { kind: FurnitureKind; level: number }[]; staff: number; trainedLevels: number;
   activeHours: number; serviceDays: number; spent: Record<string, number>;
-  colonies: ColonyRun[];
+  claims: ClaimRun[]; fame: number;
 }
 
-interface Params { reserveDays: number; townFirst: boolean; smartAdjacency: boolean; restaurantFirst: boolean; extraBuildings: number; decorTarget: number; plan: BuildingKind[]; }
+/** `wave`: every claimed region's branch must reach this level before the next region is claimed. `special`: specialised buildings per region. */
+interface Params { reserveDays: number; townFirst: boolean; smartAdjacency: boolean; restaurantFirst: boolean; extraBuildings: number; decorTarget: number; plan: BuildingKind[]; wave: number; special: number; /** Real days between claims while a depth zone is still ahead (sooner only with spare cash). */ pause: number; }
 const PARAMS: Record<StrategyName, Params> = {
   // Keeps several days of costs in hand, improves the dining room and the restaurant building first.
-  cautious: { reserveDays: 4, townFirst: false, smartAdjacency: false, restaurantFirst: true, extraBuildings: 0, decorTarget: 70, plan: ['garden', 'fishery', 'kelpFarm', 'homes', 'workshop', 'garden', 'fishery', 'kelpFarm', 'garden', 'homes', 'garden', 'workshop', 'fishery', 'kelpFarm'] },
+  cautious: { reserveDays: 4, townFirst: false, smartAdjacency: false, restaurantFirst: true, extraBuildings: 0, decorTarget: 70, wave: 7, special: 1, pause: 7, plan: ['garden', 'fishery', 'kelpFarm', 'homes', 'workshop', 'garden', 'fishery', 'kelpFarm', 'garden', 'homes', 'garden', 'workshop', 'fishery', 'kelpFarm'] },
   // Spends nearly everything on the town; producers and gardens touch the restaurant.
-  builder: { reserveDays: 1.5, townFirst: true, smartAdjacency: true, restaurantFirst: false, extraBuildings: 3, decorTarget: 50, plan: ['kelpFarm', 'fishery', 'garden', 'garden', 'homes', 'workshop', 'garden', 'homes', 'fishery', 'kelpFarm', 'garden', 'garden', 'workshop', 'homes', 'garden', 'fishery'] },
-  balanced: { reserveDays: 2, townFirst: false, smartAdjacency: true, restaurantFirst: false, extraBuildings: 1, decorTarget: 60, plan: ['garden', 'fishery', 'kelpFarm', 'garden', 'homes', 'workshop', 'garden', 'fishery', 'garden', 'kelpFarm', 'homes', 'garden', 'workshop', 'garden'] },
+  builder: { reserveDays: 1.5, townFirst: true, smartAdjacency: true, restaurantFirst: false, extraBuildings: 3, decorTarget: 50, wave: 4, special: 3, pause: 3, plan: ['kelpFarm', 'fishery', 'garden', 'garden', 'homes', 'workshop', 'garden', 'homes', 'fishery', 'kelpFarm', 'garden', 'garden', 'workshop', 'homes', 'garden', 'fishery'] },
+  balanced: { reserveDays: 2, townFirst: false, smartAdjacency: true, restaurantFirst: false, extraBuildings: 1, decorTarget: 60, wave: 6, special: 2, pause: 4, plan: ['garden', 'fishery', 'kelpFarm', 'garden', 'homes', 'workshop', 'garden', 'fishery', 'garden', 'kelpFarm', 'homes', 'garden', 'workshop', 'garden'] },
 };
 
 const C = Math.floor(TOWN_SIZE / 2);
@@ -88,17 +90,13 @@ export class Simulation {
   private lastCharms = { current: 0, tide: 0 };
   private lastPearls = 0;
   private lastDay = 1;
-  private colony!: ColonyRun;
 
   constructor(readonly options: SimOptions) {
     this.engine = new RestaurantEngine(undefined, () => this.now);
     const seed = options.seed ?? 91273;
     this.engine.state.seed = seed;
     this.p = PARAMS[options.strategy];
-    this.result = { strategy: options.strategy, seed, rows: [], unlockable: {}, unlocked: {}, requirements: {}, reserveBlocks: 0, loans: 0, bankruptDays: 0, minCash: this.s.cash, finalCash: 0, pearlsEarned: 0, charmsEarned: { current: 0, tide: 0 }, charmsUsed: { current: 0, tide: 0 }, buildings: [], furniture: [], staff: 0, trainedLevels: 0, activeHours: 0, serviceDays: 0, spent: {}, colonies: [] };
-    this.startColony();
-    // Colony 1's timings are also the run's headline timings.
-    this.result.unlockable = this.colony.unlockable; this.result.unlocked = this.colony.unlocked;
+    this.result = { strategy: options.strategy, seed, rows: [], unlockable: {}, unlocked: {}, requirements: {}, reserveBlocks: 0, loans: 0, bankruptDays: 0, minCash: this.s.cash, finalCash: 0, pearlsEarned: 0, charmsEarned: { current: 0, tide: 0 }, charmsUsed: { current: 0, tide: 0 }, buildings: [], furniture: [], staff: 0, trainedLevels: 0, activeHours: 0, serviceDays: 0, spent: {}, claims: [], fame: 0 };
     this.lastCharms = { ...this.s.town.charms }; this.lastPearls = this.s.town.pearls;
   }
   get s(): RestaurantState { return this.engine.state; }
@@ -129,7 +127,6 @@ export class Simulation {
         else if (this.s.phase === 'service' && !this.checkedToday && this.s.elapsed >= DAY_LENGTH - .5) { this.checkedToday = true; if (this.wantsPlanning()) { this.renovating = true; this.engine.closeEarly(); } }
         if (i % 100 === 0) this.act();
         if (this.options.maxServiceDays && this.result.serviceDays >= this.options.maxServiceDays) break outer;
-        if (this.done) break outer;
       }
       if (this.s.phase === 'service') this.engine.pause(true);
       this.engine.suspend();
@@ -172,7 +169,7 @@ export class Simulation {
     this.lastDay = this.s.day;
     this.pressure.push(this.live); this.live = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 };
     const report = this.s.history[this.s.history.length - 1];
-    this.result.rows.push({ colony: this.colony.index, day: report.day, realDay: this.realDay, activeHours: +(this.activeSeconds / 3600).toFixed(2), cash: Math.round(this.s.cash), profit: Math.round(report.profit), bonus: report.challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0), served: report.served, missed: report.missed, reputation: this.s.reputation, buildings: this.builtCount() });
+    this.result.rows.push({ day: report.day, realDay: this.realDay, activeHours: +(this.activeSeconds / 3600).toFixed(2), cash: Math.round(this.s.cash), profit: Math.round(report.profit), bonus: report.challenges.reduce((sum, c) => sum + (c.rewarded ? c.reward : 0), 0), branch: report.branch, served: report.served, missed: report.missed, reputation: this.s.reputation, buildings: this.builtCount(), fame: this.s.ocean.fame, regions: this.s.ocean.regions.length });
     this.result.serviceDays++;
     if (this.s.phase === 'planning' && !this.renovating) this.result.reserveBlocks++;
     this.renovating = false; this.checkedToday = false;
@@ -182,25 +179,27 @@ export class Simulation {
 
   private reserve(): number { return this.engine.operatingCost() * this.p.reserveDays + 30; }
   private budget(): number { return this.s.cash - this.reserve(); }
-  private builtCount(): number { return this.s.town.plots.filter(p => p.building && p.building !== 'restaurant' && p.job?.kind !== 'build').length; }
+  /** Finished buildings in the home town (what depth zones count). */
+  private builtCount(): number { return this.homePlots().filter(p => p.building && p.building !== 'restaurant' && p.job?.kind !== 'build').length; }
+  private homePlots(): Plot[] { return this.s.town.plots.filter(inHome); }
   private nextZone(): ZoneId | null { return ZONE_IDS.find(id => !hasZone(this.s.town, id)) ?? null; }
 
   /** The owner's routine: claim, unlock zones, run the town, then (in planning) the dining room. */
   private act(): void {
     const e = this.engine, s = this.s;
     for (const goal of GOALS) if (!s.claimed.includes(goal.id) && goal.value(s) >= goal.target) e.claim(goal.id);
-    this.maybeFound();
-    for (const id of ZONE_IDS) if (!hasZone(s.town, id) && !this.colony.unlockable[id] && zoneError(s, id, e.zonePrice(id)) === null) this.colony.unlockable[id] = this.timing();
+    for (const id of ZONE_IDS) if (!hasZone(s.town, id) && !this.result.unlockable[id] && zoneError(s, id, e.zonePrice(id)) === null) this.result.unlockable[id] = this.timing();
     const next = this.nextZone();
     if (next) for (const [i, req] of zoneRequirements(s, next, e.zonePrice(next)).entries()) {
-      const key = `${this.colony.index > 1 ? `c${this.colony.index}:` : ''}${next}:${req.label.split(' · ')[0].replace(/^\$[\d,]+$/, 'price')}`;
+      const key = `${next}:${req.label.split(' · ')[0].replace(/^\$[\d,]+$/, 'price')}`;
       if (req.met && !this.result.requirements[key]) this.result.requirements[key] = { ...this.timing(), index: i };
     }
     const zone = this.nextZone();
     if (zone && zoneError(s, zone, e.zonePrice(zone)) === null && s.cash - e.zonePrice(zone) >= this.engine.operatingCost() + 30) {
       const price = e.zonePrice(zone);
-      if (e.unlockZone(zone) === null) { this.colony.unlocked[zone] = this.timing(); this.spend('zones', price); if (zone === 'abyss') this.maybeFound(); }
+      if (e.unlockZone(zone) === null) { this.result.unlocked[zone] = this.timing(); this.spend('zones', price); }
     }
+    if (this.options.regions !== false) this.worldTurn();
     if (s.town.pearls >= SHOP.builder.pearls && s.town.builders < MAX_BUILDERS && this.options.strategy !== 'cautious') e.buy('builder');
     if (this.p.townFirst || s.phase !== 'planning') this.townTurn();
     if (s.phase === 'planning') {
@@ -269,7 +268,7 @@ export class Simulation {
     let grew = false;
     const failed = new Set<string>();
     for (let guard = 0; guard < 30; guard++) {
-      const saving = this.savingFor();
+      const saving = this.savingFor() + this.claimSaving();
       const wish = this.planningWishes().find(w => (w.cost === 0 || w.cost <= this.budget() - (w.grow ? 0 : saving)) && !(grew && w.grow) && !failed.has(`${w.tag}:${w.cost}`));
       if (!wish) return;
       const before = this.s.cash;
@@ -281,10 +280,24 @@ export class Simulation {
   /** Cash set aside for the next zone once only its price (and reputation) is missing. */
   private savingFor(): number {
     const zone = this.nextZone(); if (!zone) return 0;
-    const info = ZONES[zone], best = Math.max(...this.s.town.plots.filter(p => p.building && p.job?.kind !== 'build').map(p => p.level));
+    const info = ZONES[zone], best = Math.max(...this.homePlots().filter(p => p.building && p.job?.kind !== 'build').map(p => p.level));
     const ready = this.builtCount() >= info.buildings && best >= info.topLevel;
     return ready ? this.engine.zonePrice(zone) : 0;
   }
+  /** Cash set aside for the next region once every branch is built up and its depth gate is open (zones come first). */
+  private claimSaving(): number {
+    if (this.options.regions === false || this.savingFor() || !this.claimDue()) return 0;
+    const target = this.waveReady() ? this.nextRegion() : null, price = target ? this.engine.claimPrice(target.id) : 0;
+    // Nobody hoards for a claim that would take more than about four real days of profit.
+    const recent = this.result.rows.slice(-30), perDay = recent.reduce((sum, r) => sum + r.profit + r.bonus, 0) / Math.max(1, recent.length);
+    return price <= perDay * 40 ? price : 0;
+  }
+  /** The owner sets money aside for a claim: the first one, after the last depth zone, or once a pause has passed since the last claim. */
+  private claimDue(): boolean {
+    const last = this.result.claims[this.result.claims.length - 1];
+    return !last || !this.nextZone() || this.realDay - last.claimed.realDay >= this.p.pause;
+  }
+  private waveReady(): boolean { return this.s.ocean.regions.every(id => { const b = branchIn(this.s.town, id); return b && activeLevel(b) >= this.p.wave; }); }
 
   private findSpot(kind: FurnitureKind): Furniture | null { return findSpot(this.s, kind); }
   private buyFurniture(kind: FurnitureKind): string | null { return buyFurniture(this.engine, kind); }
@@ -297,7 +310,7 @@ export class Simulation {
     const e = this.engine, s = this.s, town = s.town;
     if (busyBuilders(town) >= town.builders) return false;
     const zone = this.nextZone(), info = zone ? ZONES[zone] : null, saving = this.savingFor();
-    const budget = this.budget() - saving;
+    const budget = this.budget() - saving - this.claimSaving();
     // Cautious owners hold town spending until the dining room is in shape.
     if (this.p.restaurantFirst && this.planningWishes().some(w => w.tag !== 'furnitureUpgrades' && w.tag !== 'training' && w.cost > 0) && s.day > 2) return false;
     const built = this.builtCount() + town.plots.filter(p => p.job?.kind === 'build').length;
@@ -310,31 +323,37 @@ export class Simulation {
     // Upgrade towards the zone's level requirement, then anything with spare cash.
     const plots = town.plots.filter(p => p.building && !p.job && p.level < MAX_LEVEL);
     if (!plots.length) return false;
-    const best = Math.max(...town.plots.filter(p => p.building).map(p => p.level));
+    const best = Math.max(...this.homePlots().filter(p => p.building).map(p => p.level));
     let target: Plot | undefined;
     if (info && best < info.topLevel) {
-      const leaders = this.p.restaurantFirst ? plots.filter(p => p.building === 'restaurant') : plots.filter(p => p.level === best || p.level === best - 1);
-      target = (leaders.length ? leaders : plots).sort((a, b) => e.upgradePrice(a.building!, a.level + 1) - e.upgradePrice(b.building!, b.level + 1))[0];
+      const home = plots.filter(inHome), leaders = this.p.restaurantFirst ? home.filter(p => p.building === 'restaurant') : home.filter(p => p.level === best || p.level === best - 1);
+      target = (leaders.length ? leaders : home.length ? home : plots).sort((a, b) => this.price(a) - this.price(b))[0];
+      // A branch below the wave level and three levels behind the leader is next (the owner saves for it); so is a cheap one while the leader is out of reach.
+      const branch = plots.filter(p => p.building === 'branch').sort((a, b) => this.price(a) - this.price(b))[0];
+      if (target && branch && (branch.level < this.p.wave && branch.level + 2 < best || this.price(target) > budget && this.price(branch) <= budget)) target = branch;
     } else {
       // More guests only help while the dining room keeps up: hold arrival upgrades after a rough day.
       const last = s.history[s.history.length - 1], overrun = last && last.missed > (last.served + last.missed) * .12;
       target = plots.filter(p => !(overrun && (p.building === 'garden' || p.building === 'restaurant'))).sort((a, b) => this.upgradeValue(a) - this.upgradeValue(b))[0];
-      if (!target || e.upgradePrice(target.building!, target.level + 1) > budget * (zone ? .5 : 1)) return false;
+      if (!target || this.price(target) > budget * (zone ? .5 : 1)) return false;
     }
-    const cost = e.upgradePrice(target.building!, target.level + 1);
+    const cost = this.price(target);
     if (cost > budget) return false;
     if (e.upgrade(target.x, target.z) !== null) return false;
     this.spend('upgrades', cost); return true;
   }
-  /** Lower is better: price, with workshops and spare homes ranked behind earning buildings. */
+  /** The next upgrade's price on a plot (its region applied). */
+  private price(p: Plot): number { return this.engine.upgradePrice(p.building!, p.level + 1, p.x, p.z); }
+  /** Lower is better: price, with workshops and spare homes ranked behind earning buildings; branches by price per extra dollar a day. */
   private upgradeValue(p: Plot): number {
+    if (p.building === 'branch') { const gain = this.engine.branchIncomeAt(p.x, p.z, p.level + 1) - this.engine.branchIncomeAt(p.x, p.z, p.level); return this.price(p) * Math.min(3, 25 / Math.max(1, gain)); }
     const weight = p.building === 'garden' || p.building === 'restaurant' ? 1 : p.building === 'workshop' ? 2 : p.building === 'homes' ? 3 : 1.5;
-    return this.engine.upgradePrice(p.building!, p.level + 1) * weight * (this.p.restaurantFirst && p.building === 'restaurant' ? .5 : 1);
+    return this.price(p) * weight * (this.p.restaurantFirst && p.building === 'restaurant' ? .5 : 1);
   }
   private buildKind(kind: BuildingKind, budget: number): boolean {
-    const e = this.engine, town = this.s.town;
-    const owned = town.plots.filter(p => p.owned && !p.building).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
-    const fresh = town.plots.filter(p => plotLockReason(town, p) === null).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
+    const e = this.engine, town = this.s.town, home = this.homePlots();
+    const owned = home.filter(p => p.owned && !p.building).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
+    const fresh = home.filter(p => plotLockReason(town, p) === null).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
     let plot = owned;
     const price = e.buildPrice(kind);
     if (!plot || (fresh && this.plotScore(fresh, kind) > this.plotScore(plot, kind) + 5 && budget >= e.plotPrice() + price * 2)) {
@@ -359,25 +378,45 @@ export class Simulation {
     if ((kind === 'homes' || kind === 'workshop') && near('restaurant')) score -= 8;
     return score;
   }
-  // ---- Colonies ----
-  private done = false;
-  private startColony(): void {
-    const r = currentRegion(this.s.ocean);
-    this.colony = { index: this.s.ocean.colonies.length, region: r.id, name: r.name, biome: r.biome, difficulty: r.difficulty, fame: r.fame, totalFame: this.s.ocean.fame, start: this.timing(), unlockable: {}, unlocked: {} };
-    this.result.colonies.push(this.colony);
+  // ---- The world: claim regions in waves, open branches, build what each region is good for ----
+  /** Claim the next region once every branch is built up; then a branch in each region, then its specialised buildings. */
+  private worldTurn(): void {
+    const e = this.engine, s = this.s, town = s.town, budget = this.budget() - this.savingFor();
+    this.trackClaims();
+    const target = this.waveReady() ? this.nextRegion() : null;
+    if (target && e.claimError(target.id) === null && e.claimPrice(target.id) <= budget * (this.claimDue() ? 1 : .3)) {
+      const price = e.claimPrice(target.id);
+      if (e.claimRegion(target.id) === null) { this.spend('regions', price); this.result.claims.push({ index: this.result.claims.length + 1, region: target.id, name: target.name, biome: target.biome, ring: target.ring, difficulty: target.difficulty, price, claimed: this.timing() }); }
+    }
+    for (const id of s.ocean.regions) {
+      if (busyBuilders(town) >= town.builders) return;
+      const region = regionById(id)!, centre = regionCenter(region.x, region.y), branch = branchIn(town, id), room = this.budget() - this.savingFor();
+      if (!branch) { const price = e.buildPrice('branch', centre.x, centre.z); if (price <= room && e.build(centre.x, centre.z, 'branch') === null) this.spend('branches', price); continue; }
+      const kind = (Object.keys(region.modifiers.boost)[0] as BoostKind | undefined) ?? (region.biome === 'lagoon' ? 'garden' : null);
+      if (!kind || activeLevel(branch) < 2) continue;
+      const plots = plotsIn(town, id), have = plots.filter(p => p.building === kind).length;
+      if (have >= this.p.special) continue;
+      const spot = plots.filter(p => !p.building && (p.owned || plotLockReason(town, p) === null) && neighbours(town, p).some(n => n.building === 'branch' || n.building === kind)).sort((a, b) => Number(b.owned) - Number(a.owned))[0];
+      if (!spot) continue;
+      const plotCost = spot.owned ? 0 : e.plotPrice(spot.x, spot.z), price = e.buildPrice(kind, spot.x, spot.z);
+      if (plotCost + price * 2 > room) continue;
+      if (!spot.owned) { if (e.unlockPlot(spot.x, spot.z) !== null) continue; this.spend('plots', plotCost); }
+      if (e.build(spot.x, spot.z, kind) === null) this.spend('buildings', price);
+    }
   }
-  /** After the Abyss: found the next colony (or stop once the requested number of colonies reached it). */
-  private maybeFound(): void {
-    if (!this.options.colonies || !hasZone(this.s.town, 'abyss') || this.done) return;
-    if (this.colony.index >= this.options.colonies) { this.done = true; return; }
-    const target = this.options.route?.[this.colony.index - 1] ?? pickRegion(this.s, this.options.region ?? 'balanced').id;
-    const founded = this.timing();
-    if (this.engine.foundColony(target) !== null) { this.done = true; return; }
-    this.colony.founded = founded;
-    this.lastDay = 1; this.pressure = []; this.live = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 }; this.lastMissed = 0;
-    this.stuckDays.clear(); this.checkedToday = false; this.renovating = false;
-    this.lastCharms = { ...this.s.town.charms }; this.lastPearls = this.s.town.pearls;
-    this.startColony();
+  /** The owner's region choice among regions whose depth gate is open. */
+  private nextRegion(): Region | null {
+    const fixed = this.options.route?.find(id => !this.s.ocean.regions.includes(id));
+    if (fixed) return regionById(fixed);
+    return pickRegion(this.s, this.options.region ?? 'balanced');
+  }
+  private trackClaims(): void {
+    for (const c of this.result.claims) {
+      const b = branchIn(this.s.town, c.region), level = b ? activeLevel(b) : 0;
+      if (level >= 1 && !c.branch1) c.branch1 = this.timing();
+      if (level >= 6 && !c.branch6) c.branch6 = this.timing();
+      if (level >= 11 && !c.branch11) c.branch11 = this.timing();
+    }
   }
   private useCharms(): void {
     this.trackRewards();
@@ -399,16 +438,17 @@ export class Simulation {
     r.buildings = s.town.plots.filter(p => p.building).map(p => ({ kind: p.building!, level: p.level }));
     r.furniture = s.furniture.map(f => ({ kind: f.kind, level: f.level }));
     r.staff = s.staff.length; r.trainedLevels = s.staff.reduce((sum, m) => sum + m.level - 1, 0);
+    this.trackClaims(); r.fame = s.ocean.fame;
     return r;
   }
 }
 
 export const simulate = (options: SimOptions): SimResult => new Simulation(options).run();
 
-/** The owner's region choice among foundable regions: lowest difficulty, most fame, or most fame among the easier half. */
-export function pickRegion(s: RestaurantState, strategy: RegionStrategy): Region {
-  const b = mapBounds(s.ocean), options: Region[] = [];
-  for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) if (isFoundable(s.ocean, regionId(x, y))) options.push(regionAt(x, y));
+/** The owner's region choice among claimable regions whose depth gate is reached: lowest difficulty, most fame, or most fame among the easier half. */
+export function pickRegion(s: RestaurantState, strategy: RegionStrategy): Region | null {
+  const options = claimableRegions(s.ocean).filter(r => hasZone(s.town, claimGate(r.ring)));
+  if (!options.length) return null;
   const byFame = (a: Region, c: Region) => c.fame - a.fame || a.difficulty - c.difficulty || a.id.localeCompare(c.id);
   if (strategy === 'richest') return options.sort(byFame)[0];
   const easy = [...options].sort((a, c) => a.difficulty - c.difficulty || byFame(a, c));
@@ -418,8 +458,8 @@ export function pickRegion(s: RestaurantState, strategy: RegionStrategy): Region
 }
 
 /** Average profit (including challenge bonuses) over service days [from, to]. */
-export function averageProfit(result: SimResult, from: number, to: number, colony = 1): number {
-  const rows = result.rows.filter(r => r.colony === colony && r.day >= from && r.day <= to);
+export function averageProfit(result: SimResult, from: number, to: number): number {
+  const rows = result.rows.filter(r => r.day >= from && r.day <= to);
   return rows.length ? Math.round(rows.reduce((sum, r) => sum + r.profit + r.bonus, 0) / rows.length) : 0;
 }
 

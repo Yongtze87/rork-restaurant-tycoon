@@ -28,6 +28,13 @@ describe('balance pacing (simulator)', () => {
     expect(builder.unlocked.reef).toBeDefined();
     expect(balanced.unlocked.twilight).toBeUndefined();
   });
+  it('claims the first ocean region soon after the Coral Reef, while the flagship stays the main earner', () => {
+    const first = balanced.claims[0];
+    expect(first).toBeDefined(); expect(first.claimed.realDay).toBeLessThanOrEqual(4); expect(first.claimed.day).toBeGreaterThanOrEqual(balanced.unlocked.reef!.day);
+    expect(first.branch1).toBeDefined();
+    const branch = balanced.rows.reduce((sum, r) => sum + r.branch, 0), profit = balanced.rows.reduce((sum, r) => sum + r.profit + r.bonus, 0);
+    expect(branch).toBeGreaterThan(0); expect(branch / profit).toBeLessThan(.15);
+  });
   it('grows profit per day as the owner reinvests', () => {
     expect(averageProfit(balanced, 21, 30)).toBeGreaterThan(averageProfit(balanced, 1, 5) * 1.2);
     expect(builder.buildings.length).toBeGreaterThanOrEqual(5);

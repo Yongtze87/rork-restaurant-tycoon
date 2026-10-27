@@ -1,81 +1,91 @@
 import { z } from 'zod';
-import type { Validated } from './town';
+import type { BuildingKind, Validated } from './town';
+import type { ZoneId } from './zones';
+import { HOME_ID, REGION_ID, parseRegionId, regionId, ring } from './world';
+export { HOME_ID, REGION_ID, parseRegionId, regionId, ring } from './world';
 
 /**
- * The Ocean: an endless grid of regions around the Home Reef at (0, 0). Each colony lives in one region.
- * The first ring is hand-designed; every other region is generated from its coordinates by a pure hash,
- * so the map is the same every time and never runs out. Balance for regions and fame lives here.
- * Pure: the engine applies `colonyEffects` the same way it applies tides and town effects.
+ * The Ocean: one ever-growing world. The Home Reef town is region (0, 0); every other region is a block
+ * of plots around it on the same plot grid (see `world.ts`). The first ring is hand-designed; the rest is
+ * generated from its coordinates by a pure hash, so the world is the same every time and never runs out.
+ * A region's biome changes buildings placed *in that region*; fame from mastering regions is permanent.
+ * Pure: the engine charges, records and applies everything here. Balance for regions and fame lives here.
  */
 export const BIOME_IDS = ['home', 'kelp', 'vents', 'ice', 'atoll', 'sunken', 'trench', 'lagoon'] as const;
 export type BiomeId = typeof BIOME_IDS[number];
+export type BoostKind = Extract<BuildingKind, 'kelpFarm' | 'fishery' | 'garden' | 'workshop'>;
 
-/** Multipliers, 1 = neutral. Arrival, patience, crew speed and tips above 1 help; costs below 1 help. */
-export interface RegionModifiers { arrival: number; patience: number; crewSpeed: number; tips: number; kelpCost: number; fishCost: number; buildCost: number; }
-export type ModifierKey = keyof RegionModifiers;
-export const NEUTRAL_MODIFIERS: RegionModifiers = { arrival: 1, patience: 1, crewSpeed: 1, tips: 1, kelpCost: 1, fishCost: 1, buildCost: 1 };
-/** For costs a smaller multiplier is the good direction. */
-const LOWER_IS_BETTER: Record<ModifierKey, boolean> = { arrival: false, patience: false, crewSpeed: false, tips: false, kelpCost: true, fishCost: true, buildCost: true };
+/** What a region does to its own plots, buildings and branch. 1 = neutral; costs and times below 1 help. */
+export interface RegionModifiers {
+  /** Plots, buildings and upgrades in this region. */ buildCost: number;
+  /** Construction time in this region. */ buildTime: number;
+  /** The branch restaurant's daily earnings. */ branchIncome: number;
+  /** Strength of a building kind's effect when it stands in this region (e.g. 1.5 = 50% stronger). */ boost: Partial<Record<BoostKind, number>>;
+}
+type Scalar = Exclude<keyof RegionModifiers, 'boost'>;
+export const NEUTRAL_MODIFIERS: RegionModifiers = { buildCost: 1, buildTime: 1, branchIncome: 1, boost: {} };
+const LOWER_IS_BETTER: Record<Scalar, boolean> = { buildCost: true, buildTime: true, branchIncome: false };
 
 export interface BiomeInfo {
-  name: string; description: string;
-  /** Good effects at 1★, as signed changes in the helpful direction (0.2 on kelpCost = kelp 20% cheaper). */
-  up: Partial<RegionModifiers>;
+  name: string; description: string; /** What to build here, in plain words. */ goodFor: string;
+  /** Good effects at 1★, as changes in the helpful direction (0.15 on buildCost = building 15% cheaper); a little stronger per star. */
+  up: Partial<Record<Scalar, number>>; boost?: { kind: BoostKind; amount: number };
   /** Bad effects at difficulty 1, scaled up with difficulty (see `severity`). */
-  down: Partial<RegionModifiers>;
+  down: Partial<Record<Scalar, number>>;
   /** Fame multiplier and generation weight; `shift` moves difficulty for this biome. */
   fame: number; weight: number; shift: number;
   /** Words for generated names. */
   words: [string[], string[]];
 }
 export const BIOMES: Record<BiomeId, BiomeInfo> = {
-  home: { name: 'Home reef', description: 'Where your story began.', up: {}, down: {}, fame: 2.5, weight: 0, shift: 0, words: [['Home'], ['Reef']] },
-  kelp: { name: 'Kelp forest', description: 'Tall swaying kelp. Cheap greens, but crew squeeze through the stalks.', up: { kelpCost: .2 }, down: { crewSpeed: .06 }, fame: 1, weight: 3, shift: 0, words: [['Swaying', 'Green', 'Tangle', 'Mossy', 'Whisper'], ['Hollow', 'Wood', 'Stalks', 'Thicket', 'Glade']] },
-  vents: { name: 'Volcanic vents', description: 'Warm smoking vents. Fish gather in the heat, guests get restless.', up: { fishCost: .2 }, down: { patience: .08 }, fame: 1, weight: 3, shift: 0, words: [['Ember', 'Cinder', 'Smoke', 'Ash', 'Sulphur'], ['Vents', 'Chimneys', 'Field', 'Rise', 'Furnace']] },
-  ice: { name: 'Ice shelf', description: 'Cold water under the ice. Grateful guests tip well; crew move slowly.', up: { tips: .15 }, down: { crewSpeed: .08 }, fame: 1, weight: 3, shift: 0, words: [['Frost', 'Glacier', 'Pale', 'Snowfall', 'Crystal'], ['Shelf', 'Ledge', 'Floe', 'Cap', 'Drift']] },
-  atoll: { name: 'Coral atoll', description: 'A bright ring of coral full of visitors. Building on coral costs more.', up: { arrival: .1 }, down: { buildCost: .12 }, fame: 1, weight: 3, shift: 0, words: [['Sunburst', 'Bright', 'Ring', 'Rainbow', 'Lucky'], ['Atoll', 'Isle', 'Crown', 'Shoals', 'Garden']] },
-  sunken: { name: 'Sunken city', description: 'Old ruins to build on, cheaply. Few guests find their way here.', up: { buildCost: .12 }, down: { arrival: .06 }, fame: 1.1, weight: 2, shift: .3, words: [['Drowned', 'Old', 'Pillar', 'Silent', 'Gilded'], ['Spires', 'Ruins', 'Halls', 'Steps', 'Gate']] },
-  trench: { name: 'Open trench', description: 'The edge of the deep. Hard going, but daring diners pay well and fame is greater.', up: { tips: .08 }, down: { patience: .06, arrival: .05 }, fame: 1.4, weight: 2, shift: .5, words: [['Blue', 'Deep', 'Night', 'Hollow', 'Long'], ['Trench', 'Fall', 'Chasm', 'Drop', 'Rift']] },
-  lagoon: { name: 'Calm lagoon', description: 'Sheltered and gentle: patient guests and an easy rest, with smaller rewards.', up: { patience: .08 }, down: { tips: .05 }, fame: .5, weight: 1.5, shift: -1, words: [['Glass', 'Still', 'Quiet', 'Soft', 'Mirror'], ['Water', 'Pool', 'Bay', 'Cove', 'Shallows']] },
+  home: { name: 'Home reef', description: 'Where your story began. Your flagship restaurant lives here.', goodFor: 'Everything: the restaurant you run yourself.', up: {}, down: {}, fame: 1, weight: 0, shift: 0, words: [['Home'], ['Reef']] },
+  kelp: { name: 'Kelp forest', description: 'Tall swaying kelp. Farms thrive, but builders squeeze through the stalks.', goodFor: 'Kelp farms: cheaper kelp dishes in your restaurant.', up: {}, boost: { kind: 'kelpFarm', amount: .5 }, down: { buildTime: .12 }, fame: 1, weight: 3, shift: 0, words: [['Swaying', 'Green', 'Tangle', 'Mossy', 'Whisper'], ['Hollow', 'Wood', 'Stalks', 'Thicket', 'Glade']] },
+  vents: { name: 'Volcanic vents', description: 'Warm smoking vents. Fish gather in the heat; building on hot rock costs more.', goodFor: 'Fisheries: cheaper fish dishes in your restaurant.', up: {}, boost: { kind: 'fishery', amount: .5 }, down: { buildCost: .1 }, fame: 1, weight: 3, shift: 0, words: [['Ember', 'Cinder', 'Smoke', 'Ash', 'Sulphur'], ['Vents', 'Chimneys', 'Field', 'Rise', 'Furnace']] },
+  ice: { name: 'Ice shelf', description: 'Cold water under the ice. Grateful diners tip a branch well; builders work slowly.', goodFor: 'A branch restaurant: big tips every day.', up: { branchIncome: .25 }, down: { buildTime: .15 }, fame: 1, weight: 3, shift: 0, words: [['Frost', 'Glacier', 'Pale', 'Snowfall', 'Crystal'], ['Shelf', 'Ledge', 'Floe', 'Cap', 'Drift']] },
+  atoll: { name: 'Coral atoll', description: 'A bright ring of coral full of visitors. Building on coral costs more.', goodFor: 'Glow gardens: guests visit your restaurant more often.', up: {}, boost: { kind: 'garden', amount: .5 }, down: { buildCost: .12 }, fame: 1, weight: 3, shift: 0, words: [['Sunburst', 'Bright', 'Ring', 'Rainbow', 'Lucky'], ['Atoll', 'Isle', 'Crown', 'Shoals', 'Garden']] },
+  sunken: { name: 'Sunken city', description: 'Old ruins to build on, cheaply, with skilled engineers. Few diners find a branch here.', goodFor: 'Workshops and cheap building.', up: { buildCost: .15 }, boost: { kind: 'workshop', amount: .5 }, down: { branchIncome: .15 }, fame: 1.1, weight: 2, shift: .3, words: [['Drowned', 'Old', 'Pillar', 'Silent', 'Gilded'], ['Spires', 'Ruins', 'Halls', 'Steps', 'Gate']] },
+  trench: { name: 'Open trench', description: 'The edge of the deep. Hard to build on, but daring diners pay a branch well and fame is greater.', goodFor: 'A branch restaurant: the richest daily income, and more fame.', up: { branchIncome: .45 }, down: { buildCost: .15, buildTime: .1 }, fame: 1.4, weight: 2, shift: .5, words: [['Blue', 'Deep', 'Night', 'Hollow', 'Long'], ['Trench', 'Fall', 'Chasm', 'Drop', 'Rift']] },
+  lagoon: { name: 'Calm lagoon', description: 'Sheltered and gentle: cheap, quick building with smaller rewards.', goodFor: 'An easy, cheap start; any building.', up: { buildCost: .12, buildTime: .12 }, down: { branchIncome: .15 }, fame: .5, weight: 1.5, shift: -1, words: [['Glass', 'Still', 'Quiet', 'Soft', 'Mirror'], ['Water', 'Pool', 'Bay', 'Cove', 'Shallows']] },
 };
 export const VISITABLE_BIOMES = BIOME_IDS.filter(id => id !== 'home');
 
-/** Balance knobs for regions and fame. */
+/** Balance knobs for regions, claiming and fame. See docs/BALANCE.md. */
 export const OCEAN_BALANCE = {
   /** Generated difficulty: base + perRing × ring ± jitter/2. */
   base: .8, perRing: .6, jitter: 1.6,
-  /** Every region past the Home Reef: build costs and fewer guests grow with difficulty (up to `cap`), unless that is the biome's upside. */
-  buildPerLevel: .06, arrivalPerLevel: .03, cap: 6,
-  /** Fame reward = fameBase × difficulty ^ fameExponent × biome fame. Grows faster than difficulty. */
-  fameBase: 12, fameExponent: 1.5,
+  /** Every region past the Home Reef: building costs more and its branch earns more with difficulty (up to `cap`). */
+  buildPerLevel: .06, incomePerLevel: .08, cap: 6,
+  /** A region's total mastery fame = fameBase × difficulty ^ fameExponent × biome fame. Grows faster than difficulty. */
+  fameBase: 10, fameExponent: 1.5,
   /** No single multiplier strays further than this from neutral. */
-  clampLow: .7, clampHigh: 1.4,
+  clampLow: .7, clampHigh: 1.8,
 } as const;
+/** Claim price = base × difficulty ^ exponent × perRing ^ (ring − 1) × growth ^ (regions already claimed), to $100. */
+export const CLAIM = { base: 2500, exponent: 1.2, perRing: 2.2, growth: 1.25 } as const;
+/** How far out regions may be claimed: ring 1 after the Coral Reef, ring 2 after the Twilight Zone, ring 3+ after the Abyss. */
+export const claimGate = (ringIndex: number): ZoneId => ringIndex <= 1 ? 'reef' : ringIndex === 2 ? 'twilight' : 'abyss';
+/** Plot prices inside a region: base × (1 + step × (owned − 1)) ^ exponent × (1 + perRing × (ring − 1)), before the region's build cost. */
+export const REGION_PLOTS = { base: 300, step: .35, exponent: 1.6, perRing: .6 } as const;
+/** Share of a region's mastery fame for each milestone, and the Home Reef's fame for reaching its Abyss. */
+export const MASTERY = { claim: .3, branch6: .3, branch11: .25, full: .15, homeAbyss: 30 } as const;
 
 /**
  * Permanent fame bonuses. Each approaches its cap (bonus = cap × fame / (fame + scale)): every fame point helps,
  * a little less than the one before, and no bonus ever passes its cap.
- * `tips` is an extra share of every bill paid as tips; `build` makes plots, buildings, upgrades and zones cheaper; `arrival` brings guests more often.
+ * `tips` is an extra share of every bill paid as tips; `build` makes plots, buildings, upgrades, zones and claims cheaper;
+ * `arrival` brings guests more often; `branch` raises every branch's daily earnings.
  */
-export const FAME_BONUS = { scale: 25, tips: .25, build: .35, arrival: .2, startCash: 6000 } as const;
-export interface FameBonuses { tips: number; build: number; arrival: number; startCash: number; }
+export const FAME_BONUS = { scale: 60, tips: .15, build: .25, arrival: .12, branch: .25 } as const;
+export interface FameBonuses { tips: number; build: number; arrival: number; branch: number; }
 export function fameBonuses(fame: number): FameBonuses {
   const f = Math.max(0, fame), k = f / (f + FAME_BONUS.scale), r = (cap: number) => Math.round(cap * k * 1000) / 1000;
-  return { tips: r(FAME_BONUS.tips), build: r(FAME_BONUS.build), arrival: r(FAME_BONUS.arrival), startCash: Math.round(FAME_BONUS.startCash * k / 10) * 10 };
+  return { tips: r(FAME_BONUS.tips), build: r(FAME_BONUS.build), arrival: r(FAME_BONUS.arrival), branch: r(FAME_BONUS.branch) };
 }
 const pct = (n: number) => `${Math.round(n * 100)}%`;
-/** Fame bonuses in plain words, e.g. for "Founding here earns +16 fame → …". */
-export const fameText = (b: FameBonuses): string => `tips +${pct(b.tips)} of each bill · building ${pct(b.build)} cheaper · guests ${pct(b.arrival)} more often · starting cash +$${b.startCash.toLocaleString('en-US')}`;
+/** Fame bonuses in plain words. */
+export const fameText = (b: FameBonuses): string => `tips +${pct(b.tips)} of each bill · building ${pct(b.build)} cheaper · guests ${pct(b.arrival)} more often · branches earn +${pct(b.branch)}`;
 
-export interface Region { id: string; x: number; y: number; name: string; biome: BiomeId; /** One decimal, 1 and up; grows with distance on average. */ difficulty: number; stars: 1 | 2 | 3 | 4 | 5; modifiers: RegionModifiers; fame: number; }
-export const regionId = (x: number, y: number): string => `${x},${y}`;
-export const REGION_ID = /^-?\d{1,6},-?\d{1,6}$/;
-export function parseRegionId(id: string): { x: number; y: number } | null {
-  if (!REGION_ID.test(id)) return null;
-  const [x, y] = id.split(',').map(Number); return { x, y };
-}
-export const ring = (x: number, y: number): number => Math.max(Math.abs(x), Math.abs(y));
-export const HOME_ID = '0,0';
+export interface Region { id: string; x: number; y: number; ring: number; name: string; biome: BiomeId; /** One decimal, 1 and up; grows with distance on average. */ difficulty: number; stars: 1 | 2 | 3 | 4 | 5; modifiers: RegionModifiers; /** Total fame for mastering this region. */ fame: number; }
 
 /** Hand-designed first ring: name, biome and difficulty. Effects still come from `modifiersFor`. */
 export const FIRST_RING: Record<string, { name: string; biome: BiomeId; difficulty: number }> = {
@@ -89,6 +99,8 @@ export const FIRST_RING: Record<string, { name: string; biome: BiomeId; difficul
   '-1,-1': { name: 'Cinderfield Vents', biome: 'vents', difficulty: 2.5 },
 };
 
+const FIRST_RING_NAMES = new Set(Object.values(FIRST_RING).map(r => r.name));
+
 function mix(value: number): number {
   let n = value >>> 0;
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
@@ -100,20 +112,21 @@ export const hash01 = (x: number, y: number, salt: number): number => mix(mix(Ma
 const clamp = (n: number) => Math.min(OCEAN_BALANCE.clampHigh, Math.max(OCEAN_BALANCE.clampLow, n));
 /** How hard the downsides bite: 0.6 at difficulty 1, +0.2 per level, up to 1.6. */
 export const severity = (difficulty: number): number => .6 + .2 * (Math.min(difficulty, OCEAN_BALANCE.cap) - 1);
+export const starsFor = (difficulty: number): Region['stars'] => Math.min(5, Math.max(1, Math.round(difficulty))) as Region['stars'];
 /** Region effects from biome and difficulty: one formula for hand-made and generated regions. */
 export function modifiersFor(biome: BiomeId, difficulty: number): RegionModifiers {
-  if (biome === 'home') return { ...NEUTRAL_MODIFIERS };
-  const info = BIOMES[biome], m = { ...NEUTRAL_MODIFIERS }, level = Math.min(difficulty, OCEAN_BALANCE.cap) - 1, stars = starsFor(difficulty);
-  const apply = (key: ModifierKey, helpful: number) => { m[key] *= 1 + (LOWER_IS_BETTER[key] ? -helpful : helpful); };
-  for (const [key, v] of Object.entries(info.up) as [ModifierKey, number][]) apply(key, v * (1 + .1 * (stars - 1)));
-  for (const [key, v] of Object.entries(info.down) as [ModifierKey, number][]) apply(key, -v * severity(difficulty));
-  // The general difficulty penalty never cancels the biome's own upside.
+  if (biome === 'home') return { ...NEUTRAL_MODIFIERS, boost: {} };
+  const info = BIOMES[biome], level = Math.min(difficulty, OCEAN_BALANCE.cap) - 1, strength = 1 + .1 * (starsFor(difficulty) - 1);
+  const m: Record<Scalar, number> = { buildCost: 1, buildTime: 1, branchIncome: 1 };
+  const apply = (key: Scalar, helpful: number) => { m[key] *= 1 + (LOWER_IS_BETTER[key] ? -helpful : helpful); };
+  for (const [key, v] of Object.entries(info.up) as [Scalar, number][]) apply(key, v * strength);
+  for (const [key, v] of Object.entries(info.down) as [Scalar, number][]) apply(key, -v * severity(difficulty));
+  // Further out, building costs more and branches earn more, but never so that it cancels the biome's own upside or downside.
   if (!info.up.buildCost) m.buildCost *= 1 + OCEAN_BALANCE.buildPerLevel * level;
-  if (!info.up.arrival) m.arrival *= 1 - OCEAN_BALANCE.arrivalPerLevel * level;
-  for (const key of Object.keys(m) as ModifierKey[]) m[key] = Math.round(clamp(m[key]) * 1000) / 1000;
-  return m;
+  if (!info.down.branchIncome) m.branchIncome *= 1 + OCEAN_BALANCE.incomePerLevel * level;
+  const round = (n: number) => Math.round(clamp(n) * 1000) / 1000;
+  return { buildCost: round(m.buildCost), buildTime: round(m.buildTime), branchIncome: round(m.branchIncome), boost: info.boost ? { [info.boost.kind]: Math.round((1 + info.boost.amount * strength) * 1000) / 1000 } : {} };
 }
-export const starsFor = (difficulty: number): Region['stars'] => Math.min(5, Math.max(1, Math.round(difficulty))) as Region['stars'];
 export const fameFor = (biome: BiomeId, difficulty: number): number => Math.round(OCEAN_BALANCE.fameBase * difficulty ** OCEAN_BALANCE.fameExponent * BIOMES[biome].fame);
 
 function generatedBiome(x: number, y: number): BiomeId {
@@ -134,24 +147,37 @@ export function regionAt(x: number, y: number): Region {
     const b = OCEAN_BALANCE, raw = b.base + b.perRing * ring(x, y) + (hash01(x, y, 0x77) - .5) * b.jitter + BIOMES[biome].shift;
     difficulty = Math.max(1, Math.round(raw * 10) / 10);
     const [first, second] = BIOMES[biome].words;
-    name = `${first[Math.floor(hash01(x, y, 0x3a) * first.length)]} ${second[Math.floor(hash01(x, y, 0x9c) * second.length)]}`;
+    // Generated names never repeat a hand-made first-ring name.
+    for (let salt = 0; ; salt++) {
+      name = `${first[Math.floor(hash01(x, y, 0x3a + salt) * first.length)]} ${second[Math.floor(hash01(x, y, 0x9c + salt) * second.length)]}`;
+      if (!FIRST_RING_NAMES.has(name) || salt > 8) break;
+    }
   }
-  const region: Region = { id, x, y, name, biome, difficulty, stars: starsFor(difficulty), modifiers: modifiersFor(biome, difficulty), fame: fameFor(biome, difficulty) };
+  const region: Region = { id, x, y, ring: ring(x, y), name, biome, difficulty, stars: starsFor(difficulty), modifiers: modifiersFor(biome, difficulty), fame: biome === 'home' ? MASTERY.homeAbyss : fameFor(biome, difficulty) };
   if (cache.size < 5000) cache.set(id, region);
   return region;
 }
 export function regionById(id: string): Region | null { const p = parseRegionId(id); return p ? regionAt(p.x, p.y) : null; }
 export const neighbourIds = (x: number, y: number): string[] => [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].map(([dx, dy]) => regionId(x + dx, y + dy));
 
-/** What each multiplier means, in plain words: e.g. "Kelp 20% cheaper". Upsides and downsides separately. */
-const LABELS: Record<ModifierKey, [string, string]> = {
-  arrival: ['Guests arrive {p} more often', 'Guests arrive {p} less often'], patience: ['Guests {p} more patient', 'Guests {p} less patient'],
-  crewSpeed: ['Crew {p} faster', 'Crew {p} slower'], tips: ['Tips +{p}', 'Tips −{p}'],
-  kelpCost: ['Kelp {p} cheaper', 'Kelp {p} dearer'], fishCost: ['Fish {p} cheaper', 'Fish {p} dearer'], buildCost: ['Building {p} cheaper', 'Building {p} dearer'],
+/** Base claim price for a region when `claimed` regions are already claimed (fame discount not applied). */
+export function claimPrice(region: Region, claimed: number): number {
+  if (region.biome === 'home') return 0;
+  return Math.round(CLAIM.base * region.difficulty ** CLAIM.exponent * CLAIM.perRing ** (region.ring - 1) * CLAIM.growth ** claimed / 100) * 100;
+}
+/** Base price of the next plot in a region that already has `owned` plots (region build cost and fame not applied). */
+export const regionPlotCost = (region: Region, owned: number): number => REGION_PLOTS.base * (1 + REGION_PLOTS.step * Math.max(0, owned - 1)) ** REGION_PLOTS.exponent * (1 + REGION_PLOTS.perRing * Math.max(0, region.ring - 1));
+
+const BOOST_NAMES: Record<BoostKind, string> = { kelpFarm: 'Kelp farms', fishery: 'Fisheries', garden: 'Glow gardens', workshop: 'Workshops' };
+/** What a region does, in plain words: e.g. "Kelp farms 50% stronger here". Upsides and downsides separately. */
+const LABELS: Record<Scalar, [string, string]> = {
+  buildCost: ['Building {p} cheaper here', 'Building {p} dearer here'], buildTime: ['Building {p} faster here', 'Building takes {p} longer here'],
+  branchIncome: ['Branch earns {p} more', 'Branch earns {p} less'],
 };
 export function describeModifiers(m: RegionModifiers): { upsides: string[]; downsides: string[] } {
   const upsides: string[] = [], downsides: string[] = [];
-  for (const key of Object.keys(LABELS) as ModifierKey[]) {
+  for (const [kind, v] of Object.entries(m.boost) as [BoostKind, number][]) upsides.push(`${BOOST_NAMES[kind]} ${Math.round((v - 1) * 100)}% stronger here`);
+  for (const key of Object.keys(LABELS) as Scalar[]) {
     const v = m[key], p = `${Math.round(Math.abs(v - 1) * 100)}%`; if (p === '0%') continue;
     const good = LOWER_IS_BETTER[key] ? v < 1 : v > 1;
     (good ? upsides : downsides).push(LABELS[key][good ? 0 : 1].replace('{p}', p));
@@ -159,52 +185,69 @@ export function describeModifiers(m: RegionModifiers): { upsides: string[]; down
   return { upsides, downsides };
 }
 
-/** Exactly what founding keeps and what starts over, matching `RestaurantEngine.foundColony`; shown before founding. */
-export const FOUNDING_KEEPS = ['Pearls, charms and extra builders', 'Collections: achievements and their progress', 'Fame and its bonuses', 'Your ocean record of colonies', 'Tutorial, milestones, restaurant name and settings'];
-export const FOUNDING_RESETS = ['Cash (you start with the colony’s starting cash)', 'Restaurant layout, furniture, crew and menu', 'Town plots, buildings and depth zones', 'Daily receipts and history'];
-
-// ---- Save: the exploration record ----
+// ---- Save: claimed regions, fame and the milestones that paid it ----
 const count = z.number().int().nonnegative();
-export const colonySchema = z.object({
-  region: z.string().regex(REGION_ID), name: z.string().min(1).max(40),
-  /** Fame this colony earns; it is added to the total once the colony reaches its Abyss (`abyss`). */ fame: count.optional(), abyss: z.boolean().default(false),
-  /** Service days and guests served there; the current colony's are filled in when the next one is founded. */
-  days: count.default(0), served: count.default(0),
-  /** Lifetime guests served when this colony began. */ startServed: count.default(0),
-}).transform(c => ({ ...c, fame: c.fame ?? regionById(c.region)?.fame ?? 0 }));
-export type Colony = Validated<z.infer<typeof colonySchema>>;
-export const homeColony = (): Colony => ({ region: HOME_ID, name: 'Home Reef', fame: fameFor('home', 1), abyss: false, days: 0, served: 0, startServed: 0 });
-/** Fame the current colony will add when it reaches its Abyss (0 once added). */
-export const pendingFame = (o: Ocean): number => currentColony(o).abyss ? 0 : currentColony(o).fame;
-/** Add the current colony's fame to the total, once. */
-export function creditFame(o: Ocean): number { const c = currentColony(o), gain = pendingFame(o); c.abyss = true; o.fame += gain; return gain; }
-export const oceanSchema = z.object({ fame: count.default(0), colonies: z.array(colonySchema).min(1).max(2000).default(() => [homeColony()]) })
-  .refine(o => new Set(o.colonies.map(c => c.region)).size === o.colonies.length, 'A region holds one colony');
+const unique = (list: unknown[]): boolean => new Set(list).size === list.length;
+/**
+ * Saves from the short-lived colony build kept `colonies` (one restaurant per region, restarted on founding).
+ * They load as one world: fame is kept, every founded region becomes a claimed (empty) region, and milestones
+ * already paid stay paid. Anything unreadable in that record is dropped rather than failing the save.
+ */
+export function migrateOcean(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { colonies?: unknown }).colonies)) return raw;
+  const old = raw as { fame?: unknown; colonies: unknown[] };
+  const entries = old.colonies.map(c => (c && typeof c === 'object' ? c : {}) as { region?: unknown; abyss?: unknown });
+  const regions = [...new Set(entries.map(c => c.region).filter((id): id is string => typeof id === 'string' && REGION_ID.test(id) && id !== HOME_ID))].slice(0, 2000);
+  const fame = typeof old.fame === 'number' && Number.isFinite(old.fame) && old.fame >= 0 ? Math.floor(old.fame) : 0;
+  const homeAbyss = entries.some(c => c.region === HOME_ID && c.abyss === true);
+  return { fame, regions, mastery: [...regions.map(id => `${id}:claim`), ...(homeAbyss ? [`${HOME_ID}:abyss`] : [])] };
+}
+export const oceanSchema = z.preprocess(migrateOcean, z.object({
+  fame: count.default(0),
+  /** Claimed regions other than the Home Reef, in the order they were claimed. */
+  regions: z.array(z.string().regex(REGION_ID)).max(2000).default([]).refine(list => unique(list) && !list.includes(HOME_ID), 'Invalid regions'),
+  /** Mastery milestones already rewarded with fame, e.g. "1,0:claim", "1,0:branch6". Fame is never taken back. */
+  mastery: z.array(z.string().max(40)).max(10000).default([]).refine(unique, 'Duplicate milestones'),
+}));
 export type Ocean = Validated<z.infer<typeof oceanSchema>>;
-export const createOcean = (): Ocean => ({ fame: 0, colonies: [homeColony()] });
+export const createOcean = (): Ocean => ({ fame: 0, regions: [], mastery: [] });
 
-export const currentColony = (o: Ocean): Colony => o.colonies[o.colonies.length - 1];
-export const currentRegion = (o: Ocean): Region => regionById(currentColony(o).region) ?? regionAt(0, 0);
-export const isExplored = (o: Ocean, id: string): boolean => o.colonies.some(c => c.region === id);
-/** Unexplored and next to an explored region (all eight directions). */
-export function isFoundable(o: Ocean, id: string): boolean {
-  const p = parseRegionId(id); if (!p || isExplored(o, id)) return false;
-  return neighbourIds(p.x, p.y).some(n => isExplored(o, n));
+export const isClaimed = (o: Pick<Ocean, 'regions'>, id: string): boolean => id === HOME_ID || o.regions.includes(id);
+/** Unclaimed and next to a claimed region or the Home Reef (all eight directions). */
+export function isClaimable(o: Pick<Ocean, 'regions'>, id: string): boolean {
+  const p = parseRegionId(id); if (!p || isClaimed(o, id)) return false;
+  return neighbourIds(p.x, p.y).some(n => isClaimed(o, n));
 }
-export type RegionStatus = 'explored' | 'current' | 'foundable' | 'fog';
-export function regionStatus(o: Ocean, id: string): RegionStatus {
-  if (currentColony(o).region === id) return 'current';
-  return isExplored(o, id) ? 'explored' : isFoundable(o, id) ? 'foundable' : 'fog';
+export type RegionStatus = 'home' | 'claimed' | 'claimable' | 'fog';
+export function regionStatus(o: Pick<Ocean, 'regions'>, id: string): RegionStatus {
+  if (id === HOME_ID) return 'home';
+  return isClaimed(o, id) ? 'claimed' : isClaimable(o, id) ? 'claimable' : 'fog';
 }
-/** The rectangle the map shows: everything explored plus two rings of water around it. */
-export function mapBounds(o: Ocean): { x0: number; y0: number; x1: number; y1: number } {
-  const ps = o.colonies.map(c => parseRegionId(c.region)!);
-  return { x0: Math.min(...ps.map(p => p.x)) - 2, y0: Math.min(...ps.map(p => p.y)) - 2, x1: Math.max(...ps.map(p => p.x)) + 2, y1: Math.max(...ps.map(p => p.y)) + 2 };
+/** Every claimable region, nearest first. */
+export function claimableRegions(o: Pick<Ocean, 'regions'>): Region[] {
+  const seen = new Set<string>(), list: Region[] = [];
+  for (const id of [HOME_ID, ...o.regions]) {
+    const p = parseRegionId(id)!;
+    for (const n of neighbourIds(p.x, p.y)) if (!seen.has(n) && isClaimable(o, n)) { seen.add(n); list.push(regionById(n)!); }
+  }
+  return list.sort((a, b) => a.ring - b.ring || a.difficulty - b.difficulty || a.id.localeCompare(b.id));
 }
-export const coloniesFounded = (o: Ocean): number => o.colonies.length - 1;
-export const biomesVisited = (o: Ocean): BiomeId[] => [...new Set(o.colonies.map(c => regionById(c.region)?.biome).filter((b): b is BiomeId => Boolean(b) && b !== 'home'))];
-/** The colony's restaurant seed: a pure function of the previous seed and the region, so founding is deterministic. */
-export const colonySeed = (previous: number, id: string): number => { const p = parseRegionId(id)!; return mix(mix(previous) ^ Math.floor(hash01(p.x, p.y, 0xc0) * 4294967296)) || 1; };
+/** Region rectangle holding everything claimed plus one ring of claimable regions. */
+export function worldBounds(o: Pick<Ocean, 'regions'>): { x0: number; y0: number; x1: number; y1: number } {
+  const ps = [HOME_ID, ...o.regions].map(id => parseRegionId(id)!);
+  return { x0: Math.min(...ps.map(p => p.x)) - 1, y0: Math.min(...ps.map(p => p.y)) - 1, x1: Math.max(...ps.map(p => p.x)) + 1, y1: Math.max(...ps.map(p => p.y)) + 1 };
+}
+export const biomesClaimed = (o: Pick<Ocean, 'regions'>): BiomeId[] => [...new Set(o.regions.map(id => regionById(id)?.biome).filter((b): b is BiomeId => Boolean(b) && b !== 'home'))];
+
+export type MasteryKind = 'claim' | 'branch6' | 'branch11' | 'full' | 'abyss';
+export const masteryKey = (id: string, kind: MasteryKind): string => `${id}:${kind}`;
+/** Fame for one milestone in a region. */
+export const masteryFame = (region: Region, kind: MasteryKind): number => kind === 'abyss' ? (region.biome === 'home' ? MASTERY.homeAbyss : 0) : Math.max(1, Math.round(region.fame * MASTERY[kind]));
+/** The milestones that earn fame in a region, in order, with their labels. */
+export function masterySteps(region: Region): { kind: MasteryKind; label: string; fame: number }[] {
+  if (region.biome === 'home') return [{ kind: 'abyss', label: 'Reach the Abyss', fame: MASTERY.homeAbyss }];
+  return ([['claim', 'Claim the region'], ['branch6', 'Branch at level 6'], ['branch11', 'Branch at level 11'], ['full', 'Own every plot']] as [MasteryKind, string][]).map(([kind, label]) => ({ kind, label, fame: masteryFame(region, kind) }));
+}
 
 // ---- Looks: placeholder palettes per biome (the Home Reef keeps the original look) ----
 export interface BiomePalette {

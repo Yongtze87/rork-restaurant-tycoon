@@ -3,10 +3,11 @@
  *
  *   bun tools/simulate.ts [--days N] [--strategy cautious|builder|balanced|all] [--seed S] [--seeds K]
  *                         [--sessions N] [--minutes M] [--no-charms] [--json]
- *                         [--colonies N] [--region easiest|richest|balanced|all] [--route x,y;x,y]
+ *                         [--no-regions] [--region easiest|richest|balanced|all] [--route x,y;x,y]
  *
- * --colonies plays N colonies in a row (founding the next as soon as the Abyss is reached) and prints
- * each colony's pacing in real days since it was founded.
+ * The owner claims ocean regions in waves (once every branch is built up), opens a branch in each and
+ * builds what the region is good for. --region picks how it chooses; --route fixes the order; --no-regions
+ * plays the home town only. Each run prints the claims and how much of the profit the branches earn.
  * --days is real calendar days; each day has --sessions play sessions of --minutes at 1×.
  * The model is described in docs/BALANCE.md.
  */
@@ -20,7 +21,7 @@ const flag = (name: string) => args.includes(`--${name}`);
 const value = (name: string, fallback: string) => { const i = args.indexOf(`--${name}`); return i >= 0 && args[i + 1] ? args[i + 1] : fallback; };
 const days = Number(value('days', '14')), seed = Number(value('seed', '91273')), seeds = Number(value('seeds', '1'));
 const which = value('strategy', 'all'), strategies = which === 'all' ? STRATEGIES : [which as StrategyName];
-const colonies = Number(value('colonies', '0')), regionArg = value('region', 'balanced'), regions = regionArg === 'all' ? REGION_STRATEGIES : [regionArg as RegionStrategy];
+const regionArg = value('region', 'balanced'), regionList = regionArg === 'all' ? REGION_STRATEGIES : [regionArg as RegionStrategy], world = !flag('no-regions');
 const route = value('route', '') ? value('route', '').split(';') : undefined;
 const sessions = Number(value('sessions', '3')), minutes = Number(value('minutes', '10')), charms = !flag('no-charms'), quiet = flag('quiet');
 
@@ -46,13 +47,23 @@ function report(r: SimResult): void {
   console.log(`  reserve blocks ${r.reserveBlocks} · loans ${r.loans} · bankrupt days ${r.bankruptDays} · min cash $${Math.round(r.minCash)} · final cash $${r.finalCash}`);
   console.log(`  pearls earned ${r.pearlsEarned} · charms earned ${r.charmsEarned.current} current / ${r.charmsEarned.tide} tide, used ${r.charmsUsed.current} / ${r.charmsUsed.tide}`);
   console.log(`  spent: ${Object.entries(r.spent).map(([k, v]) => `${k} $${Math.round(v)}`).join(' · ')}`);
-  if (r.colonies.length > 1 || colonies) colonyTable(r);
+  if (world) worldTable(r);
 }
-/** Per colony: real days since founding to each zone and to founding the next colony (absolute real day in brackets). */
-function colonyTable(r: SimResult): void {
-  const rel = (c: SimResult['colonies'][number], t?: { realDay: number; activeHours: number }) => t ? `${pad(t.realDay - c.start.realDay, 3)}d ${pad((t.activeHours - c.start.activeHours).toFixed(1), 4)}h` : pad('—', 10);
-  console.log('  real days / hours played since founding\n  colony | region                       | ★   | fame earns/had | reef        | twilight    | abyss       | founded next | profit/day d1-10 · d11-80 · d81+');
-  for (const c of r.colonies) console.log(`  ${pad(c.index, 6)} | ${`${c.name} (${c.biome} ${c.region})`.padEnd(28)} | ${c.difficulty.toFixed(1)} | ${pad(c.fame, 4)} / ${pad(c.totalFame, 5)} | ${rel(c, c.unlocked.reef).padEnd(11)} | ${rel(c, c.unlocked.twilight).padEnd(11)} | ${rel(c, c.unlocked.abyss).padEnd(11)} | ${rel(c, c.founded).padEnd(12)} | $${averageProfit(r, 1, 10, c.index)} · $${averageProfit(r, 11, 80, c.index)} · $${averageProfit(r, 81, 9999, c.index)}`);
+/** Real day of a timing, or a dash. */
+const rd = (t?: { realDay: number }) => t ? `rd ${t.realDay}` : '—';
+/** Branch income per day and its share of profit (incl. challenges) over service-day windows. */
+export function branchShare(r: SimResult, from: number, to: number): { branch: number; share: number } {
+  const rows = r.rows.filter(x => x.day >= from && x.day <= to); if (!rows.length) return { branch: 0, share: 0 };
+  const branch = rows.reduce((s, x) => s + x.branch, 0), profit = rows.reduce((s, x) => s + x.profit + x.bonus, 0);
+  return { branch: Math.round(branch / rows.length), share: profit > 0 ? Math.round(branch / profit * 100) : 0 };
+}
+/** Every claim: when, what it cost, and when its branch opened and reached levels 6 and 11. */
+function worldTable(r: SimResult): void {
+  console.log(`  fame ${r.fame} · regions claimed ${r.claims.length}`);
+  console.log('  #  | region                          | ring ★   | claim price | claimed      | branch L1 | L6     | L11');
+  for (const c of r.claims) console.log(`  ${pad(c.index, 2)} | ${`${c.name} (${c.biome})`.padEnd(31)} | ${c.ring}  ${c.difficulty.toFixed(1)} | ${pad('$' + c.price.toLocaleString('en-US'), 11)} | ${`${rd(c.claimed)} ${c.claimed.activeHours}h`.padEnd(12)} | ${rd(c.branch1).padEnd(9)} | ${rd(c.branch6).padEnd(6)} | ${rd(c.branch11)}`);
+  const last = r.rows[r.rows.length - 1]?.day ?? 0, windows = [[1, 40], [41, 160], [161, 320], [321, 640], [641, 9999]].filter(([a]) => a <= last);
+  console.log('  branch income/day (share of profit): ' + windows.map(([a, b]) => { const x = branchShare(r, a, b); return `d${a}-${Math.min(b, last)} $${x.branch} (${x.share}%)`; }).join(' · '));
 }
 
 if (flag('payback')) {
@@ -90,9 +101,9 @@ if (flag('payback')) {
 }
 
 const all: SimResult[] = [];
-for (const strategy of strategies) for (const region of colonies ? regions : [undefined]) for (let i = 0; i < seeds; i++) {
-  const t = performance.now(), r = simulate({ strategy, days, seed: seed + i * 7919, sessions, sessionMinutes: minutes, charms, colonies: colonies || undefined, region, route });
-  if (colonies && !flag('json')) console.log(`\n--- regions: ${route ? `route ${route.join(' → ')}` : region} ---`);
+for (const strategy of strategies) for (const region of world ? regionList : [undefined]) for (let i = 0; i < seeds; i++) {
+  const t = performance.now(), r = simulate({ strategy, days, seed: seed + i * 7919, sessions, sessionMinutes: minutes, charms, regions: world, region, route });
+  if (world && regionList.length > 1 && !flag('json')) console.log(`\n--- regions: ${route ? `route ${route.join(' → ')}` : region} ---`);
   all.push(r);
   if (flag('json')) continue;
   report(r); console.log(`  (${((performance.now() - t) / 1000).toFixed(1)} s)`);
@@ -109,6 +120,7 @@ else {
       return `d${med(got.map(r => r.unlocked[id]!.day))} / rd${med(got.map(r => r.unlocked[id]!.realDay))} / ${med(got.map(r => r.unlocked[id]!.activeHours))}h${never ? ` (${never} never)` : ''}`;
     };
     console.log(`  ${pad(strategy, 9)} reef ${z('reef')} · twilight ${z('twilight')} · abyss ${z('abyss')}`);
+    if (world) console.log(`  ${pad('', 9)} claims (real day) ${rs.map(r => r.claims.map(c => c.claimed.realDay).join(',')).join(' / ')} · fame ${rs.map(r => r.fame).join('/')} · branch share d161-320 ${rs.map(r => branchShare(r, 161, 320).share).join('/')}% · d321+ ${rs.map(r => branchShare(r, 321, 9999).share).join('/')}%`);
     console.log(`  ${pad('', 9)} profit/day d1-10 $${med(rs.map(r => averageProfit(r, 1, 10)))} · d11-40 $${med(rs.map(r => averageProfit(r, 11, 40)))} · d41-160 $${med(rs.map(r => averageProfit(r, 41, 160)))} · d161+ $${med(rs.map(r => averageProfit(r, 161, 9999)))} · blocks ${rs.map(r => r.reserveBlocks).join('/')} · loans ${rs.map(r => r.loans).join('/')} · bankrupt ${rs.map(r => r.bankruptDays).join('/')} · min $${rs.map(r => Math.round(r.minCash)).join('/')} · final $${rs.map(r => r.finalCash).join('/')}`);
   }
 }

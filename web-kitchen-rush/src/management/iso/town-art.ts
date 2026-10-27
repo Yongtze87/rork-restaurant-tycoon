@@ -69,6 +69,8 @@ export function drawBuilding(ctx: Ctx, kind: BuildingKind, look: Look, t: number
       ctx.strokeStyle = c; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + k * 4 + Math.sin(t + i + k) * 1.5, y - 9); ctx.stroke(); }
     }
     if (look >= 2) { const y = -34 + Math.sin(t * 1.2) * 3; glow(ctx, 4, y, 16, 'rgba(190,240,255,A)', .5); dome(ctx, 4, y + 4, 7, 6, 'rgba(214,246,255,.9)'); }
+  } else if (kind === 'branch') {
+    drawBranch(ctx, look, t);
   } else {
     if (look === 3) {
       isoBlock(ctx, .7, 14, '#8E9AAE', '#5E6672', '#4A5160');
@@ -80,6 +82,30 @@ export function drawBuilding(ctx: Ctx, kind: BuildingKind, look: Look, t: number
       ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.stroke(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5); ctx.lineTo(Math.cos(a) * 8, Math.sin(a) * 8); ctx.stroke(); } ctx.restore();
     }
   }
+}
+
+/** Branch restaurant: a kelp kiosk (1–5), a coral bistro (6–10), a pearl brasserie (11–15). A striped awning marks every look. */
+function drawBranch(ctx: Ctx, look: Look, t: number): void {
+  const h = [14, 22, 26][look - 1], cells = [.6, .72, .8][look - 1];
+  const [top, left, right] = look === 1 ? ['#9BC48A', '#6E9A5E', '#56804A'] : look === 2 ? ['#F7B8A0', '#E0806A', '#C46552'] : ['#F6F0FF', '#D9D0F0', '#BDB2DE'];
+  isoBlock(ctx, cells, h, top, left, right);
+  // Awning stripes over the front (left) face.
+  const hw = cells * 32, hh = cells * 16;
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4, b = (i + 1) / 4;
+    ctx.fillStyle = i % 2 ? '#FFF2D7' : look === 3 ? '#A57BFF' : '#2FB8B0';
+    ctx.beginPath(); ctx.moveTo(-hw + hw * a, -h + hh * a + 2); ctx.lineTo(-hw + hw * b, -h + hh * b + 2); ctx.lineTo(-hw + hw * b - 2, -h + hh * b + 9); ctx.lineTo(-hw + hw * a - 2, -h + hh * a + 9); ctx.closePath(); ctx.fill();
+  }
+  // Door and a lit window.
+  ctx.fillStyle = '#2B1E3A'; ctx.beginPath(); ctx.roundRect(-hw * .55 - 3, hh * .45 - 12, 7, 11, [3, 3, 0, 0]); ctx.fill();
+  ctx.fillStyle = '#FFE27A'; ctx.beginPath(); ctx.roundRect(hw * .35, -h * .55, 6, 6, 2); ctx.fill();
+  if (look >= 2) { ctx.fillStyle = '#FFE27A'; ctx.beginPath(); ctx.roundRect(hw * .65, -h * .45 + 4, 5, 5, 2); ctx.fill(); }
+  if (look === 1) { ctx.strokeStyle = '#3E8E4E'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, -h); ctx.quadraticCurveTo(-4, -h - 10, Math.sin(t * 1.3) * 3, -h - 18); ctx.stroke(); }
+  if (look === 2) for (const [x, sh] of [[-8, 12], [6, 16]]) { ctx.fillStyle = '#F2A65A'; ctx.beginPath(); ctx.moveTo(x - 3, -h); ctx.lineTo(x, -h - sh); ctx.lineTo(x + 3, -h); ctx.fill(); }
+  if (look === 3) { glow(ctx, 0, -h - 14, 26, 'rgba(255,226,122,A)', .35 + Math.sin(t * 1.5) * .08); dome(ctx, 0, -h + 2, 14, 16, 'rgba(240,230,255,.85)'); }
+  // Hanging sign: a fork and plate.
+  ctx.fillStyle = 'rgba(18,15,46,.85)'; ctx.beginPath(); ctx.roundRect(hw * .2 - 7, -h - (look === 3 ? 30 : 12), 14, 9, 3); ctx.fill();
+  ctx.fillStyle = '#FFE27A'; ctx.beginPath(); ctx.arc(hw * .2, -h - (look === 3 ? 25.5 : 7.5), 2.5, 0, Math.PI * 2); ctx.fill();
 }
 
 /** Scaffolding over a foundation while a job runs. */
