@@ -42,8 +42,8 @@ describe('construction time', () => {
     const reloaded = new RestaurantEngine(h.storage, h.now); expect(reloaded.state.town).toEqual(e.state.town);
     h.advance(1); reloaded.update(.1);
     expect(plotAt(reloaded.state.town, C + 1, C)!.job).toBeNull(); expect(reloaded.lastCompletion?.text).toBe('Kelp farm is built.');
-    // Level 1 next to the restaurant: 4% × 1.5 = 6% cheaper.
-    expect(reloaded.townEffects().kelpCost).toBeCloseTo(.94); expect(reloaded.dishCost('salad')).toBe(7);
+    // Level 1 next to the restaurant: 6% × 1.5 = 9% cheaper ($7 → $6.37, rounded to $6).
+    expect(reloaded.townEffects().kelpCost).toBeCloseTo(.91); expect(reloaded.dishCost('salad')).toBe(6);
     expect(restaurantSchema.safeParse(reloaded.state).success).toBe(true);
   });
   it('finishes construction while the owner is away, even with the restaurant closed', async () => {
@@ -107,7 +107,7 @@ describe('town effects on the restaurant', () => {
   it('neighbours matter: producers and gardens are stronger next to the restaurant, gardens next to homes speed up crew', () => {
     const town = createTown(), set = (x: number, z: number, building: 'kelpFarm' | 'fishery' | 'garden' | 'homes', level: number) => Object.assign(plotAt(town, x, z)!, { owned: true, building, level });
     set(C + 1, C, 'kelpFarm', 5); set(0, 0, 'fishery', 5);
-    expect(townEffects(town).kelpCost).toBeCloseTo(1 - 5 * .04 * 1.5); expect(townEffects(town).fishCost).toBeCloseTo(1 - 5 * .04);
+    expect(townEffects(town).kelpCost).toBeCloseTo(1 - 5 * .06 * 1.5); expect(townEffects(town).fishCost).toBeCloseTo(1 - 5 * .06);
     set(C, C + 1, 'garden', 4); set(C, C + 2, 'homes', 6);
     const e = townEffects(town); expect(e.arrivalBonus).toBeCloseTo(4 * .03 * 1.5); expect(e.crewSpeed).toBeCloseTo(1.04); expect(e.extraCrew).toBe(2);
   });

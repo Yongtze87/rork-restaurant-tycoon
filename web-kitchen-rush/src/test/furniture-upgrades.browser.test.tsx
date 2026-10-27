@@ -20,12 +20,12 @@ it('upgrades a selected table from the inspector with the real cost and next eff
   await screen.getByRole('button', { name: 'Select existing table' }).click();
   const inspector = screen.getByRole('region', { name: 'Furniture placement' });
   await expect.element(inspector.getByTestId('furniture-level')).toHaveTextContent('Lv 1');
-  await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Next: Tips +2% · +1 atmosphere');
+  await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Next: Tips +3% · +1 atmosphere');
   await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Selling refunds 70% of the base price only.');
   await inspector.getByRole('button', { name: `Upgrade Coral table to level 2 for ${money(cost)}` }).click();
   expect(table().level).toBe(2); expect(restaurant.state.cash).toBe(1250 - cost);
   await expect.element(inspector.getByTestId('furniture-level')).toHaveTextContent('Lv 2');
-  await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Next: Tips +2% → +4% · +1 atmosphere');
+  await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Next: Tips +3% → +6% · +1 atmosphere');
   await expect.element(inspector.getByRole('button', { name: /Upgrade Coral table to level 3/ })).toHaveTextContent(`Upgrade · ${money(furnitureUpgradeCost('table', 3))}`);
   await expect.element(screen.getByTestId('upgrade-scene')).toHaveAttribute('data-building', 'true');
 });

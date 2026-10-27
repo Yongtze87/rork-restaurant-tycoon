@@ -46,7 +46,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - Buildings and the restaurant level up to 15, with a new look at levels 6 and 11.
 - Construction runs in real time, including while you are away: about a minute at first, hours at the top levels. One builder works at a time.
 - **Time skips:** Current charms (−15 min) and Tide charms (−1 h), earned from a daily gift, all three daily challenges and milestones. **Pearls** finish a job instantly and buy a second builder.
-- **Depth zones** are the long-term chapters. The middle 5×5 is the **Sunlit Shallows**; the next ring is the **Coral Reef**, the outer ring the **Twilight Zone**, and the dark drop-off around the town is the **Abyss**. Each zone needs reputation, buildings and cash (Coral Reef: 3.8★, 4 buildings, $3,000 · Twilight: 4.2★, 8 buildings, one at level 6, $9,000 · Abyss: 4.6★, 12 buildings, one at level 11, $25,000). Each zone opens two dishes and draws guests 5% more often; the Reef and Twilight also open their ring of plots.
+- **Depth zones** are the long-term chapters. The middle 5×5 is the **Sunlit Shallows**; the next ring is the **Coral Reef**, the outer ring the **Twilight Zone**, and the dark drop-off around the town is the **Abyss**. Each zone needs reputation, buildings and cash (Coral Reef: 3.8★, 4 buildings, $5,000 · Twilight: 4.2★, 8 buildings, one at level 8, $20,000 · Abyss: 4.6★, 12 buildings, one at level 13, $120,000). Each zone opens two dishes and draws guests 5% more often; the Reef and Twilight also open their ring of plots.
 - The pearl shop lists real-money packs, but they can't be bought until a store and payment provider are chosen.
 
 ### Underwater atmosphere
@@ -95,6 +95,7 @@ The output is a static site for any static host. Configure the host to serve `in
 | `bun run lint` | ESLint |
 | `bun run test` | Unit tests, then browser tests (first run: `bunx playwright install chromium`) |
 | `bunx tsc -p tsconfig.app.json --noEmit` | Type check |
+| `bun tools/simulate.ts --days 56` | Balance simulator: automated owners play the real engine (see [docs/BALANCE.md](docs/BALANCE.md)) |
 
 ---
 

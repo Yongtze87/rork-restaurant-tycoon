@@ -11,7 +11,7 @@ vi.mock('@/management/RestaurantScene', async importOriginal => ({ ...(await imp
 beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 const C = Math.floor(TOWN_SIZE / 2);
 function meetReef(): void {
-  const s = restaurant.state; s.reputation = 3.9; s.cash = 5000;
+  const s = restaurant.state; s.reputation = 3.9; s.cash = 7000;
   s.town.plots.filter(p => plotZone(p) === 'shallows' && !p.building && Math.abs(p.x - C) + Math.abs(p.z - C) === 1).forEach(p => Object.assign(p, { owned: true, building: 'garden', level: 1, job: null }));
   restaurant.notify();
 }
@@ -47,7 +47,7 @@ it('shows each zone’s requirements with progress and reaches the Coral Reef fr
   await expect.element(zones.getByRole('group', { name: 'Twilight Zone' }).getByRole('button')).not.toBeInTheDocument();
   meetReef();
   await expect.element(reef.getByLabelText('Not yet')).not.toBeInTheDocument();
-  await reef.getByRole('button', { name: 'Reach Coral Reef · $3,000' }).click();
+  await reef.getByRole('button', { name: 'Reach Coral Reef · $5,000' }).click();
   expect(restaurant.state.town.zones).toEqual(['shallows', 'reef']); expect(restaurant.state.cash).toBe(2000);
   await expect.element(zones.getByText('Coral Reef', { exact: true })).toBeVisible();
   await expect.element(zones.getByRole('group', { name: 'Twilight Zone' }).getByRole('button', { name: /Not ready yet/ })).toBeDisabled();

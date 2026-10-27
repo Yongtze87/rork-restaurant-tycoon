@@ -37,7 +37,7 @@ describe('zone requirements', () => {
     const s = createRestaurant(); addBuildings(s.town, 2);
     expect(zoneRequirements(s, 'shallows')).toEqual([]);
     expect(zoneRequirements(s, 'reef').map(r => [r.label, r.met])).toEqual([
-      ['Reputation 3.8 · now 3.5', false], ['4 buildings in town · 2/4', false], ['$3,000 · you have $1,250', false],
+      ['Reputation 3.8 · now 3.5', false], ['4 buildings in town · 2/4', false], ['$5,000 · you have $1,250', false],
     ]);
     expect(zoneError(s, 'reef')).toBe('Reach a 3.8 reputation first.');
   });
@@ -45,9 +45,9 @@ describe('zone requirements', () => {
     const s = createRestaurant(); s.reputation = 5; s.cash = 100_000; addBuildings(s.town, 12, 5);
     expect(zoneError(s, 'twilight')).toBe('Reach the Coral Reef first.');
     s.town.zones.push('reef');
-    expect(zoneError(s, 'twilight')).toBe('Upgrade a building to level 6 first.');
-    plotAt(s.town, C, C)!.level = 6; expect(zoneError(s, 'twilight')).toBeNull();
-    expect(zoneRequirements(s, 'abyss').find(r => r.label.startsWith('A building'))).toMatchObject({ label: 'A building at level 11 · best Lv 6', met: false });
+    expect(zoneError(s, 'twilight')).toBe('Upgrade a building to level 8 first.');
+    plotAt(s.town, C, C)!.level = 8; expect(zoneError(s, 'twilight')).toBeNull();
+    expect(zoneRequirements(s, 'abyss').find(r => r.label.startsWith('A building'))).toMatchObject({ label: 'A building at level 13 · best Lv 8', met: false });
     // A building still under construction does not count yet.
     s.town.plots.filter(p => p.building === 'homes').slice(0, 5).forEach(p => { p.job = { kind: 'build', startedAt: 0, endsAt: 1 }; });
     expect(zoneRequirements(s, 'twilight').find(r => r.label.includes('buildings'))?.met).toBe(false);
@@ -56,9 +56,9 @@ describe('zone requirements', () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now);
     expect(e.unlockZone('reef')).toBe('Reach a 3.8 reputation first.');
     e.state.reputation = 3.8; expect(e.unlockZone('reef')).toBe('Build 4 buildings in town first.');
-    addBuildings(e.state.town, 4); expect(e.unlockZone('reef')).toBe('Reaching the Coral Reef costs $3,000.');
+    addBuildings(e.state.town, 4); expect(e.unlockZone('reef')).toBe('Reaching the Coral Reef costs $5,000.');
     expect(e.unlockZone('abyss')).toBe('Reach the Twilight Zone first.');
-    e.state.cash = 3500; const before = e.townEffects().arrivalBonus;
+    e.state.cash = 5500; const before = e.townEffects().arrivalBonus;
     expect(e.unlockZone('reef')).toBeNull();
     expect(e.state.cash).toBe(500); expect(e.state.town.zones).toEqual(['shallows', 'reef']);
     expect(e.townEffects().arrivalBonus).toBeCloseTo(before + ZONE_ARRIVAL_BONUS);
@@ -126,7 +126,7 @@ describe('5×5 save migration', () => {
     expect(plotAt(town, C - 1, C + 1)).toMatchObject({ owned: true, building: null });
     expect(ownedCount(town)).toBe(5);
     // Neighbour bonuses survive the move: the kelp farm still touches the restaurant.
-    expect(e.townEffects().kelpCost).toBeCloseTo(1 - 4 * .04 * 1.5);
+    expect(e.townEffects().kelpCost).toBeCloseTo(1 - 4 * .06 * 1.5);
     h.advance(30); e.update(.1); expect(plotAt(town, C + 2, C + 2)!.job).toBeNull();
     h.advance(30); e.update(.1); expect(plotAt(town, C, C)).toMatchObject({ level: 8, job: null });
     e.save(); expect(h.read().town.plots).toHaveLength(81); expect(restaurantSchema.safeParse(h.read()).success).toBe(true);
@@ -138,6 +138,6 @@ describe('5×5 save migration', () => {
   });
   it('names each zone for players', () => {
     expect(Object.values(ZONES).map(z => z.name)).toEqual(['Sunlit Shallows', 'Coral Reef', 'Twilight Zone', 'Abyss']);
-    expect([ZONES.reef.price, ZONES.twilight.price, ZONES.abyss.price]).toEqual([3000, 9000, 25000]);
+    expect([ZONES.reef.price, ZONES.twilight.price, ZONES.abyss.price]).toEqual([5000, 20000, 120000]);
   });
 });

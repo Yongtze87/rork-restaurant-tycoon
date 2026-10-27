@@ -17,9 +17,9 @@ export interface ZoneInfo {
 }
 export const ZONES: Record<ZoneId, ZoneInfo> = {
   shallows: { name: 'Sunlit Shallows', place: 'the Sunlit Shallows', description: 'Warm sand and kelp. Where every reef story begins.', reputation: 0, buildings: 0, topLevel: 0, price: 0 },
-  reef: { name: 'Coral Reef', place: 'the Coral Reef', description: 'Bright coral gardens with lobster and sea grapes. A new ring of plots.', reputation: 3.8, buildings: 4, topLevel: 0, price: 3000 },
-  twilight: { name: 'Twilight Zone', place: 'the Twilight Zone', description: 'Deep blue water lit by moon jellies and glow squid. The outer ring of plots.', reputation: 4.2, buildings: 8, topLevel: 6, price: 9000 },
-  abyss: { name: 'Abyss', place: 'the Abyss', description: 'The dark drop-off around your town. Rare vent pearls and ink for the finest dishes.', reputation: 4.6, buildings: 12, topLevel: 11, price: 25000 },
+  reef: { name: 'Coral Reef', place: 'the Coral Reef', description: 'Bright coral gardens with lobster and sea grapes. A new ring of plots.', reputation: 3.8, buildings: 4, topLevel: 0, price: 5000 },
+  twilight: { name: 'Twilight Zone', place: 'the Twilight Zone', description: 'Deep blue water lit by moon jellies and glow squid. The outer ring of plots.', reputation: 4.2, buildings: 8, topLevel: 8, price: 20000 },
+  abyss: { name: 'Abyss', place: 'the Abyss', description: 'The dark drop-off around your town. Rare vent pearls and ink for the finest dishes.', reputation: 4.6, buildings: 12, topLevel: 13, price: 120000 },
 };
 /** Each zone past the Shallows draws guests this much more often. */
 export const ZONE_ARRIVAL_BONUS = .05;

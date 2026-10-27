@@ -51,8 +51,8 @@ export type Town = Validated<z.infer<typeof townSchema>>;
 export interface BuildingInfo { name: string; description: string; adjacency: string; looks: [string, string, string]; buildCost: number; buildSeconds: number; }
 export const BUILDINGS: Record<BuildingKind, BuildingInfo> = {
   restaurant: { name: 'Restaurant', description: 'Your restaurant. Each level draws guests a little more often.', adjacency: '', looks: ['Reef shack', 'Coral hall', 'Bubble-dome palace'], buildCost: 0, buildSeconds: 0 },
-  kelpFarm: { name: 'Kelp farm', description: 'Grows your own kelp. Kelp dishes cost less to make.', adjacency: 'Next to the restaurant: 50% stronger.', looks: ['Kelp patch', 'Kelp terraces', 'Glowing kelp forest'], buildCost: 350, buildSeconds: 90 },
-  fishery: { name: 'Fishery', description: 'Catches your own fish. Fish dishes cost less to make.', adjacency: 'Next to the restaurant: 50% stronger.', looks: ['Fish traps', 'Net house', 'Pearl-shell fishery'], buildCost: 450, buildSeconds: 120 },
+  kelpFarm: { name: 'Kelp farm', description: 'Grows your own kelp. Kelp dishes cost less to make.', adjacency: 'Next to the restaurant: 50% stronger.', looks: ['Kelp patch', 'Kelp terraces', 'Glowing kelp forest'], buildCost: 300, buildSeconds: 90 },
+  fishery: { name: 'Fishery', description: 'Catches your own fish. Fish dishes cost less to make.', adjacency: 'Next to the restaurant: 50% stronger.', looks: ['Fish traps', 'Net house', 'Pearl-shell fishery'], buildCost: 350, buildSeconds: 120 },
   homes: { name: 'Mareen homes', description: 'Room for more crew. +1 crew slot, +1 more every 5 levels.', adjacency: 'Next to a glow garden: crew work faster.', looks: ['Shell huts', 'Coral cottages', 'Pearl villas'], buildCost: 300, buildSeconds: 90 },
   garden: { name: 'Glow garden', description: 'A glowing attraction. Guests arrive more often.', adjacency: 'Next to the restaurant: 50% stronger. Next to homes: crew work faster.', looks: ['Anemone bed', 'Jelly garden', 'Bioluminescent grove'], buildCost: 250, buildSeconds: 60 },
   workshop: { name: 'Workshop', description: 'Mareen engineers. All building and upgrading finishes faster.', adjacency: '', looks: ['Driftwood shed', 'Stone workshop', 'Crystal forge'], buildCost: 500, buildSeconds: 150 },
@@ -98,9 +98,11 @@ export const activeLevel = (plot: Plot): number => plot.job?.kind === 'build' ? 
 const levelsOf = (town: Town, kind: BuildingKind): Plot[] => town.plots.filter(p => p.building === kind && activeLevel(p) > 0);
 const nextTo = (town: Town, plot: Plot, kind: BuildingKind): boolean => neighbours(town, plot).some(p => p.building === kind && activeLevel(p) > 0);
 
+/** Balance knobs for building upgrades and producers; see docs/BALANCE.md for the reasoning. */
+export const TOWN_BALANCE = { restaurantUpgradeBase: 600, upgradeExponent: 1.6, producerPerLevel: .06, producerCap: .6 } as const;
 export function upgradeCost(kind: BuildingKind, nextLevel: number): number {
-  const base = kind === 'restaurant' ? 800 : BUILDINGS[kind].buildCost;
-  return Math.round(base * .6 * nextLevel ** 1.35 / 10) * 10;
+  const base = kind === 'restaurant' ? TOWN_BALANCE.restaurantUpgradeBase : BUILDINGS[kind].buildCost;
+  return Math.round(base * .6 * nextLevel ** TOWN_BALANCE.upgradeExponent / 10) * 10;
 }
 /** Real seconds for a job before workshop speed-ups: about a minute early on, hours near the top. */
 export function baseSeconds(kind: BuildingKind, nextLevel: number): number {
@@ -115,7 +117,7 @@ export interface TownEffects { kelpCost: number; fishCost: number; extraCrew: nu
 export function townEffects(town: Town): TownEffects {
   const restaurantPlot = town.plots.find(p => p.building === 'restaurant')!;
   const boost = (p: Plot) => nextTo(town, p, 'restaurant') ? 1.5 : 1;
-  const producer = (kind: BuildingKind) => 1 - Math.min(.6, levelsOf(town, kind).reduce((sum, p) => sum + activeLevel(p) * .04 * boost(p), 0));
+  const producer = (kind: BuildingKind) => 1 - Math.min(TOWN_BALANCE.producerCap, levelsOf(town, kind).reduce((sum, p) => sum + activeLevel(p) * TOWN_BALANCE.producerPerLevel * boost(p), 0));
   const gardens = levelsOf(town, 'garden');
   return {
     kelpCost: producer('kelpFarm'), fishCost: producer('fishery'),
@@ -132,8 +134,8 @@ export const nextToKind = (town: Town, plot: Pick<Plot, 'x' | 'z'>, kind: Buildi
 export function effectText(town: Town, plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind, level: number): string {
   const boost = nextToKind(town, plot, 'restaurant') ? 1.5 : 1;
   if (kind === 'restaurant') return level > 1 ? `Guests arrive ${percent((level - 1) * .03)} more often` : 'Upgrade to draw guests more often';
-  if (kind === 'kelpFarm') return `Kelp dishes cost ${percent(Math.min(.6, level * .04 * boost))} less to make`;
-  if (kind === 'fishery') return `Fish dishes cost ${percent(Math.min(.6, level * .04 * boost))} less to make`;
+  if (kind === 'kelpFarm') return `Kelp dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
+  if (kind === 'fishery') return `Fish dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
   if (kind === 'homes') return `+${1 + Math.floor(level / 5)} crew slot${level >= 5 ? 's' : ''}`;
   if (kind === 'garden') return `Guests arrive ${percent(level * .03 * boost)} more often${nextToKind(town, plot, 'homes') ? ` · crew ${percent(Math.min(.15, level * .01))} faster` : ''}`;
   return `All building finishes ${percent(Math.min(.45, level * .03))} faster`;
