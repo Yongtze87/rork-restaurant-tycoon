@@ -3,6 +3,7 @@ import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, 
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
+import { LAST_TUTORIAL_STEP } from './tutorial';
 import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
 import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, busyBuilders, completeJobs, dayKey, finishCost, jobSeconds, lookFor, plotAt, plotLockReason, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
@@ -231,7 +232,14 @@ export class RestaurantEngine {
   }
   rename(name: string): void { this.state.name = name.trim().slice(0, 28) || 'Little Reef'; this.changed(); }
   setMusic(value: boolean): void { this.state.music = value; this.changed(); }
-  welcome(): void { this.state.welcomed = true; this.changed(); }
+  /** Skip or finish the guided tutorial. */
+  welcome(): void { this.state.welcomed = true; this.state.tutorial = { ...this.state.tutorial, done: true }; this.changed(); }
+  /** Save tutorial progress; it only moves forward, and moving past the last step finishes it. */
+  tutorialTo(step: number): void {
+    const tutorial = this.state.tutorial; if (tutorial.done || step <= tutorial.step) return;
+    if (step > LAST_TUTORIAL_STEP) { this.welcome(); return; }
+    tutorial.step = step; this.changed();
+  }
   reset(): void { this.rewardSavePending = false; this.pauseAfterCatchUp = null; this.catchingUp = false; this.backgrounded = false; this.awaySummary = null; this.speed = 1; this.incomeReceipts = []; this.state = createRestaurant(); this.paused = false; this.accumulator = 0; this.savedAt = 0; this.loadWarning = ''; this.changed('A fresh beginning. Make this reef your own.'); }
   readiness(): string[] {
     const errors: string[] = [];

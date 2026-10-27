@@ -32,3 +32,7 @@ progress::-webkit-progress-bar { @apply rounded-full bg-ink/15; }
 progress::-webkit-progress-value { @apply rounded-full bg-gold; transition: width .2s; }
 progress::-moz-progress-bar { @apply rounded-full bg-gold; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+/* Tutorial coach mark: a teal ring on the control the current step points at. Static when motion is reduced. */
+[data-tutorial-highlight] { outline: 3px solid #4DF0FF; outline-offset: 2px; animation: tutorial-pulse 1.6s ease-in-out infinite; }
+@keyframes tutorial-pulse { 0%, 100% { box-shadow: 0 0 0 0 #4DF0FF99; } 50% { box-shadow: 0 0 0 8px #4DF0FF00; } }
+@media (prefers-reduced-motion: reduce) { [data-tutorial-highlight] { animation: none !important; box-shadow: 0 0 0 5px #4DF0FF55; } }

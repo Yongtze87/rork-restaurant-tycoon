@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MAX_LEVEL, createTown, townSchema, type Validated } from './town';
 import { rollTide, tideKind } from './tides';
 import type { ZoneId } from './zones';
+import { migrateTutorial, newTutorial, tutorialSchema } from './tutorial';
 
 export const furnitureKind = z.enum(['table', 'prep', 'grill', 'plant', 'divider', 'lamp']);
 export type FurnitureKind = z.infer<typeof furnitureKind>;
@@ -57,7 +58,7 @@ const menuItem = (dish: DishId) => z.object({ enabled: z.boolean(), price: price
 const menuSchema = z.object(Object.fromEntries(DISH_IDS.map(dish => [dish, menuItem(dish)])) as { [K in DishId]: ReturnType<typeof menuItem> });
 export type Menu = Validated<z.infer<typeof menuSchema>>;
 /** Validated versioned save. Arcade records live under a different key. */
-export const restaurantSchema = z.object({
+export const restaurantSchema = z.preprocess(migrateTutorial, z.object({
   version: z.literal(1), name: z.string().min(1).max(28), day: z.number().int().min(1), cash: z.number().finite(), reputation: z.number().min(1).max(5), debt: z.number().nonnegative(), expanded: z.boolean(),
   furniture: z.array(furnitureSchema).min(1).max(100), staff: z.array(staffSchema).min(2).max(12), guests: z.array(guestSchema).max(24), dirty: z.array(z.string().max(30)).max(40),
   menu: menuSchema,
@@ -66,7 +67,9 @@ export const restaurantSchema = z.object({
   dailyChallenges: challengesSchema, lifetimeChallengeBonus: z.number().int().nonnegative().default(0), tide: tideKind.default('calm'),
   totals: totalsSchema, history: z.array(reportSchema).max(20), lifetimeServed: z.number().int().nonnegative(), claimed: z.array(z.string()).max(10), music: z.boolean(), welcomed: z.boolean(),
   town: townSchema.default(createTown),
-});
+  /** Guided first session; `migrateTutorial` marks it done for saves that had dismissed the old welcome card. */
+  tutorial: tutorialSchema.default(newTutorial),
+}));
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
 export const CATALOG: Record<FurnitureKind, CatalogItem> = {
@@ -125,6 +128,6 @@ export function createRestaurant(): RestaurantState {
       { id: 11, name: 'Pearl', role: 'server', level: 1, x: 4, z: 7, yaw: 0, route: [], task: 'idle', guestId: null, stationId: null, timer: 0 },
     ], guests: [], dirty: [], menu: createMenu(),
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
-    phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(),
+    phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(), tutorial: newTutorial(),
   };
 }

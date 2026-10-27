@@ -59,7 +59,7 @@ export function TownPanel({ selected, onSelect, onEnterRestaurant, onShop, actio
       <p className="mb-3 text-xs leading-relaxed text-ink/65">Unlock plots next to your town and choose what to build. What you build, and where, shapes how your restaurant grows.</p>
       <ZoneSection action={action} />
       <h3 className="mb-2 text-lg">Plots</h3>
-      <div className="space-y-2">{list.map(p => <button type="button" key={`${p.x},${p.z}`} onClick={() => onSelect(p)} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-ink/10 bg-ink/[.06] px-3 text-left text-sm font-bold hover:bg-ink/10">
+      <div className="space-y-2">{list.map(p => <button type="button" key={`${p.x},${p.z}`} data-tutorial={!p.owned ? 'plot-locked' : p.job ? 'plot-busy' : p.building ? undefined : 'plot-empty'} onClick={() => onSelect(p)} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-ink/10 bg-ink/[.06] px-3 text-left text-sm font-bold hover:bg-ink/10">
         {p.owned ? p.job ? <Clock size={17} className="shrink-0 text-gold" aria-hidden="true" /> : <MapPin size={17} className="shrink-0 text-teal" aria-hidden="true" /> : <LockKeyhole size={17} className="shrink-0 text-ink/60" aria-hidden="true" />}
         <span className="min-w-0 flex-1">{plotLabel(town, p, now)}</span></button>)}</div>
     </section>;
@@ -68,7 +68,7 @@ export function TownPanel({ selected, onSelect, onEnterRestaurant, onShop, actio
   if (!plot.owned) {
     const cost = unlockCost(town), open = canUnlock(town, plot), reason = plotLockReason(town, plot), zone = ZONES[plotZone(plot)];
     return <section aria-label="Locked plot">{back}{summary}<h3 className="text-xl">Wild seabed</h3><p className="text-xs text-ink/60">{zone.name}</p>
-      {open ? <><p className="my-2 text-xs text-ink/65">Claim this plot for your town. Each new plot costs more than the last.</p>{afterSpend(cost)}<SmallButton className="mt-2 w-full bg-teal text-paper" disabled={state.cash < cost} onClick={() => action(restaurant.unlockPlot(plot.x, plot.z))}><LockKeyhole size={16} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Unlock · ${money(cost)}`}</SmallButton></>
+      {open ? <><p className="my-2 text-xs text-ink/65">Claim this plot for your town. Each new plot costs more than the last.</p>{afterSpend(cost)}<SmallButton tutorial="unlock-plot" className="mt-2 w-full bg-teal text-paper" disabled={state.cash < cost} onClick={() => action(restaurant.unlockPlot(plot.x, plot.z))}><LockKeyhole size={16} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Unlock · ${money(cost)}`}</SmallButton></>
         : <Notice>{reason}{hasZone(town, plotZone(plot)) ? ' Plots grow outward from your restaurant.' : ' See Depth zones under All plots.'}</Notice>}
     </section>;
   }
@@ -80,7 +80,7 @@ export function TownPanel({ selected, onSelect, onEnterRestaurant, onShop, actio
         <div className="flex items-start justify-between gap-2"><div><h4 className="font-display text-lg leading-tight">{info.name}</h4><p className="mt-0.5 text-[11px] text-ink/65">{info.description}</p></div><span className="font-display text-lg tabular-nums text-teal">{money(info.buildCost)}</span></div>
         <p className="mt-1.5 text-[11px] font-bold text-teal">{effectText(town, plot, kind, 1)}</p>
         {info.adjacency && <p className={cn('mt-1 flex items-center gap-1 text-[11px]', bonus ? 'font-bold text-gold' : 'text-ink/55')}><Sparkles size={12} aria-hidden="true" />{bonus ? 'Neighbour bonus active here. ' : ''}{info.adjacency}</p>}
-        <SmallButton className="mt-2 w-full" disabled={!affordable || busy} onClick={() => action(restaurant.build(plot.x, plot.z, kind))}><Hammer size={15} />{!affordable ? `Need ${money(info.buildCost - state.cash)} more` : `Build · ${formatDuration(jobSeconds(town, kind, 1) * 1000)}`}</SmallButton>
+        <SmallButton tutorial="build-building" className="mt-2 w-full" disabled={!affordable || busy} onClick={() => action(restaurant.build(plot.x, plot.z, kind))}><Hammer size={15} />{!affordable ? `Need ${money(info.buildCost - state.cash)} more` : `Build · ${formatDuration(jobSeconds(town, kind, 1) * 1000)}`}</SmallButton>
       </div>;
     })}</div></section>;
   const kind = plot.building, info = BUILDINGS[kind], job = plot.job, next = plot.level + 1, cost = upgradeCost(kind, next);
@@ -92,7 +92,7 @@ export function TownPanel({ selected, onSelect, onEnterRestaurant, onShop, actio
     {job ? <div className="mt-3 rounded-2xl border border-gold/40 bg-gold/10 p-3" data-testid="construction">
       <div className="flex items-center justify-between text-sm font-extrabold"><span>{job.kind === 'build' ? 'Building' : `Upgrading to level ${next}`}</span><span className="tabular-nums">{formatDuration(job.endsAt - now)}</span></div>
       <progress className="mt-2" aria-label="Construction progress" value={Math.min(1, (now - job.startedAt) / Math.max(1, job.endsAt - job.startedAt))} max={1} />
-      <div className="mt-3 grid grid-cols-2 gap-2">{(['current', 'tide'] as const).map(charm => <SmallButton key={charm} className="flex-col gap-0 py-1.5 text-xs" disabled={town.charms[charm] < 1} onClick={() => action(restaurant.useCharm(plot.x, plot.z, charm))}><span className="flex items-center gap-1"><Waves size={14} />{CHARMS[charm].name}</span><span className="text-[10px] text-ink/60">−{charm === 'current' ? '15 min' : '1 hour'} · you have {town.charms[charm]}</span></SmallButton>)}</div>
+      <div className="mt-3 grid grid-cols-2 gap-2">{(['current', 'tide'] as const).map(charm => <SmallButton key={charm} tutorial={charm === 'current' ? 'use-current' : undefined} className="flex-col gap-0 py-1.5 text-xs" disabled={town.charms[charm] < 1} onClick={() => action(restaurant.useCharm(plot.x, plot.z, charm))}><span className="flex items-center gap-1"><Waves size={14} />{CHARMS[charm].name}</span><span className="text-[10px] text-ink/60">−{charm === 'current' ? '15 min' : '1 hour'} · you have {town.charms[charm]}</span></SmallButton>)}</div>
       <SmallButton className="mt-2 w-full border-violet/40 bg-violet/15" disabled={town.pearls < finishCost(job, now)} onClick={() => action(restaurant.finishNow(plot.x, plot.z))}><Zap size={15} />Finish now · {finishCost(job, now)} {finishCost(job, now) === 1 ? 'pearl' : 'pearls'}</SmallButton>
       {town.pearls < finishCost(job, now) && <button type="button" onClick={onShop} className="mt-1 w-full text-center text-[11px] font-bold text-teal underline">Get pearls in the shop</button>}
     </div>
