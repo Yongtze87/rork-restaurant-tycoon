@@ -1,14 +1,15 @@
 import { grottoSpaceError } from './town';
 import { useState } from 'react';
-import { Armchair, ArrowUpRight, Check, Leaf, LockKeyhole, Move, ShoppingBag, X } from 'lucide-react';
+import { Armchair, ArrowUpRight, Check, ChefHat, Flower2, LayoutGrid, LockKeyhole, ShoppingBag, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { restaurant } from './engine';
-import { CATALOG, capacity, comfort, type FurnitureKind, type RestaurantState } from './types';
+import { CATALOG, comfort, type FurnitureKind, type RestaurantState } from './types';
 import { FurnitureArt, type Action } from './Panels';
 import { guardSpend } from './spend-guard';
 import { money } from './format';
 
 const categories = ['All', 'Dining', 'Decor', 'Kitchen'] as const;
+const CATEGORY_ICONS = { All: LayoutGrid, Dining: Armchair, Decor: Flower2, Kitchen: ChefHat } as const;
 type Category = typeof categories[number];
 const catalogOrder: FurnitureKind[] = ['table', 'booth', 'plant', 'lamp', 'divider', 'prep', 'grill'];
 const matchesCategory = (kind: FurnitureKind, category: Category): boolean => category === 'All' || CATALOG[kind].category === (category === 'Decor' ? 'Atmosphere' : category);
@@ -31,8 +32,7 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
         <button type="button" aria-pressed={view === 'shop'} onClick={() => setView('shop')} className={cn('flex min-h-10 items-center gap-1 rounded-md px-2.5 text-[11px] font-extrabold', view === 'shop' ? 'bg-paper text-teal shadow-sm' : 'text-ink/60')}><ShoppingBag size={14} aria-hidden="true" />Shop</button>
         <button type="button" aria-pressed={view === 'room'} onClick={() => setView('room')} className={cn('flex min-h-10 items-center gap-1 rounded-md px-2.5 text-[11px] font-extrabold', view === 'room' ? 'bg-paper text-teal shadow-sm' : 'text-ink/60')}>Room <span className="rounded-full bg-teal/10 px-1 tabular-nums">{state.furniture.length}</span></button>
       </div>
-      <div role="group" aria-label="Furniture categories" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">{categories.map(cat => <button type="button" key={cat} aria-pressed={category === cat} onClick={() => setCategory(cat)} className={cn('min-h-10 shrink-0 rounded-full px-2.5 text-[11px] font-extrabold', category === cat ? 'bg-teal text-paper' : 'text-ink/65 hover:bg-ink/5')}>{cat}</button>)}</div>
-      <span className="flex shrink-0 items-center gap-1.5 px-1 text-[10px] font-bold text-ink/60"><Armchair size={13} aria-hidden="true" />{capacity(state)}<Leaf size={13} aria-hidden="true" />{comfort(state)}%</span>
+      <div role="group" aria-label="Furniture categories" className="flex min-w-0 flex-1 justify-end gap-0.5">{categories.map(cat => { const Icon = CATEGORY_ICONS[cat]; return <button type="button" key={cat} aria-label={cat} title={cat} aria-pressed={category === cat} onClick={() => setCategory(cat)} className={cn('grid size-10 shrink-0 place-items-center rounded-full', category === cat ? 'bg-teal text-paper' : 'text-ink/65 hover:bg-ink/5')}><Icon size={16} aria-hidden="true" /></button>; })}</div>
       <button type="button" aria-label="Close build menu" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-ink/5"><X size={17} /></button>
     </div>
     <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5 short:flex-wrap short:overflow-visible">
@@ -57,8 +57,7 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
         : owned.map(item => <button type="button" key={item.id} aria-label={`Edit ${CATALOG[item.kind].name} at column ${item.x + 1}, row ${item.z + 1}`} onClick={() => inspect(item.id)} className={card}>
           <FurnitureArt kind={item.kind} small />
           <span className="flex items-center justify-between gap-1 text-[11px] font-extrabold leading-tight"><span className="truncate">{CATALOG[item.kind].name}</span><span data-testid="room-level" className="shrink-0 rounded-full bg-teal/10 px-1 text-[10px] text-teal">Lv {item.level}</span></span>
-          <span className="text-[10px] font-bold text-teal">Resale {money(Math.floor(CATALOG[item.kind].price * .7))}{item.level > 1 ? ' · base price' : ''}</span>
-          <span className="flex items-center gap-1 text-[10px] text-ink/55"><Move size={11} aria-hidden="true" />Col {item.x + 1} · Row {item.z + 1}</span>
+          <span className="text-[10px] font-bold text-teal">Sells {money(Math.floor(CATALOG[item.kind].price * .7))}</span>
         </button>)}
     </div>
   </section>;

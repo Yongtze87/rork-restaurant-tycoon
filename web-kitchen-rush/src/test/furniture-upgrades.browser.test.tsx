@@ -21,7 +21,6 @@ it('upgrades a selected table from the inspector with the real cost and next eff
   const inspector = screen.getByRole('region', { name: 'Furniture placement' });
   await expect.element(inspector.getByTestId('furniture-level')).toHaveTextContent('Lv 1');
   await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Next: Tips +3% · +1 atmosphere');
-  await expect.element(inspector.getByTestId('furniture-upgrade')).toHaveTextContent('Selling refunds 70% of the base price only.');
   await inspector.getByRole('button', { name: `Upgrade Coral table to level 2 for ${money(cost)}` }).click();
   expect(table().level).toBe(2); expect(restaurant.state.cash).toBe(1250 - cost);
   await expect.element(inspector.getByTestId('furniture-level')).toHaveTextContent('Lv 2');
@@ -40,7 +39,7 @@ it('disables the upgrade with the reason when cash is short or at the highest le
   expect(table().level).toBe(1); expect(restaurant.state.cash).toBe(100);
   table().level = 15; restaurant.state.cash = 100_000; restaurant.notify();
   await expect.element(screen.getByRole('button', { name: 'Fully upgraded' })).toBeDisabled();
-  await expect.element(screen.getByTestId('furniture-upgrade')).toHaveTextContent('Already at the highest level.');
+  await expect.element(screen.getByTestId('furniture-upgrade')).toHaveTextContent('Fully upgraded');
 });
 
 it('shows each piece’s level in the room list', async () => {
@@ -50,7 +49,7 @@ it('shows each piece’s level in the room list', async () => {
   await screen.getByRole('button', { name: /Room/ }).click();
   const item = screen.getByRole('button', { name: 'Edit Coral table at column 2, row 5' });
   await expect.element(item).toHaveTextContent('Lv 7');
-  await expect.element(item).toHaveTextContent(`Resale ${money(Math.floor(CATALOG.table.price * .7))} · base price`);
+  await expect.element(item).toHaveTextContent(`Sells ${money(Math.floor(CATALOG.table.price * .7))}`);
   await expect.element(screen.getByRole('button', { name: 'Edit Sea anemone at column 1, row 1' })).toHaveTextContent('Lv 1');
 });
 

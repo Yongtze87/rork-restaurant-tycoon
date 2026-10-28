@@ -99,7 +99,8 @@ it('selects actual owned pieces, moves for free and refunds exactly 70% on sale'
   await screen.getByRole('button', { name: 'Confirm', exact: true }).click();
   expect(restaurant.state.cash).toBe(1250); expect(restaurant.state.furniture.find(f => f.id === 6)).toMatchObject({ x: 0, z: 7 });
   await screen.getByRole('button', { name: 'Edit Sea anemone at column 1, row 8' }).click();
-  await screen.getByRole('button', { name: 'Sell Sea anemone for $45' }).click();
+  await screen.getByRole('button', { name: 'Sell Sea anemone for $45' }).click(); expect(restaurant.state.furniture.some(f => f.id === 6)).toBe(true);
+  await screen.getByRole('button', { name: 'Confirm: sell for $45' }).click();
   expect(restaurant.state.cash).toBe(1295); expect(restaurant.state.furniture.some(f => f.id === 6)).toBe(false);
   expect(restaurant.incomeReceipts[restaurant.incomeReceipts.length - 1].source).toBe('sale');
 });

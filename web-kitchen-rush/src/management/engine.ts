@@ -7,6 +7,7 @@ import type { CashReceipt } from './cash-feedback';
 import { LAST_TUTORIAL_STEP } from './tutorial';
 import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
+import { EFFICIENCY_STEP, EFFICIENCY_WINDOW, advise, summarize, type Advice, type Efficiency, type EfficiencySample } from './efficiency';
 import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
 import { HOME_ID, claimGate, claimPrice, fameBonuses, isClaimable as regionClaimable, isClaimed, masteryFame, masteryKey, regionAt, regionById, regionPlotCost, type FameBonuses, type MasteryKind, type Region, type RegionModifiers } from './ocean';
 import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_BALANCE, activeLevel, addRegion, addRoads, branchIn, branchIncome, buildingById, buildingPlot, buildingRegion, busyBuilders, completeJobs, ensureRegionPlots, finishCost, grottoSpaceError, isRoad, jobSeconds, lookFor, ownedCount, parcelOf, placementError as sitingError, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, roadError, streetTiles, tileKey, townEffects, unlockCost, upgradeCost, widenRestaurant, type Building, type BuildingKind, type CharmKind, type TownEffects } from './town';
@@ -414,7 +415,7 @@ export class RestaurantEngine {
     if (step > LAST_TUTORIAL_STEP) { this.welcome(); return; }
     tutorial.step = step; this.changed();
   }
-  reset(): void { this.rewardSavePending = false; this.pauseAfterCatchUp = null; this.catchingUp = false; this.backgrounded = false; this.awaySummary = null; this.speed = 1; this.incomeReceipts = []; this.state = createRestaurant(); this.paused = false; this.accumulator = 0; this.savedAt = 0; this.loadWarning = ''; this.changed('A fresh beginning. Make this reef your own.'); }
+  reset(): void { this.rewardSavePending = false; this.pauseAfterCatchUp = null; this.catchingUp = false; this.backgrounded = false; this.awaySummary = null; this.speed = 1; this.incomeReceipts = []; this.samples = []; this.lost = []; this.lastMissed = { missed: 0, full: 0 }; this.state = createRestaurant(); this.paused = false; this.accumulator = 0; this.savedAt = 0; this.loadWarning = ''; this.changed('A fresh beginning. Make this reef your own.'); }
   readiness(): string[] {
     const errors: string[] = [];
     if (!capacity(this.state)) errors.push('Build at least one coral table.');
@@ -511,8 +512,31 @@ export class RestaurantEngine {
       }
     }
   }
+  /** The last minute of service, sampled for the efficiency readout (session only, not saved). */
+  private samples: EfficiencySample[] = []; private sampleClock = 0; private lost: { at: number; full: boolean }[] = []; private lastMissed = { missed: 0, full: 0 };
+  private sample(dt: number): void {
+    const s = this.state; this.sampleClock += dt;
+    // Losses since the last step: turned away by a full room, or left upset.
+    const t = s.totals; if (t.missed < this.lastMissed.missed) this.lastMissed = { missed: 0, full: 0 };
+    const full = t.full - this.lastMissed.full, upset = t.missed - this.lastMissed.missed - full;
+    for (let i = 0; i < full; i++) this.lost.push({ at: s.clock, full: true }); for (let i = 0; i < upset; i++) this.lost.push({ at: s.clock, full: false });
+    this.lastMissed = { missed: t.missed, full: t.full };
+    if (this.sampleClock < EFFICIENCY_STEP) return; this.sampleClock = 0;
+    const chefs = s.staff.filter(m => m.role === 'chef'), servers = s.staff.filter(m => m.role === 'server'), seats = capacity(s);
+    const busy = (list: Staff[]) => list.length ? list.filter(m => m.task !== 'idle').length / list.length : 0;
+    this.samples.push({ chefs: busy(chefs), servers: busy(servers), seats: seats ? Math.min(1, (s.guests.filter(g => g.stage !== 'arriving' && g.stage !== 'leaving').length + s.dirty.length) / seats) : 0, waiting: s.guests.filter(g => g.stage === 'waiting').length, ready: s.guests.filter(g => g.stage === 'ready').length, dirty: s.dirty.length });
+    if (this.samples.length > EFFICIENCY_WINDOW / EFFICIENCY_STEP) this.samples.shift();
+    this.lost = this.lost.filter(l => l.at > s.clock - EFFICIENCY_WINDOW);
+  }
+  /** How the dining room kept up over the last minute, and the one change most likely to help. */
+  efficiency(): Efficiency & { advice: Advice } {
+    const s = this.state, e = summarize(this.samples, this.lost.filter(l => l.full).length, this.lost.filter(l => !l.full).length);
+    const stations = s.furniture.filter(f => f.kind === 'prep' || f.kind === 'grill').length, chefs = s.staff.filter(m => m.role === 'chef').length;
+    return { ...e, advice: advise(e, { crewFull: s.staff.length >= this.crewLimit(), stationsShort: chefs >= stations, limitBy: this.seatLimit().by }) };
+  }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
+    if (s.elapsed < DAY_LENGTH) this.sample(dt);
     if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + this.arrivalGap(); }
     for (const guest of s.guests) {
       if (guest.stage === 'arriving' && walk(guest, dt, 1.7)) {
