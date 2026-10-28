@@ -63,7 +63,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingInfo> = {
   homes: { name: 'Mareen homes', description: 'Room for more crew. +1 crew slot, +1 more every 5 levels.', adjacency: 'Next to a glow garden: crew work faster.', looks: ['Shell huts', 'Coral cottages', 'Pearl villas'], buildCost: 300, buildSeconds: 90 },
   garden: { name: 'Glow garden', description: 'A glowing attraction. Guests arrive more often.', adjacency: 'Next to the restaurant or a branch: 50% stronger. Next to homes: crew work faster.', looks: ['Anemone bed', 'Jelly garden', 'Bioluminescent grove'], buildCost: 250, buildSeconds: 60 },
   workshop: { name: 'Workshop', description: 'Mareen engineers. All building and upgrading finishes faster.', adjacency: '', looks: ['Driftwood shed', 'Stone workshop', 'Crystal forge'], buildCost: 500, buildSeconds: 150 },
-  branch: { name: 'Branch restaurant', description: 'A second restaurant your crew runs on its own. It earns money at the close of every service day.', adjacency: 'One per region, outside the Home Reef. Producers and gardens next to it are 50% stronger.', looks: ['Kelp kiosk', 'Coral bistro', 'Pearl brasserie'], buildCost: 1200, buildSeconds: 240 },
+  branch: { name: 'Branch restaurant', description: 'A second restaurant your crew runs on its own. It earns money at the end of every shift.', adjacency: 'One per region, outside the Home Reef. Producers and gardens next to it are 50% stronger.', looks: ['Kelp kiosk', 'Coral bistro', 'Pearl brasserie'], buildCost: 1200, buildSeconds: 240 },
 };
 /** Buildings for any plot; a branch is offered too on region plots (see `buildableAt`). */
 export const BUILDABLE: BuildingKind[] = ['kelpFarm', 'fishery', 'homes', 'garden', 'workshop'];
@@ -183,7 +183,7 @@ export const nextToHub = (town: Town, plot: Pick<Plot, 'x' | 'z'>) => nextToKind
 /** What a building does at a level, in the player's terms. `fameBranch` is the fame bonus on branch income. */
 export function effectText(town: Town, plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind, level: number, fameBranch = 0): string {
   const boost = (nextToHub(town, plot) ? 1.5 : 1) * boostOf(plot, kind);
-  if (kind === 'branch') return `Earns $${branchIncome(level, plotModifiers(plot).branchIncome, fameBranch).toLocaleString('en-US')} at the close of every service day`;
+  if (kind === 'branch') return `Earns $${branchIncome(level, plotModifiers(plot).branchIncome, fameBranch).toLocaleString('en-US')} at the end of every shift`;
   if (kind === 'restaurant') return level > 1 ? `Guests arrive ${percent((level - 1) * .03)} more often` : 'Upgrade to draw guests more often';
   if (kind === 'kelpFarm') return `Kelp dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
   if (kind === 'fishery') return `Fish dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;

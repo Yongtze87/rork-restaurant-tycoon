@@ -40,10 +40,11 @@ describe('daily tides', () => {
     for (const kind of TIDE_KINDS) expect(counts[kind]).toBeGreaterThan(100);
     for (const kind of TIDE_KINDS) if (kind !== 'calm') expect(counts.calm).toBeGreaterThan(counts[kind] * 2);
   });
-  it('rolls each new day from the saved seed without consuming the guest random stream', () => {
-    const e = new RestaurantEngine(); e.open();
+  it('keeps one tide all real day and rolls the next one from the saved seed, without consuming the guest random stream', () => {
+    let now = new Date(2027, 0, 15, 23, 50).getTime(); const e = new RestaurantEngine(undefined, () => now); e.open();
     const day = e.state.day; for (let i = 0; i < 4000 && e.state.day === day; i++) e.update(.1);
-    expect(e.state.day).toBe(2); expect(e.state.tide).toBe(rollTide(e.state.seed, 2));
+    expect(e.state.day).toBe(2); expect(e.state.tide).toBe(rollTide(e.state.seed, 1));
+    now += 20 * 60_000; e.update(.1); expect(e.state.calendar.index).toBe(2); expect(e.state.tide).toBe(rollTide(e.state.seed, 2));
     const seed = e.state.seed; e.tideEffects(); expect(e.state.seed).toBe(seed);
   });
   it('keeps every effect modest and describes it from the same numbers', () => {
@@ -101,7 +102,7 @@ describe('daily tides', () => {
     h.advance(1800); advance(online, 1800);
     const restored = new RestaurantEngine(h.storage, h.now); await restored.resume();
     const { lastActiveAt: _a, ...a } = restored.state, { lastActiveAt: _b, ...b } = online.state;
-    expect(a).toEqual(b); expect(new Set(online.state.history.map(r => r.tide)).size).toBeGreaterThan(1);
+    expect(a).toEqual(b); expect(online.state.history.length).toBeGreaterThan(3); expect(new Set(online.state.history.map(r => r.tide)).size).toBe(1);
   });
 });
 

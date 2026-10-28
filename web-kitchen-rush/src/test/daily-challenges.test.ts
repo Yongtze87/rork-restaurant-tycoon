@@ -22,12 +22,12 @@ describe('daily challenge generation', () => {
   it('creates three distinct bounded tasks with zero fabricated progress without consuming service RNG', () => {
     const s = createRestaurant(), before = JSON.stringify(s), kinds = new Set<string>(), boards = new Set<string>();
     for (let day = 1; day <= 100; day++) {
-      const board = createDailyChallenges({ ...s, day });
+      const board = createDailyChallenges({ ...s, calendar: { ...s.calendar, index: day } });
       expect(board).toHaveLength(3); expect(new Set(board.map(c => c.kind)).size).toBe(3);
-      for (const c of board) { expect(c.day).toBe(day); expect(c.progress).toBe(0); expect(c.rewarded).toBe(false); expect(c.reward).toBeLessThanOrEqual(85); kinds.add(c.kind); }
-      expect(board[0].target).toBeGreaterThanOrEqual(6); expect(board[0].target).toBeLessThanOrEqual(10);
+      for (const c of board) { expect(c.day).toBe(day); expect(c.progress).toBe(0); expect(c.rewarded).toBe(false); expect(c.reward).toBeLessThanOrEqual(340); kinds.add(c.kind); }
+      expect(board[0].target).toBeGreaterThanOrEqual(24); expect(board[0].target).toBeLessThanOrEqual(40);
       boards.add(JSON.stringify(board.map(({ day: _, ...c }) => c)));
-      expect(restaurantSchema.safeParse({ ...s, day, dailyChallenges: board }).success).toBe(true);
+      expect(restaurantSchema.safeParse({ ...s, calendar: { ...s.calendar, index: day }, dailyChallenges: board }).success).toBe(true);
     }
     expect(kinds.size).toBe(6); expect(boards.size).toBeGreaterThan(20); expect(JSON.stringify(s)).toBe(before);
     expect(createDailyChallenges(s)).toEqual(createDailyChallenges(s));
@@ -96,12 +96,20 @@ describe('committed service progress and one-time rewards', () => {
     const report = structuredClone(e.state.history[0]); expect(challengeBonus(report.challenges)).toBe(50);
     expect(report.challenges[1].rewarded).toBe(false); expect(report.challenges[1].progress).toBeGreaterThan(0);
     expect(report.profit).toBe(report.revenue + report.tips - report.ingredients - report.wages - report.rent);
-    expect(e.state.cash).toBe(1250 + report.profit + 50); expect(e.state.dailyChallenges.every(c => c.progress === 0 && c.day === 2)).toBe(true);
+    expect(e.state.cash).toBe(1250 + report.profit + 50);
+    // The board belongs to the real day, so it carries on across shifts.
+    expect(e.state.dailyChallenges[0].rewarded).toBe(true); expect(e.state.dailyChallenges[1].progress).toBe(report.challenges[1].progress); expect(e.state.dailyChallenges.every(c => c.day === 1)).toBe(true);
     finish(e); expect(e.state.history[0]).toEqual(report);
   });
-  it('rolls the next day’s board from the menu as it is then', () => {
-    const e = new RestaurantEngine(); e.open(); e.setDish('burger', false, 38); finish(e);
-    expect(e.state.dailyChallenges).toHaveLength(3); expect(e.state.dailyChallenges.some(c => c.kind === 'dish' && c.dish === 'burger')).toBe(false);
+  it('rolls a new board and tide at local midnight, archiving the day with its shifts and challenges', () => {
+    let now = new Date(2027, 0, 15, 23, 50).getTime(); const e = new RestaurantEngine(undefined, () => now); e.open(); e.update(.1);
+    expect(e.state.calendar.index).toBe(1); finish(e); const board = e.state.dailyChallenges.map(c => ({ ...c })), served = e.state.calendar.totals.served;
+    e.setDish('burger', false, 38); now += 20 * 60_000; e.update(.1);
+    expect(e.state.calendar.index).toBe(2); expect(e.state.days).toHaveLength(1);
+    expect(e.state.days[0]).toMatchObject({ day: 1, shifts: 1, served, challenges: board });
+    expect(e.state.dailyChallenges).toHaveLength(3); expect(e.state.dailyChallenges.every(c => c.day === 2 && c.progress === 0)).toBe(true);
+    expect(e.state.dailyChallenges.some(c => c.kind === 'dish' && c.dish === 'burger')).toBe(false);
+    now -= 3_600_000; e.update(.1); expect(e.state.calendar.index).toBe(2);
     e.reset(); expect(e.state.dailyChallenges).toEqual([]); expect(e.state.lifetimeChallengeBonus).toBe(0);
   });
 });

@@ -48,7 +48,7 @@ const legacyChallenge = (raw: unknown): unknown => {
 };
 const challengeSchema = z.preprocess(legacyChallenge, z.object({
   day: z.number().int().positive(), kind: z.enum(['special', 'dish', 'served', 'quick', 'revenue', 'tips']), dish: dishId.nullable().default(null),
-  target: z.number().int().positive().max(1000), progress: z.number().int().nonnegative().max(1000), reward: z.number().int().positive().max(200), rewarded: z.boolean(),
+  target: z.number().int().positive().max(100_000), progress: z.number().int().nonnegative().max(100_000), reward: z.number().int().positive().max(1000), rewarded: z.boolean(),
 }).refine(c => c.progress <= c.target && c.rewarded === (c.progress === c.target), 'Invalid challenge progress').refine(c => (c.kind === 'dish') === (c.dish !== null), 'A dish challenge names one dish'));
 export type DailyChallenge = Validated<z.infer<typeof challengeSchema>>;
 const challengesSchema = z.array(challengeSchema).max(3).default([]).refine(items => new Set(items.map(c => `${c.kind}:${c.dish}`)).size === items.length, 'Duplicate challenges');
@@ -56,6 +56,15 @@ const reportSchema = totalsSchema.extend({ challenges: challengesSchema, day: z.
   /** Earnings of every finished branch restaurant at this closing (included in profit). */
   branch: z.number().nonnegative().default(0) });
 export type Report = Validated<z.infer<typeof reportSchema>>;
+/** One real calendar day: the sum of its shifts, the challenges of that day and its tide. `day` is the restaurant's n-th calendar day. */
+const dayRecordSchema = reportSchema.extend({ date: z.string().max(10), shifts: z.number().int().nonnegative() });
+export type DayRecord = Validated<z.infer<typeof dayRecordSchema>>;
+const dayTotalsSchema = totalsSchema.extend({ wages: z.number().nonnegative(), rent: z.number().nonnegative(), debtPayment: z.number().nonnegative(), branch: z.number().nonnegative(), profit: z.number().finite(), shifts: z.number().int().nonnegative(), ratingSum: z.number().nonnegative() });
+export type DayTotals = Validated<z.infer<typeof dayTotalsSchema>>;
+export const freshDayTotals = (): DayTotals => ({ ...freshTotals(), wages: 0, rent: 0, debtPayment: 0, branch: 0, profit: 0, shifts: 0, ratingSum: 0 });
+/** The real calendar: today's date, the date the restaurant started, which calendar day this is, and today's running totals. */
+const calendarSchema = z.object({ date: z.string().max(10), start: z.string().max(10), index: z.number().int().positive(), totals: dayTotalsSchema });
+export const newCalendar = () => ({ date: '', start: '', index: 1, totals: freshDayTotals() });
 const menuItem = (dish: DishId) => z.object({ enabled: z.boolean(), price: priceSchema }).default({ enabled: false, price: DISHES[dish].fair });
 /** One entry per dish; dishes added after a save was made start off the menu at their suggested price. */
 const menuSchema = z.object(Object.fromEntries(DISH_IDS.map(dish => [dish, menuItem(dish)])) as { [K in DishId]: ReturnType<typeof menuItem> });
@@ -88,6 +97,10 @@ export const restaurantSchema = z.preprocess(migrateTutorial, z.object({
   ingredientCarry: z.number().finite().min(0).max(1).default(0),
   /** Claimed ocean regions and permanent fame. Older saves have only the Home Reef; colony-build saves keep their fame and regions. */
   ocean: oceanSchema.default(createOcean),
+  /** Real days (local midnight). Older saves start their calendar on the next visit. */
+  calendar: calendarSchema.default(newCalendar),
+  /** The last 30 real days, newest last. `history` keeps the last 20 work shifts. */
+  days: z.array(dayRecordSchema).max(30).default([]),
 }));
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
@@ -148,6 +161,6 @@ export function createRestaurant(): RestaurantState {
     ], guests: [], dirty: [], menu: createMenu(),
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(), tutorial: newTutorial(),
-    collections: freshCollections(), ingredientCarry: 0, ocean: createOcean(),
+    collections: freshCollections(), ingredientCarry: 0, ocean: createOcean(), calendar: newCalendar(), days: [],
   };
 }

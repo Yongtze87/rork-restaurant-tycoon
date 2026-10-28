@@ -60,7 +60,7 @@ function RegionsSection({ onRegion }: { onRegion: (id: string) => void }) {
       const region = regionById(id)!, branch = branchIn(state.town, id), income = branch ? restaurant.branchIncomeAt(branch.x, branch.z) : 0;
       return <button type="button" key={id} onClick={() => onRegion(id)} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-teal/30 bg-teal/10 px-3 text-left text-sm font-bold hover:bg-teal/15">
         <Check size={16} className="shrink-0 text-teal" aria-hidden="true" /><span className="min-w-0 flex-1">{region.name}<span className="block text-[11px] font-semibold text-ink/60">{BIOMES[region.biome].name} · {branch ? `Branch Lv ${branch.level}${branch.job?.kind === 'build' ? ' (building)' : ''}` : 'No branch yet'}</span></span>
-        <span className="shrink-0 text-xs font-extrabold tabular-nums text-gold">{income ? `${money(income)}/day` : ''}</span></button>;
+        <span className="shrink-0 text-xs font-extrabold tabular-nums text-gold">{income ? `${money(income)}/shift` : ''}</span></button>;
     })}
     {claimable.map(region => {
       const error = restaurant.claimError(region.id), gate = error?.startsWith('Reach') ? error.replace(/ at home.*$/, '').replace(/^Reach/, 'After') : null;
@@ -93,7 +93,7 @@ function RegionDetails({ id, back, onSelect, action, summary }: { id: string; ba
     {status === 'claimed' && <div className="mt-2 space-y-2">
       <div className="grid grid-cols-2 gap-2 text-center text-[11px] font-bold">
         <div className="rounded-xl bg-ink/[.06] p-2"><p className="font-display text-base tabular-nums">{owned}/{REGION_SIZE * REGION_SIZE}</p>plots owned</div>
-        <div className="rounded-xl bg-gold/15 p-2"><p className="font-display text-base tabular-nums">{branch ? money(restaurant.branchIncomeAt(branch.x, branch.z)) : '—'}</p>branch income per day</div>
+        <div className="rounded-xl bg-gold/15 p-2"><p className="font-display text-base tabular-nums">{branch ? money(restaurant.branchIncomeAt(branch.x, branch.z)) : '—'}</p>branch income per shift</div>
       </div>
       <SmallButton className="w-full" onClick={() => onSelect(branch ?? regionCenter(region.x, region.y))}><Store size={15} />{branch ? `Branch restaurant · Lv ${branch.level}` : 'Build a branch restaurant'}</SmallButton>
     </div>}
@@ -187,7 +187,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
     })}</div></section>;
   const kind = plot.building, info = BUILDINGS[kind], job = plot.job, next = plot.level + 1, cost = restaurant.upgradePrice(kind, next, plot.x, plot.z), special = boostNote(plot, kind);
   return <section aria-label={info.name}>{head(info.name, `Lv ${plot.level}/${MAX_LEVEL} · ${info.looks[lookFor(plot.level) - 1]}`, kind === 'restaurant' ? <SmallButton className="shrink-0" onClick={onEnterRestaurant}><Store size={14} />Enter</SmallButton> : <Info>{info.description}{info.adjacency ? ` ${info.adjacency}` : ''}{kind === 'branch' ? ' Branch income is paid at every closing, also while you are away.' : ''}</Info>)}
-    <p className="mt-1 text-[11px] font-bold text-teal">{kind === 'branch' && <span data-testid="branch-income" className="mr-1 text-gold">{job?.kind === 'build' ? `Opens when built: ${money(restaurant.branchIncomeAt(plot.x, plot.z, 1))} per service day.` : `Earns ${money(restaurant.branchIncomeAt(plot.x, plot.z))} per service day.`}</span>}{job?.kind === 'build' ? 'Ready when built: ' : 'Now: '}{effectText(town, plot, kind, plot.level, fame.branch)}{special && <span className="text-gold"> · {special}</span>}</p>
+    <p className="mt-1 text-[11px] font-bold text-teal">{kind === 'branch' && <span data-testid="branch-income" className="mr-1 text-gold">{job?.kind === 'build' ? `Opens when built: ${money(restaurant.branchIncomeAt(plot.x, plot.z, 1))} per shift.` : `Earns ${money(restaurant.branchIncomeAt(plot.x, plot.z))} per shift.`}</span>}{job?.kind === 'build' ? 'Ready when built: ' : 'Now: '}{effectText(town, plot, kind, plot.level, fame.branch)}{special && <span className="text-gold"> · {special}</span>}</p>
     {job ? <div className="mt-2 rounded-xl border border-gold/40 bg-gold/10 p-2" data-testid="construction">
       <div className="flex items-center justify-between text-xs font-extrabold"><span>{job.kind === 'build' ? 'Building' : `Upgrading to level ${next}`}</span><span className="tabular-nums">{formatDuration(job.endsAt - now)}</span></div>
       <progress className="mt-1.5" aria-label="Construction progress" value={Math.min(1, (now - job.startedAt) / Math.max(1, job.endsAt - job.startedAt))} max={1} />

@@ -6,6 +6,7 @@ import ManagementGame from '@/management/ManagementGame';
 import { plotAt, plotsIn } from '@/management/town';
 import { regionCenter } from '@/management/world';
 import '@/index.css';
+import { dateOfDay, localDateKey } from '@/management/calendar';
 
 vi.mock('@/management/RestaurantScene', async importOriginal => ({ ...(await importOriginal<object>()), default: () => <div>Restaurant world</div> }));
 vi.mock('@/management/TownScene', () => ({ default: () => <div data-testid="town-view">World scene</div> }));
@@ -74,12 +75,14 @@ it('pays a finished branch at closing and shows it as branch income on the recei
   const income = restaurant.branchTotal(); expect(income).toBeGreaterThan(100);
   restaurant.open(); for (let i = 0; i < 3000 && !s.history.length; i++) restaurant.update(.25);
   restaurant.pause(true);
-  expect(s.history[0].branch).toBe(income);
+  expect(s.history[0].branch).toBe(income); expect(s.calendar.totals.branch).toBe(income);
+  // Midnight passes: the day, with its branch income, becomes a receipt in the Ledger.
+  const yesterday = dateOfDay(localDateKey(Date.now()), 0); Object.assign(s.calendar, { date: yesterday, start: yesterday, index: 1 }); restaurant.update(.1);
+  expect(s.days).toHaveLength(1); expect(s.days[0].branch).toBe(income);
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger' }).click();
   const summaries = screen.getByRole('region', { name: 'Daily summaries' });
-  await expect.element(summaries.getByRole('button', { name: 'View Day 1 summary' })).toBeVisible();
-  await summaries.getByRole('button', { name: 'View Day 1 summary' }).click();
-  const receipt = screen.getByRole('table', { name: 'Day 1 income and expenses' });
+  await summaries.getByRole('button', { name: 'View Yesterday summary' }).click();
+  const receipt = screen.getByRole('table', { name: 'Yesterday income and expenses' });
   await expect.element(receipt.getByRole('row', { name: new RegExp(`Branch income \\$${income}`) })).toBeVisible();
 });

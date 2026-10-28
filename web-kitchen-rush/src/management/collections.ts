@@ -61,10 +61,10 @@ export const ACHIEVEMENTS: Achievement[] = [
     { id: 'branch-level-6', title: 'Second kitchen', text: 'Get a branch restaurant to level 6', target: 6, reward: reward(15, 1), value: bestBranch },
     { id: 'branch-level-11', title: 'Restaurant chain', text: 'Get a branch restaurant to level 11', target: 11, reward: reward(30, 1), value: bestBranch },
   ]),
-  ...TIDE_KINDS.map(kind => single('tide', { id: `tide-${kind}`, title: TIDES[kind].name, text: `Serve a day under ${TIDES[kind].name.toLowerCase()}`, target: 1, reward: reward(3), value: s => flag(s.collections.tides.includes(kind)) })).flat(),
+  ...TIDE_KINDS.map(kind => single('tide', { id: `tide-${kind}`, title: TIDES[kind].name, text: `Finish a shift during a ${TIDES[kind].name.toLowerCase()}`, target: 1, reward: reward(3), value: s => flag(s.collections.tides.includes(kind)) })).flat(),
   ...chain('host', 'served', [100, 500, 2000].map((n, i) => ({ id: `served-${n}`, title: ['Friendly face', 'Reef regular', 'Legend of the reef'][i], text: `Serve ${n.toLocaleString('en-US')} guests in total`, target: n, reward: reward([5, 10, 25][i]), value: (s: RestaurantState) => s.lifetimeServed }))),
-  ...single('host', { id: 'perfect-day', title: 'Perfect day', text: `Close a day with no missed guests and at least ${PERFECT_DAY_MIN_SERVED} served`, target: 1, reward: reward(10), value: s => flag(s.collections.perfectDays > 0) }),
-  ...single('host', { id: 'five-star-day', title: 'Five stars', text: 'Close a day with a 5.0 rating', target: 1, reward: reward(15), value: s => flag(s.collections.fiveStarDays > 0) }),
+  ...single('host', { id: 'perfect-day', title: 'Perfect day', text: `Finish a shift with no missed guests and at least ${PERFECT_DAY_MIN_SERVED} served`, target: 1, reward: reward(10), value: s => flag(s.collections.perfectDays > 0) }),
+  ...single('host', { id: 'five-star-day', title: 'Five stars', text: 'Finish a shift with a 5.0 rating', target: 1, reward: reward(15), value: s => flag(s.collections.fiveStarDays > 0) }),
   ...chain('craft', 'furniture-level', [
     { id: 'furniture-level-6', title: 'Handy owner', text: 'Upgrade any furniture to level 6', target: 6, reward: reward(10), value: bestFurniture },
     { id: 'furniture-level-11', title: 'Master crafter', text: 'Upgrade any furniture to level 11', target: 11, reward: reward(20, 1), value: bestFurniture },

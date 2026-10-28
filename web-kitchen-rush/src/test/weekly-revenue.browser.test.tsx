@@ -6,15 +6,16 @@ import { restaurant } from '@/management/engine';
 import { WeeklyRevenue } from '@/management/WeeklyRevenue';
 import { freshTotals, type Report } from '@/management/types';
 import '@/index.css';
+import { onDay } from './calendar-helpers';
 
 vi.mock('@/management/RestaurantScene', () => ({ default: () => <div>Restaurant world</div> }));
 const receipt = (day: number, revenue = day <= 7 ? 100 : 150, tips = 10): Report => ({ ...freshTotals(), day, revenue, tips, wages: 60, rent: 30, debtPayment: 0, profit: revenue + tips - 90, rating: 4, challenges: [], tide: 'calm', branch: 0 });
 const history = (count = 10): Report[] => Array.from({ length: count }, (_, i) => receipt(i + 1));
-beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
+beforeEach(async () => { localStorage.removeItem('vast-ocean-updates-open'); restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 afterEach(() => vi.restoreAllMocks());
 
 it.each([320, 390, 768, 1280])('shows the weekly chart immediately in Ledger at %spx with usable controls and no overlap', async width => {
-  await page.viewport(width, 800); restaurant.state.history = history(); restaurant.state.day = 11;
+  await page.viewport(width, 800); const names = onDay(11, history());
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
   await screen.getByRole('tab', { name: 'Week' }).click();
@@ -33,7 +34,7 @@ it.each([320, 390, 768, 1280])('shows the weekly chart immediately in Ledger at 
   await expect.element(screen.getByTestId('revenue-week-total')).toHaveTextContent('$480');
   await expect.element(screen.getByTestId('revenue-comparison')).toHaveTextContent('+$150 · +45.5%');
   await screen.getByRole('button', { name: 'Previous revenue week' }).click();
-  await expect.element(screen.getByTestId('revenue-week-label')).toHaveTextContent('Days 1–7');
+  await expect.element(screen.getByTestId('revenue-week-label')).toHaveTextContent(`${names.label(1)} – ${names.label(7)}`);
   await expect.element(screen.getByTestId('revenue-week-total')).toHaveTextContent('$770');
   await expect.element(screen.getByRole('button', { name: 'Previous revenue week' })).toBeDisabled();
   await screen.getByRole('button', { name: 'Next revenue week' }).click();
@@ -41,16 +42,16 @@ it.each([320, 390, 768, 1280])('shows the weekly chart immediately in Ledger at 
 });
 
 it('opens a selected receipt with exact sales/tips and does not pause, spend or change archived reports', async () => {
-  restaurant.state.history = history(); restaurant.state.day = 11; restaurant.open();
+  const names = onDay(11, history()); restaurant.open();
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
   await screen.getByRole('tab', { name: 'Week' }).click();
   const before = JSON.stringify(restaurant.state), cash = restaurant.state.cash;
   await screen.getByRole('combobox', { name: 'Explore a day' }).selectOptions('8');
-  await expect.element(screen.getByTestId('revenue-day-detail')).toHaveTextContent('Day 8: $150 sales + $10 tips.');
+  await expect.element(screen.getByTestId('revenue-day-detail')).toHaveTextContent(`${names.label(8)}: $150 sales + $10 tips.`);
   expect(document.querySelector('[data-revenue-day="8"] circle')).not.toBeNull();
-  await screen.getByRole('button', { name: 'Open Day 8 revenue receipt' }).click();
-  await expect.element(screen.getByRole('heading', { name: 'Day 8 summary' })).toBeVisible();
+  await screen.getByRole('button', { name: `Open ${names.label(8)} revenue receipt` }).click();
+  await expect.element(screen.getByRole('heading', { name: `${names.label(8)} summary` })).toBeVisible();
   expect(JSON.stringify(restaurant.state)).toBe(before); expect(restaurant.state.cash).toBe(cash); expect(restaurant.paused).toBe(false);
   await screen.getByRole('button', { name: 'Back to ledger' }).click();
   const clock = restaurant.state.clock; restaurant.update(.1); expect(restaurant.state.clock).toBeGreaterThan(clock);
@@ -58,9 +59,10 @@ it('opens a selected receipt with exact sales/tips and does not pause, spend or 
 
 it('shows the challenges on the first Ledger screen and revenue one tab away', async () => {
   await page.viewport(390, 800); const screen = await render(<ManagementGame />);
+  await screen.getByRole('button', { name: /Show today/ }).click();
   await screen.getByRole('button', { name: 'View daily challenges' }).click();
   const panel = screen.getByRole('dialog', { name: 'Ledger' }).element();
-  const board = screen.getByRole('region', { name: 'Day 1 challenges' }).element().getBoundingClientRect();
+  const board = screen.getByRole('region', { name: 'Today’s challenges' }).element().getBoundingClientRect();
   expect(board.bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
   await screen.getByRole('tab', { name: 'Week' }).click();
   expect(screen.getByRole('region', { name: 'Weekly revenue' }).element().getBoundingClientRect().top - panel.getBoundingClientRect().top).toBeLessThan(140);
@@ -95,7 +97,7 @@ it('follows new closing receipts, retains a browsed week, and recovers from rese
 });
 
 it('keeps native select keyboard interaction from pausing service', async () => {
-  restaurant.state.history = history(); restaurant.state.day = 11; restaurant.open();
+  const names = onDay(11, history()); restaurant.open();
   const screen = await render(<ManagementGame />); await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
   await screen.getByRole('tab', { name: 'Week' }).click();
   const select = screen.getByRole('combobox', { name: 'Explore a day' }).element();

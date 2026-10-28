@@ -15,7 +15,7 @@ it('asks before a purchase that leaves too little to open, counting the new wage
   await expect.element(screen.getByTestId('safe-to-spend')).toHaveTextContent('$130');
   await screen.getByRole('button', { name: /Hire chef/ }).click();
   const dialog = screen.getByRole('alertdialog');
-  await expect.element(dialog).toHaveTextContent('Hiring a chef costs $150 and adds $34/day in wages.');
+  await expect.element(dialog).toHaveTextContent('Hiring a chef costs $150 and adds $34/shift in wages.');
   await expect.element(screen.getByTestId('spend-after')).toHaveTextContent('$100');
   await expect.element(screen.getByTestId('spend-reserve')).toHaveTextContent('$154');
   await screen.getByRole('button', { name: 'Keep my cash' }).click();

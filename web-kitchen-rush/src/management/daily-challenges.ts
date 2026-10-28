@@ -11,12 +11,15 @@ function mix(value: number): number {
 /** A real arriving guest can be a star guest; designation never spawns extra customers. */
 export const isSpecialGuest = (day: number, id: number): boolean => mix(Math.imul(day, 7919) ^ id) % 3 !== 0;
 
-/** Roll once at opening, against the actual menu and equipment. Reloads retain the saved board. */
+/** Goals are sized for a real day of play (about four work shifts), and so are the rewards. */
+const DAY_GOAL = 4, DAY_REWARD = 4;
+/** Roll once per real day, against the actual menu and equipment. Reloads retain the saved board. */
 export function createDailyChallenges(state: RestaurantState): DailyChallenge[] {
-  let seed = mix(state.seed ^ Math.imul(state.day, 104729));
+  const day = state.calendar.index;
+  let seed = mix(state.seed ^ Math.imul(day, 104729));
   const roll = (count: number): number => { seed = mix(seed + 0x9e3779b9); return seed % count; };
-  const tier = Math.min(2, Math.floor((state.day - 1) / 3));
-  const make = (kind: DailyChallenge['kind'], target: number, reward: number, dish: DishId | null = null): DailyChallenge => ({ day: state.day, kind, dish, target: Math.min(1000, target), reward, progress: 0, rewarded: false });
+  const tier = Math.min(2, Math.floor((day - 1) / 3));
+  const make = (kind: DailyChallenge['kind'], target: number, reward: number, dish: DishId | null = null): DailyChallenge => ({ day, kind, dish, target: Math.min(kind === 'revenue' || kind === 'tips' ? 100_000 : 1000, target * DAY_GOAL), reward: reward * DAY_REWARD, progress: 0, rewarded: false });
   const available = DISH_IDS.filter(dish => state.menu[dish].enabled && state.furniture.some(f => f.kind === DISHES[dish].station));
   const challenges = [make('special', 6 + tier + roll(3), 65 + tier * 10)];
   const dish = available[roll(Math.max(1, available.length))];

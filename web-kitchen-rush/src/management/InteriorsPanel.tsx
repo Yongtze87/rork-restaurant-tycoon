@@ -46,11 +46,11 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
             <span className="truncate text-[10px] text-ink/55">{benefit}</span>
           </button>;
         })}
-        {category === 'All' && <button type="button" aria-label={state.expanded ? 'East grotto unlocked' : 'Expand the east grotto · $900'} title="Forty extra floor tiles. Unlocks after 3 days." disabled={state.expanded || state.history.length < 3 || state.cash < 900} onClick={() => guardSpend('The east grotto', 900, () => action(restaurant.expand()))} className={cn(card, 'border-dashed border-teal/30')}>
+        {category === 'All' && <button type="button" aria-label={state.expanded ? 'East grotto unlocked' : 'Expand the east grotto · $900'} title="Forty extra floor tiles. Unlocks after 3 shifts." disabled={state.expanded || state.history.length < 3 || state.cash < 900} onClick={() => guardSpend('The east grotto', 900, () => action(restaurant.expand()))} className={cn(card, 'border-dashed border-teal/30')}>
           <div className="grid h-12 place-items-center rounded-xl bg-teal/5 text-teal">{state.expanded ? <Check size={22} /> : state.history.length < 3 ? <LockKeyhole size={20} /> : <ArrowUpRight size={22} />}</div>
           <span className="truncate text-[11px] font-extrabold leading-tight">East grotto</span>
           <span className="text-[10px] font-bold text-teal">{state.expanded ? 'Unlocked' : '$900'}</span>
-          <span className="truncate text-[10px] text-ink/55">{state.history.length < 3 && !state.expanded ? 'After 3 days' : '+40 tiles'}</span>
+          <span className="truncate text-[10px] text-ink/55">{state.history.length < 3 && !state.expanded ? 'After 3 shifts' : '+40 tiles'}</span>
         </button>}
       </> : !owned.length ? <p className="p-2 text-xs text-ink/60">Nothing here yet. Find something in Shop.</p>
         : owned.map(item => <button type="button" key={item.id} aria-label={`Edit ${CATALOG[item.kind].name} at column ${item.x + 1}, row ${item.z + 1}`} onClick={() => inspect(item.id)} className={card}>

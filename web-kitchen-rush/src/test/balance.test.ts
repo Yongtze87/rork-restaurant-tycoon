@@ -4,12 +4,12 @@ import { averageProfit, simulate } from '@/management/sim/simulator';
 // Short-horizon pacing guards built on the balance simulator (docs/BALANCE.md). Each run drives the
 // real engine at 1× with an automated owner, so these catch tuning that breaks the early game.
 describe('balance pacing (simulator)', () => {
-  const balanced = simulate({ strategy: 'balanced', days: 10, maxServiceDays: 30, seed: 91273 });
+  const balanced = simulate({ strategy: 'balanced', days: 10, maxServiceDays: 40, seed: 91273 });
   const builder = simulate({ strategy: 'builder', days: 10, maxServiceDays: 24, seed: 5 });
 
   it('runs the requested service days deterministically', () => {
-    expect(balanced.serviceDays).toBe(30);
-    const again = simulate({ strategy: 'balanced', days: 10, maxServiceDays: 30, seed: 91273 });
+    expect(balanced.serviceDays).toBe(40);
+    const again = simulate({ strategy: 'balanced', days: 10, maxServiceDays: 40, seed: 91273 });
     expect(again.finalCash).toBe(balanced.finalCash); expect(again.unlocked).toEqual(balanced.unlocked);
   });
   it('keeps a balanced owner solvent: never below zero, never stuck, no loan needed', () => {

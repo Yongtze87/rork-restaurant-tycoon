@@ -11,6 +11,7 @@ import { WeeklyRevenue } from './WeeklyRevenue';
 import { CollectionPanel } from './CollectionPanel';
 import { Info, Stat } from './GameWindow';
 import { guardSpend } from './spend-guard';
+import { dayNames } from './calendar';
 
 const furnitureIcons = { table: Armchair, prep: ChefHat, grill: Flame, plant: Flower2, divider: Sprout, lamp: Lamp };
 export type Panel = 'build' | 'team' | 'menu' | 'ledger' | 'town';
@@ -33,13 +34,13 @@ export function Notice({ children }: { children: ReactNode }) { return <div clas
 export function TeamPanel({ state, action }: { state: RestaurantState; action: Action }) {
   const wages = state.staff.reduce((sum, staff) => sum + staffWage(staff), 0), limit = restaurant.crewLimit(), full = state.staff.length >= limit;
   return <>
-    <div className="mb-3 grid grid-cols-3 gap-2"><Stat label="Crew" value={`${state.staff.length}/${limit}`} /><Stat label="Wages per day" value={money(wages)} /><Stat label="Safe to spend" testId="safe-to-spend" value={money(restaurant.safeToSpend())} tone={restaurant.safeToSpend() > 0 ? undefined : 'danger'} /></div>
+    <div className="mb-3 grid grid-cols-3 gap-2"><Stat label="Crew" value={`${state.staff.length}/${limit}`} /><Stat label="Wages per shift" value={money(wages)} /><Stat label="Safe to spend" testId="safe-to-spend" value={money(restaurant.safeToSpend())} tone={restaurant.safeToSpend() > 0 ? undefined : 'danger'} /></div>
     <ul className="grid gap-2 sm:grid-cols-2">{state.staff.map(member => {
       const chef = member.role === 'chef', cost = member.level * 180, onlyOne = state.staff.filter(s => s.role === member.role).length === 1;
       return <li key={member.id} className="rounded-xl border border-ink/10 bg-ink/[.06] p-2.5">
         <div className="flex items-center gap-2.5"><span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', chef ? 'bg-tomato/15 text-tomato' : 'bg-teal/15 text-teal')}>{chef ? <ChefHat size={18} /> : <UtensilsCrossed size={18} />}</span>
           <div className="min-w-0 flex-1"><h3 className="truncate font-display text-base leading-tight">{member.name} <span className="font-body text-[11px] text-ink/50">{member.role}</span></h3>
-            <p className="flex items-center gap-1 text-[11px] text-ink/60">{[1, 2, 3].map(level => <Star key={level} size={11} className={level <= member.level ? 'fill-gold text-gold' : 'text-ink/20'} />)}<span className="ml-1">{money(staffWage(member))}/day</span></p></div>
+            <p className="flex items-center gap-1 text-[11px] text-ink/60">{[1, 2, 3].map(level => <Star key={level} size={11} className={level <= member.level ? 'fill-gold text-gold' : 'text-ink/20'} />)}<span className="ml-1">{money(staffWage(member))}/shift</span></p></div>
           <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[10px] font-extrabold uppercase text-teal">{member.task === 'idle' ? 'Free' : 'Busy'}</span></div>
         <div className="mt-2 flex gap-1.5">
           <SmallButton className="flex-1" disabled={member.level === 3 || state.cash < cost} label={member.level === 3 ? `${member.name} is fully trained` : `Train ${member.name} for ${money(cost)}`} onClick={() => guardSpend(`Training ${member.name}`, cost, () => action(restaurant.train(member.id)), 12)}><TrendingUp size={14} />{member.level === 3 ? 'Fully trained' : `Train · ${money(cost)}`}</SmallButton>
@@ -47,8 +48,8 @@ export function TeamPanel({ state, action }: { state: RestaurantState; action: A
         </div>
       </li>;
     })}</ul>
-    <div className="mb-2 mt-4 flex items-center justify-between"><h3 className="font-display text-base">Hire</h3><Info>Chefs cook at a free kelp counter or vent grill, so add stations before more chefs. Servers deliver dishes and clear tables. Training makes them faster and adds $12 to their daily wage. Mareen homes in Town raise the crew limit.</Info></div>
-    <div className="grid grid-cols-2 gap-2">{(['chef', 'server'] as const).map(role => <SmallButton key={role} disabled={full || state.cash < 150} onClick={() => guardSpend(`Hiring a ${role}`, 150, () => action(restaurant.hire(role)), HIRE_WAGE[role])} className="flex-col gap-0.5 py-2"><UserPlus size={18} /><span>Hire {role}</span><span className="text-[10px] font-bold text-ink/50">$150 · +{money(HIRE_WAGE[role])}/day</span></SmallButton>)}</div>
+    <div className="mb-2 mt-4 flex items-center justify-between"><h3 className="font-display text-base">Hire</h3><Info>Chefs cook at a free kelp counter or vent grill, so add stations before more chefs. Servers deliver dishes and clear tables. Training makes them faster and adds $12 to their wage per shift. Mareen homes in Town raise the crew limit.</Info></div>
+    <div className="grid grid-cols-2 gap-2">{(['chef', 'server'] as const).map(role => <SmallButton key={role} disabled={full || state.cash < 150} onClick={() => guardSpend(`Hiring a ${role}`, 150, () => action(restaurant.hire(role)), HIRE_WAGE[role])} className="flex-col gap-0.5 py-2"><UserPlus size={18} /><span>Hire {role}</span><span className="text-[10px] font-bold text-ink/50">$150 · +{money(HIRE_WAGE[role])}/shift</span></SmallButton>)}</div>
     {full && <p className="mt-2 text-[11px] text-ink/60">Crew is full. Build Mareen homes in Town for more room.</p>}
   </>;
 }
@@ -85,28 +86,29 @@ function DishIcon({ dish, small = false }: { dish: DishId; small?: boolean }) {
 
 /** The ledger, one tab at a time: today's money, the week, milestones and the long-term collection. */
 export function LedgerPanel({ state, action, onReport, tab }: { state: RestaurantState; action: Action; onReport: (day: number) => void; tab: LedgerTab }) {
-  if (tab === 'week') return <WeeklyRevenue history={state.history} onReport={onReport} />;
+  const names = dayNames(state.calendar);
+  if (tab === 'week') return <WeeklyRevenue history={state.days} onReport={onReport} label={names.label} tick={names.tick} />;
   if (tab === 'collection') return <CollectionPanel state={state} action={action} />;
   if (tab === 'goals') return <section aria-label="Little milestones"><h3 className="sr-only">Little milestones</h3><ul className="space-y-2">{GOALS.map(goal => {
     const done = state.claimed.includes(goal.id), value = Math.min(goal.target, goal.value(state));
     return <li key={goal.id} className="flex items-center gap-2.5 rounded-xl border border-ink/10 bg-ink/[.04] p-2.5"><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><h4 className="truncate text-sm font-extrabold">{goal.title}</h4><span className="shrink-0 text-[11px] font-bold text-teal">+{money(goal.reward)}</span></div><p className="truncate text-[11px] text-ink/60">{goal.text} · {value}/{goal.target}</p><progress aria-label={goal.text} value={value} max={goal.target} className="mt-1 h-1.5" /></div>
       <SmallButton className="shrink-0" disabled={done || value < goal.target} label={done ? `${goal.title} collected` : `Collect ${goal.title}`} onClick={() => action(restaurant.claim(goal.id))}>{done ? <Check size={14} /> : <Coins size={14} />}<span className="hidden min-[380px]:inline">{done ? 'Done' : 'Collect'}</span></SmallButton></li>;
   })}</ul></section>;
-  const today = state.totals, bills = restaurant.billsTonight(), safe = restaurant.safeToSpend();
+  const today = restaurant.todayTotals(), bills = restaurant.billsTonight(), safe = restaurant.safeToSpend();
   return <>
     <section aria-label="Register" className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-4">
       <Stat label="In the register" value={money(state.cash)} tone="teal" />
-      <Stat label="Tonight’s bills" value={money(bills)} />
+      <Stat label="Next payroll" value={money(bills)} />
       <Stat label="Safe to spend" testId="safe-to-spend" value={money(safe)} tone={safe > 0 ? undefined : 'danger'} />
-      <Stat label={state.debt ? 'Loan left' : 'Branches per day'} value={state.debt ? money(state.debt) : money(restaurant.branchTotal())} tone={state.debt ? 'gold' : undefined} />
+      <Stat label={state.debt ? 'Loan left' : 'Branches per shift'} value={state.debt ? money(state.debt) : money(restaurant.branchTotal())} tone={state.debt ? 'gold' : undefined} />
     </section>
-    {state.cash < 200 && !state.debt && <div className="mt-2 flex items-center gap-2 rounded-xl border border-gold/50 p-2.5"><p className="min-w-0 flex-1 text-xs"><strong>Recovery loan</strong> · $600, repaid $30 a day</p><SmallButton onClick={() => action(restaurant.loan())}>Take loan</SmallButton></div>}
-    <div className="mt-3"><DailyChallenges challenges={state.dailyChallenges} day={state.day} beforeOpening={state.phase === 'planning'} /></div>
-    <h3 className="mb-2 font-display text-base">Today so far</h3>
+    {state.cash < 200 && !state.debt && <div className="mt-2 flex items-center gap-2 rounded-xl border border-gold/50 p-2.5"><p className="min-w-0 flex-1 text-xs"><strong>Recovery loan</strong> · $600, repaid $30 a shift</p><SmallButton onClick={() => action(restaurant.loan())}>Take loan</SmallButton></div>}
+    <div className="mt-3"><DailyChallenges challenges={state.dailyChallenges} day={state.calendar.index} title="Today’s challenges" beforeOpening={state.phase === 'planning'} /></div>
+    <h3 className="mb-2 flex items-center justify-between font-display text-base">Today so far<Info>Your crew works in short shifts of about 2½ minutes. Wages, rent and any loan repayment are paid at the end of each shift; a day’s receipt is the sum of its shifts. A new day starts at midnight.</Info></h3>
     <div className="grid grid-cols-4 gap-2"><Stat label="Served" value={today.served} /><Stat label="Sales + tips" value={money(today.revenue + today.tips)} /><Stat label="Ingredients" value={money(today.ingredients)} /><Stat label="Missed" value={today.missed} /></div>
-    <section aria-label="Daily summaries" className="mt-4"><h3 className="mb-2 flex items-center justify-between font-display text-base">Daily receipts<Info>The last 20 days, including days that ran while you were away. Wages, rent and any loan repayment are paid at each closing.</Info></h3>
-      {!state.history.length ? <p className="text-xs text-ink/60">Your first receipt arrives at the end of today.</p> : <ul className="space-y-1.5">{[...state.history].reverse().map(report => <li key={report.day}><button type="button" aria-label={`View Day ${report.day} summary`} onClick={() => onReport(report.day)} className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-ink/10 bg-ink/[.04] px-3 text-left hover:border-teal/40">
-        <span className="font-display text-sm">Day {report.day}</span><span className="min-w-0 flex-1 truncate text-[11px] text-ink/60">{report.served} served · {money(report.revenue + report.tips + (report.branch ?? 0))} in</span>
+    <section aria-label="Daily summaries" className="mt-4"><h3 className="mb-2 font-display text-base">Past days</h3>
+      {!state.days.length ? <p className="text-xs text-ink/60">Today’s receipt arrives after midnight.</p> : <ul className="space-y-1.5">{[...state.days].reverse().map(report => <li key={report.day}><button type="button" aria-label={`View ${names.label(report.day)} summary`} onClick={() => onReport(report.day)} className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-ink/10 bg-ink/[.04] px-3 text-left hover:border-teal/40">
+        <span className="font-display text-sm">{names.label(report.day)}</span><span className="min-w-0 flex-1 truncate text-[11px] text-ink/60">{report.served} served · {money(report.revenue + report.tips + (report.branch ?? 0))} in</span>
         <span className={cn('font-display text-sm tabular-nums', report.profit < 0 ? 'text-danger' : 'text-teal')}>{report.profit > 0 ? '+' : ''}{money(report.profit)}</span><ArrowUpRight size={15} aria-hidden="true" /></button></li>)}</ul>}
     </section>
   </>;

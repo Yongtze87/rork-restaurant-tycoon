@@ -5,6 +5,7 @@ import ManagementGame from '@/management/ManagementGame';
 import { restaurant } from '@/management/engine';
 import { capacity, comfort, SAVE_KEY, type Furniture, type Point } from '@/management/types';
 import '@/index.css';
+import { onDay } from './calendar-helpers';
 
 vi.mock('@/management/RestaurantScene', () => ({ default: ({ draft, onTile }: { draft: Furniture | null; onTile: (point: Point) => void }) => <div data-testid="interiors-scene" data-draft={draft?.kind ?? ''}><button onClick={() => onTile({ x: 5, z: 4 })}>Occupied tile</button><button onClick={() => onTile({ x: 0, z: 7 })}>Free tile</button></div> }));
 beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
@@ -41,7 +42,7 @@ it.each([320, 390, 1280])('previews, cancels and buys a table without overflow o
   await screen.getByRole('button', { name: /Preview Coral table/ }).click();
   expect(restaurant.state.cash).toBe(1250);
   await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('After purchase: $1,070');
-  await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('Keeps $120 for tonight’s bills');
+  await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('Keeps $120 for the next payroll');
   const inspector = screen.getByRole('region', { name: 'Furniture placement' }).element();
   expect(inspector.scrollWidth).toBeLessThanOrEqual(inspector.clientWidth);
   expect(screen.getByTestId('restaurant-scene').element().getBoundingClientRect().bottom).toBeLessThanOrEqual(inspector.getBoundingClientRect().top);
@@ -57,7 +58,7 @@ it.each([320, 390, 1280])('previews, cancels and buys a table without overflow o
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
 });
 
-it('uses real cash shortfalls and warns before spending into tonight’s bills without silently blocking the purchase', async () => {
+it('uses real cash shortfalls and warns before spending into the next payroll without silently blocking the purchase', async () => {
   restaurant.state.cash = 200;
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: 'Build', exact: true }).click();
@@ -65,7 +66,7 @@ it('uses real cash shortfalls and warns before spending into tonight’s bills w
   await expect.element(grill).toBeDisabled(); await expect.element(grill).toHaveTextContent('Need $160 more');
   await screen.getByRole('button', { name: /Preview Coral table/ }).click();
   await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('After purchase: $20');
-  await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('Below the $120 for tonight’s bills');
+  await expect.element(screen.getByTestId('purchase-budget')).toHaveTextContent('Below the $120 for the next payroll');
   await screen.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect.element(screen.getByRole('alertdialog')).toHaveTextContent('A coral table costs $180.');
   expect(restaurant.state.cash).toBe(200);
@@ -118,9 +119,10 @@ it('buys and places while guests are in, without pausing or closing', async () =
 });
 
 it('opens Interiors from a real daily receipt without spending or rewriting profit', async () => {
+  const names = onDay(2, [{ challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, rating: 4, tide: 'calm', branch: 0 }]);
   const screen = await render(<ManagementGame />); restaurant.open();
-  for (let i = 0; i < 2600 && restaurant.state.day === 1; i++) restaurant.update(.1);
-  await screen.getByRole('button', { name: 'Read latest report: Day 1' }).click();
+  await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
+  await screen.getByRole('button', { name: `View ${names.label(1)} summary` }).click();
   const before = JSON.stringify(restaurant.state);
   await screen.getByRole('button', { name: 'Shop interiors', exact: true }).click();
   await expect.element(screen.getByRole('region', { name: 'Interior store' })).toBeVisible();

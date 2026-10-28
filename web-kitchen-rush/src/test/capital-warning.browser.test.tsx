@@ -47,14 +47,14 @@ it('appears on a live cash drop, updates actual numbers without repeating the li
   restaurant.open(); const screen = await render(<ManagementGame />);
   await expect.element(screen.getByTestId('capital-warning')).not.toBeInTheDocument();
   restaurant.state.cash = 110; restaurant.notify();
-  await expect.element(screen.getByTestId('capital-warning-balance')).toHaveTextContent('Cash $110 · Tonight’s bills $90');
+  await expect.element(screen.getByTestId('capital-warning-balance')).toHaveTextContent('Cash $110 · Next payroll $90');
   const text = screen.getByRole('alert').element().textContent;
   restaurant.state.cash = 100; restaurant.notify();
   await expect.element(screen.getByTestId('capital-warning-balance')).toHaveTextContent('Cash $100');
   expect(screen.getByRole('alert').element().textContent).toBe(text);
   const clock = restaurant.state.clock; restaurant.update(.1); expect(restaurant.state.clock).toBeGreaterThan(clock);
   restaurant.state.cash = 121; restaurant.notify(); await expect.element(screen.getByTestId('capital-warning')).not.toBeInTheDocument();
-  restaurant.state.cash = -10; restaurant.notify(); await expect.element(screen.getByRole('heading', { name: 'Tonight’s bills at risk' })).toBeVisible();
+  restaurant.state.cash = -10; restaurant.notify(); await expect.element(screen.getByRole('heading', { name: 'Payroll at risk' })).toBeVisible();
   restaurant.reset(); await expect.element(screen.getByTestId('capital-warning')).not.toBeInTheDocument();
 });
 
@@ -73,5 +73,5 @@ it('shows the warning only after offline replay, with the current balance', asyn
   const screen = await render(<ManagementGame />);
   await expect.element(screen.getByTestId('capital-warning')).not.toBeInTheDocument();
   restaurant.catchingUp = false; restaurant.notify();
-  await expect.element(screen.getByTestId('capital-warning-balance')).toHaveTextContent('Cash $0 · Tonight’s bills $90');
+  await expect.element(screen.getByTestId('capital-warning-balance')).toHaveTextContent('Cash $0 · Next payroll $90');
 });

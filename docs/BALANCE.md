@@ -317,3 +317,22 @@ restaurant can always cook its way out.
 
 A longer offline shift (“night manager”) is an obvious premium item; it would speed players up roughly as the
 table shows, so price it with that in mind.
+
+## Real calendar days
+
+Day numbers are gone for the player. Challenges, the tide and the daily gift now reset once per **real** day (local
+midnight) instead of every 2½-minute shift. Before, an active player could finish a board every few minutes and
+collect a pearl and a Current charm each time; now that happens at most once a day.
+
+Challenge goals are sized for about four shifts (`DAY_GOAL = 4`) and pay four times the old rewards
+(`DAY_REWARD = 4`, about $780 a day for all three plus the pearl and charm). With `DAY_REWARD = 3` the balanced owner
+reached the Coral Reef a day later; with 4 the pacing is back on target (8 weeks, 3 sessions a day, restaurant open
+while away):
+
+| owner | Coral Reef | Twilight | Abyss |
+|---|---|---|---|
+| balanced | real day 2 | 12 | 26 |
+| builder | 3 | 17 | 34 |
+| cautious | 5 | 18 | 40 |
+
+The simulator's rows and "svc day" columns still count shifts.

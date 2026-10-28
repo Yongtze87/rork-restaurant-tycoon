@@ -1,5 +1,6 @@
 import { accessPoints, findPath, inBounds, layoutError, occupied, placementError, seatPoint } from './layout';
-import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
+import { localDateKey, dateNumber } from './calendar';
+import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
@@ -8,14 +9,14 @@ import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
 import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
 import { HOME_ID, claimGate, claimPrice, fameBonuses, isClaimable as regionClaimable, isClaimed, masteryFame, masteryKey, regionAt, regionById, regionPlotCost, type FameBonuses, type MasteryKind, type Region, type RegionModifiers } from './ocean';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, activeLevel, branchIn, branchIncome, busyBuilders, completeJobs, dayKey, ensureRegionPlots, finishCost, jobSeconds, lookFor, ownedCount, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, regionPlots, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, activeLevel, branchIn, branchIncome, busyBuilders, completeJobs, ensureRegionPlots, finishCost, jobSeconds, lookFor, ownedCount, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, regionPlots, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
 import { inHome, regionCenter } from './world';
 
 export const GOALS = [
   { id: 'first-service', title: 'A warm welcome', text: 'Serve your first 5 guests', target: 5, reward: 180, value: (s: RestaurantState) => s.lifetimeServed },
   { id: 'atmosphere', title: 'Make it yours', text: 'Reach 50 atmosphere', target: 50, reward: 150, value: comfort },
   { id: 'more-tables', title: 'Room for everyone', text: 'Build 5 coral tables', target: 5, reward: 250, value: (s: RestaurantState) => capacity(s) / 2 },
-  { id: 'three-days', title: 'The reef favorite', text: 'Complete 3 service days', target: 3, reward: 300, value: (s: RestaurantState) => s.history.length },
+  { id: 'three-days', title: 'The reef favorite', text: 'Finish 3 shifts', target: 3, reward: 300, value: (s: RestaurantState) => s.history.length },
 ];
 /** Exact business results computed while the owner was away, not an idle-income estimate. */
 export interface AwaySummary { seconds: number; days: number; served: number; cashChange: number; challengeBonus: number; capped: boolean; }
@@ -84,7 +85,9 @@ export class RestaurantEngine {
         if (layoutError(restored.furniture, width(restored))) throw new Error('Invalid layout');
         // Regions claimed in the colony build have no plots yet: they load as claimed, empty regions.
         ensureRegionPlots(restored.town, restored.ocean.regions);
-        if (restored.dailyChallenges.some(c => c.day !== restored.day)) throw new Error('Invalid challenge day');
+        // Saves from before real calendar days: their per-shift board is dropped; today's board rolls on the next tick.
+        if (!parsed.calendar) restored.dailyChallenges = [];
+        if (restored.dailyChallenges.some(c => c.day !== restored.calendar.index)) throw new Error('Invalid challenge day');
         this.state = restored;
         // Legacy receipts were already charged: migrate without charging or completing that day twice.
         if (this.state.phase === 'report') { this.beginNextDay(); this.state.lastActiveAt = 0; }
@@ -201,7 +204,7 @@ export class RestaurantEngine {
     const existing = this.state.furniture.find(f => f.id === item.id);
     if (existing) { const busy = this.inUse(existing.id); if (busy) return busy; }
     if (existing && existing.kind !== item.kind) return 'Move the selected furniture without changing its type.';
-    if (!existing && this.state.cash < CATALOG[item.kind].price) return 'Not enough cash. Serve a day or sell something you no longer need.';
+    if (!existing && this.state.cash < CATALOG[item.kind].price) return 'Not enough cash. Earn a little more or sell something you no longer need.';
     const error = placementError(this.state, item); if (error) return error;
     if (existing) Object.assign(existing, item, { level: existing.level });
     else { this.state.cash -= CATALOG[item.kind].price; this.state.furniture.push({ ...item, id: this.state.nextId++, level: 1 }); }
@@ -253,7 +256,7 @@ export class RestaurantEngine {
   }
   expand(): string | null {
     if (this.state.expanded) return 'Your east grotto is already open.';
-    if (this.state.history.length < 3) return 'Complete 3 service days to unlock the east grotto.';
+    if (this.state.history.length < 3) return 'Finish 3 shifts to unlock the east grotto.';
     if (this.state.cash < 900) return 'The east grotto costs $900.';
     this.state.cash -= 900; this.state.expanded = true; this.changed('The east grotto is yours. Forty new tiles, endless possibilities.'); return null;
   }
@@ -314,12 +317,12 @@ export class RestaurantEngine {
     this.state.dailyChallenges = createDailyChallenges(this.state);
   }
   /** Today's tide: a pure hash of seed and day, so rolling again before service starts gives the same tide. */
-  private rollTide(): void { this.state.tide = rollTide(this.state.seed, this.state.day); }
+  private rollTide(): void { this.state.tide = rollTide(this.state.seed, this.state.calendar.index); }
   tideEffects(): TideEffects { return TIDES[this.state.tide].effects; }
   private beginNextDay(): void {
     this.state.day++; this.state.phase = 'service'; this.state.guests = []; this.state.dirty = []; this.state.elapsed = 0; this.state.nextArrival = 1; this.state.totals = freshTotals(); this.relocateStaff();
-    this.state.renovation = false; this.incomeReceipts = []; this.state.dailyChallenges = []; this.rollTide();
-    this.startChallenges(); this.event = `Day ${this.state.day} begins. Yesterday’s receipt is in Ledger.`;
+    this.state.renovation = false; this.incomeReceipts = [];
+    this.startChallenges(); this.event = 'A new shift begins.';
   }
   /** Compatibility for older receipts; normal service rolls forward automatically. */
   nextDay(): void { if (this.state.phase === 'report') { this.beginNextDay(); this.changed(); } }
@@ -503,14 +506,34 @@ export class RestaurantEngine {
     return gained;
   }
   /** Finish construction whose end time has passed (wall-clock time, also while away). */
+  /** Real-day rollover at local midnight: archive the day, roll its tide and a fresh challenge board. A clock set back changes nothing. */
+  private rollCalendar(at: number): void {
+    const s = this.state, c = s.calendar, key = localDateKey(at);
+    if (c.date === key) return;
+    if (!c.date) { Object.assign(c, { date: key, start: key, index: 1 }); if (s.phase === 'service') this.startChallenges(); return; }
+    if (dateNumber(key) < dateNumber(c.date)) return;
+    if (c.totals.shifts > 0 || s.dailyChallenges.length) {
+      const t = c.totals;
+      s.days = [...s.days, { revenue: t.revenue, tips: t.tips, ingredients: t.ingredients, served: t.served, missed: t.missed, wages: t.wages, rent: t.rent, debtPayment: t.debtPayment, branch: t.branch, profit: t.profit, shifts: t.shifts, rating: t.shifts ? Math.round(t.ratingSum / t.shifts * 100) / 100 : s.reputation, challenges: s.dailyChallenges.map(ch => ({ ...ch })), day: c.index, date: c.date, tide: s.tide }].slice(-30);
+    }
+    Object.assign(c, { date: key, index: Math.max(c.index + 1, dateNumber(key) - dateNumber(c.start) + 1), totals: freshDayTotals() });
+    this.rollTide(); s.dailyChallenges = []; if (s.phase === 'service') this.startChallenges();
+    this.event = 'A new day: fresh challenges and a new tide.';
+  }
+  /** Today so far: finished shifts plus the one in progress. */
+  todayTotals(): { served: number; missed: number; revenue: number; tips: number; ingredients: number; wages: number; branch: number } {
+    const t = this.state.calendar.totals, n = this.state.totals;
+    return { served: t.served + n.served, missed: t.missed + n.missed, revenue: t.revenue + n.revenue, tips: t.tips + n.tips, ingredients: t.ingredients + n.ingredients, wages: t.wages, branch: t.branch };
+  }
   private tickTown(at: number): void {
+    this.rollCalendar(at);
     const done = completeJobs(this.state.town, at); if (!done.length) return;
     const last = done[done.length - 1], fame = this.checkMastery(), text = `${BUILDINGS[last.building!].name} ${last.level === 1 ? 'is built' : `reached level ${last.level}`}.${fame ? ` +${fame} fame.` : ''}`;
     this.lastCompletion = { id: ++this.completionSequence, text }; this.changed(text);
   }
   /** One Current charm per calendar day (UTC), granted on the first visit of the day. */
   private dailyGift(now: number): void {
-    const day = dayKey(now), town = this.state.town; if (town.lastGiftDay === day) return;
+    const day = localDateKey(now), town = this.state.town; if (town.lastGiftDay === day) return;
     town.lastGiftDay = day; town.charms.current++; this.event = 'Daily gift: a Current charm. It skips 15 minutes of building.';
   }
   private plot(x: number, z: number) { return plotAt(this.state.town, x, z); }
@@ -592,9 +615,12 @@ export class RestaurantEngine {
     const rating = Math.max(1, Math.min(5, 3 + (s.totals.served / Math.max(1, s.totals.served + s.totals.missed)) * 1.5 + comfort(s) * .005 - s.totals.missed * .06));
     s.reputation = Math.round((s.reputation * .65 + rating * .35) * 100) / 100;
     recordDay(s.collections, { ...s.totals, rating, tide: s.tide });
+    const today = s.calendar.totals, shiftProfit = s.totals.revenue + s.totals.tips + branch - s.totals.ingredients - wages - rent - debtPayment;
+    for (const key of ['revenue', 'tips', 'ingredients', 'served', 'missed'] as const) today[key] += s.totals[key];
+    Object.assign(today, { wages: today.wages + wages, rent: today.rent + rent, debtPayment: today.debtPayment + debtPayment, branch: today.branch + branch, profit: today.profit + shiftProfit, shifts: today.shifts + 1, ratingSum: today.ratingSum + rating });
     s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips + branch - s.totals.ingredients - wages - rent - debtPayment, rating, tide: s.tide, branch }); s.history = s.history.slice(-20);
     this.beginNextDay();
-    if (covered) this.event = 'The bank covered tonight’s bills. The shortfall is repaid $30 a day.';
+    if (covered) this.event = 'The bank covered the payroll. The shortfall is repaid $30 a shift.';
     this.changed();
   }
 }

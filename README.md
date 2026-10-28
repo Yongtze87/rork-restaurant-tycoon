@@ -28,15 +28,15 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 ### Run the business
 - **Team:** hire chefs or servers (up to 6). Training makes them faster and raises their daily wage.
 - **Menu:** toggle dishes and set prices. Charging more than the fair price drives some guests away.
-- **Continuous days:** service rolls into the next day automatically, and each day saves an immutable receipt.
-- **Ledger:** a weekly revenue chart, growth against the previous week, and the last 20 daily receipts.
-- **Daily tides:** each service day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
-- **Daily challenges**, **milestones**, an interest-free **recovery loan**, a **low-cash warning**, and a **“Tight on cash”** prompt before any purchase that would leave too little for tonight’s bills. If the register is short at closing, the bank covers it and you repay $30 a day.
+- **Real days, no day counter:** the crew works in short shifts (about 2½ minutes; wages and rent are paid at the end of each). Challenges, the tide and the daily gift reset at the player's **local midnight**, so an hour online and one quick visit get the same daily board.
+- **Ledger:** today so far, a receipt per real day (the last 30), and a 7-day revenue chart.
+- **Daily tides:** each real day rolls an ocean event (calm waters, feast tide, strong current, whale passing, plankton bloom, shoal run, murky water) that nudges guest arrivals, crew pace, tips, ingredient costs or patience. Day 1 is always calm; the tide is recorded on each receipt.
+- **Daily challenges** (three per real day; finishing all three also pays a pearl and a Current charm), **milestones**, an interest-free **recovery loan**, a **low-cash warning**, and a **“Tight on cash”** prompt before any purchase that would leave too little for the next payroll. If the register is short at closing, the bank covers it and you repay $30 a day.
 - **Collection:** 63 long-term achievements in the Ledger (dish mastery, builder, explorer, ocean voyager, tide watcher, host, craft) that pay pearls and a few Tide charms. Collect each reward by hand; a badge on the Ledger button shows how many are ready.
 
 ### Offline progress you can trust
 - When you return, the game **replays the elapsed time at 1× through the same simulation step**, with checkpoints.
-- While you are away the crew works **at most one service day** (`OFFLINE_SERVICE_DAYS`); building timers keep running the whole time.
+- While you are away the crew works **at most one shift** (`OFFLINE_SERVICE_DAYS`); building timers keep running the whole time.
 
 ### Reef town
 - A 9×9 map of plots around the restaurant. Unlock neighbouring plots and choose what to build:
@@ -54,7 +54,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 - The Town view **is** the world: your Home Reef town in the middle, ocean regions around it as real seabed in the same isometric scene, and fog beyond. Drag to look around and zoom out to see several regions at once; **Reset view** recentres the Home Reef. Nothing ever resets: everything you build stays.
 - **Claim regions** next to the ones you own. Each region is a 7×7 block of plots with a one-plot seabed path around it. Its middle plot comes owned; unlock the rest one by one next to owned plots, and build with the same buildings, builders, timers, charms and pearls as at home. The home town's depth zones gate how far out you can claim: the first ring after the Coral Reef, the second after the Twilight Zone, beyond after the Abyss. Prices grow with distance, difficulty and every region you already own.
 - **Regions specialise.** Seven biomes, each with upsides and downsides for plots and buildings *in that region*: **kelp forest** (kelp farms 55% stronger, slower building), **volcanic vents** (fisheries stronger, dearer building), **coral atoll** (glow gardens stronger, dearer building), **sunken city** (workshops stronger and cheap building, branch earns less), **ice shelf** (branch earns more, slower building), **open trench** (the richest branch and more fame, but dear, slow building) and **calm lagoon** (cheap and quick, modest branch). Difficulty (1–5 stars) grows with distance, but every ring has easier and harder neighbours. Town-wide limits still apply.
-- **Branch restaurants:** one per region outside the Home Reef, levels 1–15 with three looks. Your crew runs them on their own: each finished branch earns at the close of every service day (also offline) from its level, its region and your fame, shown as **Branch income** on every receipt and in the Ledger. Producers and gardens next to a branch are 50% stronger, as next to the restaurant. The Home Reef restaurant stays the one you run yourself.
+- **Branch restaurants:** one per region outside the Home Reef, levels 1–15 with three looks. Your crew runs them on their own: each finished branch earns at the end of every shift (also offline) from its level, its region and your fame, shown as **Branch income** on every receipt and in the Ledger. Producers and gardens next to a branch are 50% stronger, as next to the restaurant. The Home Reef restaurant stays the one you run yourself.
 - **Fame** is permanent and earned by mastering regions: claiming one, its branch reaching levels 6 and 11, owning all its plots, and reaching the Abyss at home. It gives capped bonuses: extra tips on each bill, cheaper building and claims, more guests, and richer branches.
 - The Town panel lists your regions (with their branch income) and the ones you can claim (with their price); tap one, in the panel or in the scene, for its details.
 
@@ -173,7 +173,7 @@ Copy the printed sizes into `src/management/iso/sprites.ts` with each image's `s
 | Twilight dishes | Moon-jelly salad ($18 / $56 / 10 s, counter) · Glow-squid skewers ($26 / $72 / 14 s, grill) |
 | Abyss dishes | Vent pearl dumplings ($28 / $84 / 13 s, counter) · Abyssal ink noodles ($36 / $100 / 17 s, grill) |
 | Furniture | Table $180 · Kelp counter $240 · Vent grill $360 · Anemone $65 · Kelp screen $80 · Lantern $110 |
-| East grotto | $900, unlocks after 3 service days |
+| East grotto | $900, unlocks after 3 shifts |
 | Recovery loan | $600 at 0% when cash < $200, repaid at $30 per day |
 
 ---

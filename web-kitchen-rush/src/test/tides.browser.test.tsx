@@ -12,16 +12,18 @@ import { HEIGHT, width, type Report } from '@/management/types';
 import '@/index.css';
 
 vi.mock('@/management/RestaurantScene', () => ({ default: () => <div>Restaurant world</div> }));
-beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
+beforeEach(async () => { localStorage.removeItem('vast-ocean-updates-open'); restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 
 it.each([320, 1280])('shows today’s tide next to the daily challenges at %spx', async size => {
   await page.viewport(size, 800); const screen = await render(<ManagementGame />);
+  await expect.element(screen.getByRole('button', { name: /Show today/ })).toHaveTextContent(TIDES[restaurant.state.tide].name);
+  await screen.getByRole('button', { name: /Show today/ }).click();
   const card = screen.getByTestId('tide-card');
   await expect.element(card).toHaveTextContent(TIDES[restaurant.state.tide].name);
   restaurant.state.tide = 'whale'; restaurant.notify();
   await expect.element(card).toHaveTextContent('Whale passing');
   await expect.element(card).toHaveTextContent('Guests arrive 15% more often · tips +15%');
-  await expect.element(screen.getByRole('group', { name: /Day 1 tide: Whale passing/ })).toBeVisible();
+  await expect.element(screen.getByRole('group', { name: /Today’s tide: Whale passing/ })).toBeVisible();
   const rect = card.element().getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(size);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(size);
 });

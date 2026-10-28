@@ -10,17 +10,19 @@ import type { DailyChallenge } from '@/management/types';
 import '@/index.css';
 
 vi.mock('@/management/RestaurantScene', () => ({ default: () => <div>Restaurant world</div> }));
-beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
+/** Unfolds the today chip if it is folded. */
+const showToday = async () => { const chip = document.querySelector<HTMLElement>('[aria-label^="Show today"]'); if (chip) chip.click(); };
+beforeEach(async () => { localStorage.removeItem('vast-ocean-updates-open'); restaurant.reset(); restaurant.welcome(); await page.viewport(1280, 800); });
 afterEach(() => { vi.restoreAllMocks(); });
 
 it.each([320, 390, 1280])('opens daily challenges at %spx without overflow or pausing service', async width => {
   await page.viewport(width, 800); const screen = await render(<ManagementGame />);
-  await screen.getByRole('button', { name: 'View daily challenges' }).click();
-  await expect.element(screen.getByRole('region', { name: 'Day 1 challenges' })).toHaveTextContent('Open the restaurant');
+  await showToday(); await screen.getByRole('button', { name: 'View daily challenges' }).click();
+  await expect.element(screen.getByRole('region', { name: 'Today’s challenges' })).toHaveTextContent('Open the restaurant');
   await screen.getByRole('button', { name: 'Close', exact: true }).click();
   await screen.getByRole('button', { name: /Open restaurant/ }).click();
-  await screen.getByRole('button', { name: 'View daily challenges' }).click();
-  const board = screen.getByRole('region', { name: 'Day 1 challenges' });
+  await showToday(); await screen.getByRole('button', { name: 'View daily challenges' }).click();
+  const board = screen.getByRole('region', { name: 'Today’s challenges' });
   for (const c of restaurant.state.dailyChallenges) {
     const progress = board.getByRole('progressbar', { name: challengeObjective(c) });
     expect(progress.element().getAttribute('max')).toBe(String(c.target));
@@ -41,24 +43,24 @@ it('shows earned payouts and archives progress without a collect action or payin
     { day: 1, kind: 'dish', dish: 'burger', target: 100, progress: 0, reward: 65, rewarded: false },
   ];
   for (let i = 0; i < 800 && !restaurant.state.lifetimeChallengeBonus; i++) restaurant.update(.1);
-  await screen.getByRole('button', { name: 'View daily challenges' }).click();
-  const board = screen.getByRole('region', { name: 'Day 1 challenges' });
+  await showToday(); await screen.getByRole('button', { name: 'View daily challenges' }).click();
+  const board = screen.getByRole('region', { name: 'Today’s challenges' });
   await expect.element(board).toHaveTextContent('Paid +$50'); await expect.element(board).toHaveTextContent('1/3 completed');
   await expect.element(board.getByRole('button', { name: /Collect/ })).not.toBeInTheDocument();
   await screen.getByRole('button', { name: 'Close', exact: true }).click();
-  for (let i = 0; i < 2600 && restaurant.state.day === 1; i++) restaurant.update(.1);
-  const before = restaurant.state.cash;
-  await screen.getByRole('button', { name: 'Read latest report: Day 1' }).click();
-  await expect.element(screen.getByTestId('report-challenge-bonus')).toHaveTextContent('+$50');
-  await expect.element(screen.getByRole('region', { name: 'Day 1 challenges' })).toHaveTextContent('Expired');
-  await screen.getByRole('button', { name: 'Back to ledger' }).click(); expect(restaurant.state.cash).toBe(before);
-  await expect.element(screen.getByRole('region', { name: 'Day 2 challenges' })).toBeVisible();
-  expect(challengeBonus(restaurant.state.dailyChallenges)).toBe(0);
+  // A shift ends: the board belongs to the real day, so nothing expires and nothing is paid twice.
+  const before = restaurant.state.cash, shifts = restaurant.state.history.length;
+  for (let i = 0; i < 2600 && restaurant.state.history.length === shifts; i++) restaurant.update(.1);
+  expect(restaurant.state.lifetimeChallengeBonus).toBe(50); expect(restaurant.state.dailyChallenges[0].rewarded).toBe(true);
+  await showToday(); await screen.getByRole('button', { name: 'View daily challenges' }).click();
+  await expect.element(screen.getByRole('region', { name: 'Today’s challenges' })).toHaveTextContent('1/3 completed');
+  expect(before).toBeGreaterThan(0);
+  expect(challengeBonus(restaurant.state.dailyChallenges)).toBe(50);
 });
 it('explains migration when an old service has no board', async () => {
   restaurant.open(); restaurant.state.dailyChallenges = []; restaurant.state.elapsed = 151;
-  const screen = await render(<ManagementGame />); await screen.getByRole('button', { name: 'View daily challenges' }).click();
-  await expect.element(screen.getByRole('region', { name: 'Day 1 challenges' })).toHaveTextContent('start with the next day');
+  const screen = await render(<ManagementGame />); await showToday(); await screen.getByRole('button', { name: 'View daily challenges' }).click();
+  await expect.element(screen.getByRole('region', { name: 'Today’s challenges' })).toHaveTextContent('New challenges arrive at midnight');
 });
 it('uses static readable completed, expired and zero-progress states', async () => {
   const challenges: DailyChallenge[] = [
