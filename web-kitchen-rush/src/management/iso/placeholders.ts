@@ -31,6 +31,8 @@ const PREP = [['#E3DCC8', '#9AA5A0', '#7B8884'], ['#EAF4EE', '#8FB8B0', '#6F9C95
 const GRILL = [['#4A4552', '#2F2C36', '#25222B'], ['#5A4A48', '#8A5A3C', '#6E452E'], ['#3E3A5A', '#B07A3A', '#8C5E2A']];
 const PLANT = [['#E26B9C', '#C9508A', '#FFC4DC'], ['#FF7FB0', '#E25C9E', '#FFE0EE'], ['#B58CFF', '#8F66E8', '#9FFFF4']];
 const KELP = [['#4FA45A', '#357F45', '#9BCB6A'], ['#5FC06A', '#3E9A50', '#C6EB86'], ['#4DD9B0', '#2FA88C', '#BFFFF0']];
+/** Booth looks: [dais top, dais side, table rim, table top, glow]. */
+const BOOTH_LOOKS = [['#3E3866', '#2A2648', '#4B3F7A', '#6C5BB0', '120, 240, 230'], ['#2F5F6E', '#1F4450', '#2F7C86', '#4FB7B4', '160, 140, 255'], ['#5A4470', '#3A2B4E', '#B07A3A', '#FFC978', '255, 214, 140']];
 const JELLY = [['rgba(190, 240, 255, .55)', 'rgba(214, 246, 255, .92)'], ['rgba(255, 200, 240, .6)', 'rgba(255, 226, 246, .94)'], ['rgba(255, 230, 150, .7)', 'rgba(255, 244, 206, .96)']];
 /** A row of pearls along the front half of an ellipse: the look-2 and look-3 trim. */
 function pearlTrim(ctx: Ctx, cy: number, rx: number, ry: number, count: number): void {
@@ -58,6 +60,16 @@ export function drawFurniture(ctx: Ctx, kind: FurnitureKind, t: number, active =
     ctx.fillStyle = top; ctx.beginPath(); ctx.ellipse(0, -24, 46, 22, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = spot; for (const [x, y, r] of [[-18, -28, 4], [10, -18, 3], [22, -30, 2.5], [-4, -34, 2]]) { ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r, 0, 0, Math.PI * 2); ctx.fill(); }
     if (look > 1) pearlTrim(ctx, -21, 45, 21, look === 3 ? 13 : 9);
+  } else if (kind === 'booth') {
+    const [dais, side, rim, top, glow] = BOOTH_LOOKS[i3];
+    shadow(ctx, 60, 28, .25); softGlow(ctx, -22, 54 + i3 * 6, glow);
+    isoBlock(ctx, 1.8, 5, dais, side, side);
+    ctx.fillStyle = side; ctx.fillRect(-7, -21, 14, 16);
+    ctx.fillStyle = rim; ctx.beginPath(); ctx.ellipse(0, -19, 44, 21, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = top; ctx.beginPath(); ctx.ellipse(0, -24, 44, 21, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(${glow}, .8)`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, -24, 38, 17, 0, 0, Math.PI * 2); ctx.stroke();
+    crystal(ctx, 0, -30, 5, look === 3 ? '#FFE3A3' : '#9FFFF4', t);
+    pearlTrim(ctx, -21, 43, 20, 7 + i3 * 3);
   } else if (kind === 'prep') {
     const [top, left, right] = PREP[i3];
     if (look === 3) softGlow(ctx, -24, 40);
@@ -114,6 +126,76 @@ export function drawFurniture(ctx: Ctx, kind: FurnitureKind, t: number, active =
     ctx.fillStyle = 'rgba(255, 255, 255, .8)'; ctx.beginPath(); ctx.ellipse(-4, -75 + bob, 4, 2.5, -.4, 0, Math.PI * 2); ctx.fill();
     if (look > 1) pearlTrim(ctx, -70 + bob, 13 + i3, 3, look === 3 ? 7 : 5);
   }
+}
+/** One glowing crystal point standing at (x, y): `h` tall. */
+function crystal(ctx: Ctx, x: number, y: number, h: number, color: string, t: number): void {
+  const w = h * .32;
+  const alpha = ctx.globalAlpha; ctx.globalAlpha = alpha * (.55 + Math.sin(t * 1.8 + x) * .15); softGlowAt(ctx, x, y - h * .5, h * 1.4, color); ctx.globalAlpha = alpha;
+  ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x - w, y - h * .7); ctx.lineTo(x, y - h * 1.15); ctx.lineTo(x + w, y - h * .7); ctx.lineTo(x + w, y); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, .55)'; ctx.beginPath(); ctx.moveTo(x - w * .2, y - 1); ctx.lineTo(x - w * .2, y - h * .72); ctx.lineTo(x, y - h * 1.05); ctx.lineTo(x + w * .45, y - h * .7); ctx.lineTo(x + w * .45, y - 1); ctx.closePath(); ctx.fill();
+}
+function softGlowAt(ctx: Ctx, x: number, y: number, r: number, color: string): void {
+  const g = ctx.createRadialGradient(x, y, 1, x, y, r); g.addColorStop(0, color); g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+/** The booth's scallop-shell canopy, drawn at its back corner so seated guests stay in front. */
+export function drawBoothBack(ctx: Ctx, look: FurnitureLook = 1): void {
+  const ribs = 7, [shellA, shellB] = look === 3 ? ['#E8B65E', '#C98F3E'] : look === 2 ? ['#4FB7B4', '#2F8C8E'] : ['#7A62C2', '#5A479A'];
+  for (let i = 0; i < ribs; i++) {
+    const a0 = Math.PI * (1 + i / ribs), a1 = Math.PI * (1 + (i + 1) / ribs);
+    ctx.fillStyle = i % 2 ? shellA : shellB; ctx.beginPath(); ctx.moveTo(0, -4);
+    ctx.lineTo(Math.cos(a0) * 44, -4 + Math.sin(a0) * 52); ctx.quadraticCurveTo(Math.cos((a0 + a1) / 2) * 51, -4 + Math.sin((a0 + a1) / 2) * 59, Math.cos(a1) * 44, -4 + Math.sin(a1) * 52); ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255, 246, 232, .55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(0, -4, 46, 54, 0, Math.PI, 0); ctx.stroke();
+  pearlTrim(ctx, -6, 14, -6, 5);
+}
+/** A plush seat for booth guests. */
+export function drawCushion(ctx: Ctx): void {
+  shadow(ctx, 12, 6);
+  ctx.fillStyle = '#3A2B5E'; ctx.fillRect(-9, -9, 18, 8);
+  ctx.fillStyle = '#8F6FE0'; ctx.beginPath(); ctx.ellipse(0, -10, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, .35)'; ctx.beginPath(); ctx.ellipse(-3, -12, 5, 2, -.2, 0, Math.PI * 2); ctx.fill();
+}
+/** East grotto set pieces: a crystal cluster, a fallen boulder, a rock pillar of the cave arch and the arch's lintel. */
+export function drawCrystals(ctx: Ctx, t: number, lit: boolean, seed: number): void {
+  shadow(ctx, 16, 7, .3);
+  ctx.globalAlpha = lit ? 1 : .35;
+  const colors = ['#A57BFF', '#5FF2E0', '#C9A8FF'];
+  for (let i = 0; i < 3; i++) crystal(ctx, (i - 1) * 8 + (seed % 3), -(i === 1 ? 2 : 0), [18, 30, 22][i] * (.8 + (seed % 5) * .08), colors[(i + seed) % 3], lit ? t : 0);
+  ctx.globalAlpha = 1;
+}
+export function drawBoulder(ctx: Ctx, size: number, tint: number): void {
+  shadow(ctx, 22 * size, 9 * size, .3); rock(ctx, 20 * size, 13 * size, tint > .5 ? '#3E4656' : '#353C4B');
+  ctx.fillStyle = 'rgba(255, 255, 255, .08)'; ctx.beginPath(); ctx.ellipse(-6 * size, -11 * size, 7 * size, 3 * size, -.3, 0, Math.PI * 2); ctx.fill();
+}
+export function drawArchPillar(ctx: Ctx, t: number, lit: boolean): void {
+  shadow(ctx, 18, 8, .3);
+  for (const [y, rx, ry, color] of [[-8, 15, 10, '#2E2A48'], [-26, 12, 11, '#3A3460'], [-44, 10, 10, '#433C6E'], [-60, 9, 9, '#3A3460']] as const) { ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = 'rgba(160, 130, 255, .35)'; ctx.beginPath(); ctx.ellipse(-4, -46, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+  for (const [x, y] of [[5, -20], [-6, -34], [4, -54]]) { ctx.fillStyle = `rgba(120, 255, 235, ${lit ? .6 + Math.sin(t * 2 + y) * .3 : .2})`; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill(); }
+}
+/** Lintel between two pillars at (dx, dy) and (-dx, -dy) around the arch's midpoint. */
+export function drawArchLintel(ctx: Ctx, dx: number, dy: number, t: number, lit: boolean): void {
+  ctx.lineCap = 'round'; ctx.strokeStyle = '#3A3460'; ctx.lineWidth = 14;
+  ctx.beginPath(); ctx.moveTo(dx, dy - 62); ctx.quadraticCurveTo(0, -96, -dx, -dy - 62); ctx.stroke();
+  ctx.strokeStyle = '#4B4380'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(dx, dy - 66); ctx.quadraticCurveTo(0, -101, -dx, -dy - 66); ctx.stroke();
+  // Stalactites and hanging glow drops along the underside.
+  for (let i = 1; i < 6; i++) {
+    const k = i / 6, x = dx * (1 - 2 * k), y = (dy - 62) * (1 - k) * (1 - k) + 2 * (1 - k) * k * -96 + k * k * (-dy - 62) + 5;
+    ctx.fillStyle = '#2E2A48'; ctx.beginPath(); ctx.moveTo(x - 3, y - 2); ctx.lineTo(x, y + 6 + (i % 2) * 5); ctx.lineTo(x + 3, y - 2); ctx.closePath(); ctx.fill();
+    if (i % 2) { const a = lit ? .65 + Math.sin(t * 1.6 + i) * .25 : .2; ctx.fillStyle = `rgba(150, 255, 240, ${a})`; ctx.beginPath(); ctx.arc(x, y + 14 + (i % 3) * 2, 2, 0, Math.PI * 2); ctx.fill(); }
+  }
+  crystal(ctx, 0, -98, 12, lit ? '#9FFFF4' : '#5C6A78', lit ? t : 0);
+}
+/** "East grotto" plaque with a padlock, shown on the locked rock shelf. */
+export function drawLockedSign(ctx: Ctx): void {
+  shadow(ctx, 22, 7, .3);
+  ctx.fillStyle = '#4A3A30'; ctx.fillRect(-2, -26, 4, 26);
+  ctx.font = '700 11px Fredoka, sans-serif'; const w = ctx.measureText('East grotto').width + 34;
+  ctx.fillStyle = '#5E4A3A'; ctx.beginPath(); ctx.roundRect(-w / 2, -46, w, 22, 6); ctx.fill();
+  ctx.fillStyle = '#F2B743'; ctx.beginPath(); ctx.roundRect(-w / 2 + 7, -36, 10, 8, 2); ctx.fill();
+  ctx.strokeStyle = '#F2B743'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(-w / 2 + 12, -37, 3.2, Math.PI, 0); ctx.stroke();
+  ctx.fillStyle = '#FFF2D7'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('East grotto', 9, -35);
 }
 export function drawStool(ctx: Ctx): void {
   shadow(ctx, 12, 6);

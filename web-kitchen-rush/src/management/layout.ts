@@ -1,4 +1,4 @@
-import { CATALOG, HEIGHT, entrance, width, type Placement, type Point, type RestaurantState } from './types';
+import { CATALOG, GROTTO_X, HEIGHT, entrance, isSeating, width, type Placement, type Point, type RestaurantState } from './types';
 
 export const cellKey = (p: Point): string => `${p.x},${p.z}`;
 export const sameCell = (a: Point, b: Point): boolean => a.x === b.x && a.z === b.z;
@@ -10,7 +10,7 @@ export function localPoint(item: Placement, x: number, z: number): Point {
   return { x: item.x + center + dx, z: item.z + center + dz };
 }
 export function accessPoints(item: Placement): Point[] {
-  if (item.kind === 'table') return [localPoint(item, 0, 2), localPoint(item, 1, 2)];
+  if (isSeating(item.kind)) return [localPoint(item, 0, 2), localPoint(item, 1, 2)];
   if (item.kind === 'prep' || item.kind === 'grill') return [localPoint(item, 0, 1)];
   return [];
 }
@@ -46,6 +46,7 @@ export function findPath(items: Placement[], columns: number, start: Point, end:
 export function layoutError(items: Placement[], columns: number): string | null {
   const cells = new Set<string>();
   for (const item of items) {
+    if (item.kind === 'booth' && item.x < GROTTO_X) return 'Grotto booths go in the east grotto.';
     for (let x = 0; x < CATALOG[item.kind].size; x++) for (let z = 0; z < CATALOG[item.kind].size; z++) {
       const p = { x: item.x + x, z: item.z + z }, key = cellKey(p);
       if (!inBounds(p, columns)) return 'Keep every tile inside your reef floor.';
@@ -54,7 +55,7 @@ export function layoutError(items: Placement[], columns: number): string | null 
       cells.add(key);
     }
   }
-  for (const item of items) for (const point of accessPoints(item)) if (findPath(items, columns, entrance, point) === null) return `Leave a clear path to every ${item.kind === 'table' ? 'seat' : 'workstation'}. Rotate it or leave an aisle.`;
+  for (const item of items) for (const point of accessPoints(item)) if (findPath(items, columns, entrance, point) === null) return `Leave a clear path to every ${isSeating(item.kind) ? 'seat' : 'workstation'}. Rotate it or leave an aisle.`;
   return null;
 }
 export function placementError(state: RestaurantState, candidate: Placement): string | null {

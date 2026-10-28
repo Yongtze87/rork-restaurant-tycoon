@@ -86,7 +86,7 @@ if (flag('payback')) {
   const upAll = (kind: FurnitureKind) => (e: RestaurantEngine) => { for (const f of e.state.furniture.filter(x => x.kind === kind)) { const err = e.upgradeFurniture(f.id); if (err) return err; } return null; };
   const train = (role: 'chef' | 'server') => (e: RestaurantEngine) => { const m = e.state.staff.filter(x => x.role === role && x.level < 3).sort((a, b) => a.level - b.level)[0]; return m ? e.train(m.id) : 'none'; };
   const investments: Investment[] = [
-    { name: 'coral table', apply: furn('table') }, { name: 'sea anemone', apply: furn('plant') }, { name: 'glow lantern', apply: furn('lamp') },
+    { name: 'coral table', apply: furn('table') }, { name: 'grotto booth', apply: furn('booth') }, { name: 'sea anemone', apply: furn('plant') }, { name: 'glow lantern', apply: furn('lamp') },
     { name: 'hire chef', apply: e => e.hire('chef') }, { name: 'hire server', apply: e => e.hire('server') },
     { name: 'train a chef', apply: train('chef') }, { name: 'train a server', apply: train('server') },
     { name: 'upgrade one table', apply: up('table') }, { name: 'upgrade all tables', apply: upAll('table') }, { name: 'upgrade grill', apply: up('grill') }, { name: 'upgrade counter', apply: up('prep') }, { name: 'upgrade a lantern', apply: up('lamp') },

@@ -5,7 +5,7 @@ import type { ZoneId } from './zones';
 import { migrateTutorial, newTutorial, tutorialSchema } from './tutorial';
 import { createOcean, oceanSchema } from './ocean';
 
-export const furnitureKind = z.enum(['table', 'prep', 'grill', 'plant', 'divider', 'lamp']);
+export const furnitureKind = z.enum(['table', 'prep', 'grill', 'plant', 'divider', 'lamp', 'booth']);
 export type FurnitureKind = z.infer<typeof furnitureKind>;
 export const pointSchema = z.object({ x: z.number().finite().min(-2).max(16), z: z.number().finite().min(-2).max(16) });
 export type Point = Validated<z.infer<typeof pointSchema>>;
@@ -129,12 +129,19 @@ export const CATALOG: Record<FurnitureKind, CatalogItem> = {
   plant: { name: 'Sea anemone', description: '+6 atmosphere. Happier guests leave better tips.', price: 65, size: 1, category: 'Atmosphere', comfort: 6 },
   divider: { name: 'Kelp screen', description: '+4 atmosphere. Shape a cozy dining nook.', price: 80, size: 1, category: 'Atmosphere', comfort: 4 },
   lamp: { name: 'Glow-jelly lantern', description: '+8 atmosphere. A soft light from the deep.', price: 110, size: 1, category: 'Atmosphere', comfort: 8 },
+  booth: { name: 'Grotto booth', description: 'Two VIP seats in the east grotto. Guests here pay 30% more and tip a little extra.', price: 520, size: 2, category: 'Dining', comfort: 0 },
 };
+/** Tables and grotto booths: two seats each, served and cleaned the same way. */
+export const isSeating = (kind: FurnitureKind): boolean => kind === 'table' || kind === 'booth';
+/** VIP booths: what their guests pay on top of the menu price, and their extra share of the price as tip. */
+export const BOOTH = { price: 1.3, tip: .03 } as const;
 export const DAY_LENGTH = 150;
 export const createMenu = (): Menu => Object.fromEntries(DISH_IDS.map(dish => [dish, { enabled: DISHES[dish].zone === 'shallows', price: DISHES[dish].fair }])) as Menu;
 export const SAVE_KEY = 'vast-ocean-restaurant-v1';
 export const HEIGHT = 10;
-export const width = (state: Pick<RestaurantState, 'expanded'>): number => state.expanded ? 14 : 10;
+/** The east grotto: columns GROTTO_X up to GROTTO_END once expanded. */
+export const GROTTO_X = 10, GROTTO_END = 14;
+export const width = (state: Pick<RestaurantState, 'expanded'>): number => state.expanded ? GROTTO_END : GROTTO_X;
 export const entrance: Point = { x: 4, z: 9 };
 export const freshTotals = (): Totals => ({ revenue: 0, ingredients: 0, served: 0, missed: 0, tips: 0 });
 export const staffWage = (staff: Staff): number => (staff.role === 'chef' ? 34 : 26) + (staff.level - 1) * 12;
@@ -143,13 +150,13 @@ export const FURNITURE_MAX_LEVEL = MAX_LEVEL;
 export const FURNITURE_UPGRADES = { tipPerLevel: .03, tableComfortPerLevel: 1, decorComfortPerLevel: 1, cookSpeedPerLevel: .03, cookSpeedCap: .4 } as const;
 export const furnitureUpgradeCost = (kind: FurnitureKind, nextLevel: number): number => Math.round(CATALOG[kind].price * .4 * nextLevel ** 1.3 / 5) * 5;
 const above = (level: number): number => Math.max(0, Math.min(FURNITURE_MAX_LEVEL, level) - 1);
-/** Extra share of the dish price a table adds to tips. */
+/** Extra share of the dish price a table or booth adds to tips. */
 export const tableTipBonus = (level: number): number => above(level) * FURNITURE_UPGRADES.tipPerLevel;
 /** Share of cooking time a prep counter or grill saves. */
 export const stationSpeedup = (level: number): number => Math.min(FURNITURE_UPGRADES.cookSpeedCap, above(level) * FURNITURE_UPGRADES.cookSpeedPerLevel);
 export function furnitureComfort(item: Pick<Furniture, 'kind' | 'level'>): number {
   const base = CATALOG[item.kind].comfort;
-  if (item.kind === 'table') return base + above(item.level) * FURNITURE_UPGRADES.tableComfortPerLevel;
+  if (isSeating(item.kind)) return base + above(item.level) * FURNITURE_UPGRADES.tableComfortPerLevel;
   return base > 0 ? base + above(item.level) * FURNITURE_UPGRADES.decorComfortPerLevel : base;
 }
 const pct = (n: number): string => `${Math.round(n * 100)}%`;
@@ -157,14 +164,14 @@ const pct = (n: number): string => `${Math.round(n * 100)}%`;
 export function upgradeEffectText(item: Pick<Furniture, 'kind' | 'level'>): string | null {
   if (item.level >= FURNITURE_MAX_LEVEL) return null;
   const next = item.level + 1, atmosphere = `+${furnitureComfort({ ...item, level: next }) - furnitureComfort(item)} atmosphere`;
-  if (item.kind === 'table') { const now = tableTipBonus(item.level), then = tableTipBonus(next); return `${now ? `Tips +${pct(now)} → +${pct(then)}` : `Tips +${pct(then)}`} · ${atmosphere}`; }
+  if (isSeating(item.kind)) { const now = tableTipBonus(item.level), then = tableTipBonus(next); return `${now ? `Tips +${pct(now)} → +${pct(then)}` : `Tips +${pct(then)}`} · ${atmosphere}`; }
   if (item.kind === 'prep' || item.kind === 'grill') { const now = stationSpeedup(item.level), then = stationSpeedup(next); return now ? `Cooks ${pct(now)} → ${pct(then)} faster` : `Cooks ${pct(then)} faster`; }
   return atmosphere;
 }
 export const comfort = (state: RestaurantState): number => Math.min(100, state.furniture.reduce((total, item) => total + furnitureComfort(item), 20));
 /** Shared service deadline, including the restaurant's existing atmosphere bonus; `factor` is today's tide. */
 export const guestPatienceSeconds = (state: RestaurantState, factor = 1): number => (48 + comfort(state) * .18) * factor;
-export const capacity = (state: RestaurantState): number => state.furniture.filter(item => item.kind === 'table').length * 2;
+export const capacity = (state: RestaurantState): number => state.furniture.filter(item => isSeating(item.kind)).length * 2;
 /** A playable starter business, with no fabricated revenue or customers served. */
 export function createRestaurant(): RestaurantState {
   return { version: 1, name: 'Little Reef', day: 1, cash: 1250, reputation: 3.5, debt: 0, expanded: false,

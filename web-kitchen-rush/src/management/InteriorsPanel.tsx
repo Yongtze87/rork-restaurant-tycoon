@@ -9,7 +9,7 @@ import { money } from './format';
 
 const categories = ['All', 'Dining', 'Decor', 'Kitchen'] as const;
 type Category = typeof categories[number];
-const catalogOrder: FurnitureKind[] = ['table', 'plant', 'lamp', 'divider', 'prep', 'grill'];
+const catalogOrder: FurnitureKind[] = ['table', 'booth', 'plant', 'lamp', 'divider', 'prep', 'grill'];
 const matchesCategory = (kind: FurnitureKind, category: Category): boolean => category === 'All' || CATALOG[kind].category === (category === 'Decor' ? 'Atmosphere' : category);
 
 /** The build tray: a slim strip of furniture along the bottom, so the floor stays in view while you choose. Works while open. */
@@ -37,20 +37,20 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
     <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5 short:flex-wrap short:overflow-visible">
       {view === 'shop' ? <>
         {catalogOrder.filter(kind => matchesCategory(kind, category)).map(kind => {
-          const item = CATALOG[kind], count = state.furniture.filter(f => f.kind === kind).length, affordable = state.cash >= item.price;
-          const benefit = kind === 'table' ? '+2 seats' : item.comfort > 0 ? `+${Math.min(item.comfort, 100 - comfort(state))} cozy` : kind === 'prep' ? 'Kelp dishes' : 'Grill dishes';
-          return <button type="button" key={kind} data-tutorial={kind === 'table' ? 'buy-table' : undefined} aria-label={`Preview ${item.name} · ${money(item.price)}`} title={item.description} disabled={!affordable} onClick={() => choose(kind)} className={card}>
+          const item = CATALOG[kind], count = state.furniture.filter(f => f.kind === kind).length, affordable = state.cash >= item.price, locked = kind === 'booth' && !state.expanded;
+          const benefit = locked ? 'Grotto only' : kind === 'table' ? '+2 seats' : kind === 'booth' ? '+2 VIP seats' : item.comfort > 0 ? `+${Math.min(item.comfort, 100 - comfort(state))} cozy` : kind === 'prep' ? 'Kelp dishes' : 'Grill dishes';
+          return <button type="button" key={kind} data-tutorial={kind === 'table' ? 'buy-table' : undefined} aria-label={`Preview ${item.name} · ${money(item.price)}`} title={item.description} disabled={!affordable || locked} onClick={() => choose(kind)} className={card}>
             <FurnitureArt kind={kind} small />
             <span className="truncate text-[11px] font-extrabold leading-tight">{item.name}</span>
             <span className="flex items-center justify-between gap-1 text-[10px] font-bold"><span className={affordable ? 'text-teal' : 'text-danger'}>{affordable ? money(item.price) : `Need ${money(item.price - state.cash)} more`}</span>{affordable && <span className="text-ink/50">{count > 0 ? `×${count}` : ''}</span>}</span>
             <span className="truncate text-[10px] text-ink/55">{benefit}</span>
           </button>;
         })}
-        {category === 'All' && <button type="button" aria-label={state.expanded ? 'East grotto unlocked' : 'Expand the east grotto · $900'} title="Forty extra floor tiles. Unlocks after 3 shifts." disabled={state.expanded || state.history.length < 3 || state.cash < 900} onClick={() => guardSpend('The east grotto', 900, () => action(restaurant.expand()))} className={cn(card, 'border-dashed border-teal/30')}>
+        {category === 'All' && <button type="button" aria-label={state.expanded ? 'East grotto unlocked' : 'Expand the east grotto · $900'} title="Forty cave tiles where VIP booths can go. Unlocks after 3 shifts." disabled={state.expanded || state.history.length < 3 || state.cash < 900} onClick={() => guardSpend('The east grotto', 900, () => action(restaurant.expand()))} className={cn(card, 'border-dashed border-teal/30')}>
           <div className="grid h-12 place-items-center rounded-xl bg-teal/5 text-teal">{state.expanded ? <Check size={22} /> : state.history.length < 3 ? <LockKeyhole size={20} /> : <ArrowUpRight size={22} />}</div>
           <span className="truncate text-[11px] font-extrabold leading-tight">East grotto</span>
-          <span className="text-[10px] font-bold text-teal">{state.expanded ? 'Unlocked' : '$900'}</span>
-          <span className="truncate text-[10px] text-ink/55">{state.history.length < 3 && !state.expanded ? 'After 3 shifts' : '+40 tiles'}</span>
+          <span className="truncate text-[10px] font-bold text-teal">{state.expanded ? 'Unlocked' : state.history.length < 3 ? '$900 · after 3 shifts' : '$900'}</span>
+          <span className="truncate text-[10px] text-ink/55">+40 tiles · VIP booths</span>
         </button>}
       </> : !owned.length ? <p className="p-2 text-xs text-ink/60">Nothing here yet. Find something in Shop.</p>
         : owned.map(item => <button type="button" key={item.id} aria-label={`Edit ${CATALOG[item.kind].name} at column ${item.x + 1}, row ${item.z + 1}`} onClick={() => inspect(item.id)} className={card}>

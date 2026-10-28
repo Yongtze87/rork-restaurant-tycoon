@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Armchair, ArrowUpRight, ChefHat, Check, Coins, Flame, Flower2, Lamp, Leaf, LockKeyhole, Minus, Plus, Sprout, Star, Trash2, TrendingUp, UserPlus, UtensilsCrossed } from 'lucide-react';
+import { Armchair, ArrowUpRight, ChefHat, Check, Coins, Flame, Flower2, Lamp, Leaf, LockKeyhole, Minus, Plus, Sofa, Sprout, Star, Trash2, TrendingUp, UserPlus, UtensilsCrossed } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { GOALS, PRICE_CHANGES_PER_DAY, restaurant } from './engine';
@@ -14,7 +14,7 @@ import { guardSpend } from './spend-guard';
 import { dayNames } from './calendar';
 import { SeasonIcon } from './TideCard';
 
-const furnitureIcons = { table: Armchair, prep: ChefHat, grill: Flame, plant: Flower2, divider: Sprout, lamp: Lamp };
+const furnitureIcons = { table: Armchair, prep: ChefHat, grill: Flame, plant: Flower2, divider: Sprout, lamp: Lamp, booth: Sofa };
 export type Panel = 'build' | 'team' | 'menu' | 'ledger' | 'town';
 export type LedgerTab = 'today' | 'week' | 'goals' | 'collection';
 export type Action = (error: string | null) => void;
@@ -25,8 +25,8 @@ export function SmallButton({ children, onClick, disabled, className, label, tut
 }
 export function FurnitureArt({ kind, small = false }: { kind: FurnitureKind; small?: boolean }) {
   const Icon = furnitureIcons[kind];
-  return <div className={cn('relative flex items-center justify-center overflow-hidden rounded-xl', small ? 'h-12' : 'h-14', kind === 'table' ? 'bg-tomato/15' : kind === 'plant' || kind === 'divider' ? 'bg-violet/15' : 'bg-teal/10')}>
-    <Icon strokeWidth={1.25} className={cn('relative drop-shadow-[0_0_8px_#4DF0FF80]', small ? 'size-8' : 'size-9', kind === 'grill' ? 'text-tomato' : kind === 'lamp' ? 'fill-gold/40 text-ink' : 'text-teal')} />
+  return <div className={cn('relative flex items-center justify-center overflow-hidden rounded-xl', small ? 'h-12' : 'h-14', kind === 'table' ? 'bg-tomato/15' : kind === 'booth' ? 'bg-violet/25' : kind === 'plant' || kind === 'divider' ? 'bg-violet/15' : 'bg-teal/10')}>
+    <Icon strokeWidth={1.25} className={cn('relative drop-shadow-[0_0_8px_#4DF0FF80]', small ? 'size-8' : 'size-9', kind === 'grill' ? 'text-tomato' : kind === 'booth' ? 'text-violet' : kind === 'lamp' ? 'fill-gold/40 text-ink' : 'text-teal')} />
   </div>;
 }
 export function Notice({ children }: { children: ReactNode }) { return <div className="mt-2 rounded-xl border border-gold/40 bg-gold/10 p-2.5 text-xs leading-snug text-ink/75">{children}</div>; }

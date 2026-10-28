@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { MUSIC_URL } from './assets';
 import { GOALS, restaurant } from './engine';
 import { placementError } from './layout';
-import { CATALOG, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, upgradeEffectText, width, type Furniture, type FurnitureKind, type Point } from './types';
+import { CATALOG, FURNITURE_MAX_LEVEL, GROTTO_X, capacity, comfort, furnitureUpgradeCost, upgradeEffectText, width, type Furniture, type FurnitureKind, type Point } from './types';
 import { lookFor } from './town';
 import { LedgerPanel, MenuPanel, TeamPanel, SmallButton, type LedgerTab, type Panel } from './Panels';
 import { GameWindow, type WindowTab } from './GameWindow';
@@ -114,7 +114,7 @@ export default function ManagementGame() {
   }, [draft, selected, rotateDraft]);
   const choose = (kind: FurnitureKind) => {
     if (state.cash < CATALOG[kind].price) return;
-    let candidate: Furniture = { id: -1, kind, x: 0, z: 7, rotation: 0, level: 1 };
+    let candidate: Furniture = { id: -1, kind, x: kind === 'booth' ? GROTTO_X : 0, z: 7, rotation: 0, level: 1 };
     outer: for (let z = 7; z >= 0; z--) for (let x = 0; x < width(state); x++) { const test = { ...candidate, x, z }; if (!placementError(state, test)) { candidate = test; break outer; } }
     setDraft(candidate); setSelected(null);
   };

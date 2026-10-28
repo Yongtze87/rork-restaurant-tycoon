@@ -13,7 +13,7 @@ export interface SpriteSlot { src?: string; w: number; h: number; ax: number; ay
 export type Look = Guest['look'];
 export type SpriteKey =
   | `furniture.${FurnitureKind}` | `furniture.${FurnitureKind}.${2 | 3}`
-  | 'furniture.stool'
+  | 'furniture.stool' | 'furniture.cushion' | 'furniture.boothBack'
   | `guest.${Look}.${'front' | 'back'}`
   | `staff.${Role}.${'front' | 'back'}`
   | `meal.${DishId}` | 'meal.dirty'
@@ -36,7 +36,10 @@ export const SPRITES: Record<SpriteKey, SpriteSlot> = {
   'furniture.table.3': { src: '/art/furniture/table-3.webp', w: 92.7, h: 78.5, ax: 46.4, ay: 70.1, surface: 39 },
   ...furnitureLooks('prep', furniture(64, 72, 56)), ...furnitureLooks('grill', furniture(64, 72, 56)),
   ...furnitureLooks('plant', furniture(64, 72, 56)), ...furnitureLooks('divider', furniture(64, 112, 96)), ...furnitureLooks('lamp', furniture(64, 112, 96)),
+  ...furnitureLooks('booth', furniture(128, 96, 64)),
   'furniture.stool': furniture(32, 28, 20),
+  // Booth seats, and the shell canopy drawn at the booth's back corner so guests sit in front of it.
+  'furniture.cushion': furniture(32, 28, 20), 'furniture.boothBack': furniture(128, 112, 104),
   'guest.coral.front': person, 'guest.coral.back': person, 'guest.pearl.front': person, 'guest.pearl.back': person,
   'guest.lagoon.front': person, 'guest.lagoon.back': person, 'guest.dusk.front': person, 'guest.dusk.back': person,
   'staff.chef.front': person, 'staff.chef.back': person, 'staff.server.front': person, 'staff.server.back': person,

@@ -7,7 +7,7 @@
  */
 import { GOALS, OFFLINE_SERVICE_DAYS, OFFLINE_SERVICE_HOURS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
-import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
+import { CATALOG, DAY_LENGTH, width, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, isSeating, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
 import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, activeLevel, branchIn, busyBuilders, neighbours, plotLockReason, plotsIn, type BuildingKind, type Plot } from '../town';
 import { claimGate, claimableRegions, regionById, type BoostKind, type Region } from '../ocean';
 import { inHome, regionCenter } from '../world';
@@ -228,11 +228,11 @@ export class Simulation {
     if (!s.expanded && s.history.length >= 3 && !this.findSpot('table')) list.push({ cost: 900, tag: 'grotto', run: () => e.expand() });
     // The owner only grows the dining room or crew after guests were turned away, and fixes the busiest part.
     const struggling = pressure.impatient >= 3;
-    const tables = s.furniture.filter(f => f.kind === 'table').length;
+    const tables = s.furniture.filter(f => isSeating(f.kind)).length, seat = s.expanded && this.findSpot('booth') ? 'booth' : 'table';
     // Seats blocked by uncleared tables need a server, not another table.
     const room0 = s.staff.length < e.crewLimit();
     if (pressure.noSeat >= 3 && pressure.dirty >= 1 && room0) list.push({ cost: 150, tag: 'crew', grow: true, run: () => e.hire('server') });
-    else if (pressure.noSeat >= 3 && tables < 16) list.push({ cost: CATALOG.table.price, tag: 'furniture', grow: true, run: () => this.buyFurniture('table') });
+    else if (pressure.noSeat >= 3 && tables < 16) list.push({ cost: CATALOG[seat].price, tag: 'furniture', grow: true, run: () => this.buyFurniture(seat) });
     const chefs = crew('chef'), room = s.staff.length < e.crewLimit();
     const stations = s.furniture.filter(f => f.kind === 'prep' || f.kind === 'grill').length;
     if (struggling && pressure.waiting >= pressure.ready) {
@@ -254,7 +254,7 @@ export class Simulation {
     }
     return list;
   }
-  private upgradeRank(f: Furniture): number { return furnitureUpgradeCost(f.kind, f.level + 1) * (f.kind === 'table' || f.kind === 'prep' || f.kind === 'grill' ? 1 : 1.6) * (this.p.restaurantFirst ? .5 : 1); }
+  private upgradeRank(f: Furniture): number { return furnitureUpgradeCost(f.kind, f.level + 1) * (isSeating(f.kind) || f.kind === 'prep' || f.kind === 'grill' ? 1 : 1.6) * (this.p.restaurantFirst ? .5 : 1); }
 
   private planningTurn(): void {
     // While saving for a zone whose other requirements are met, only buy what keeps service running (growth).
@@ -459,7 +459,7 @@ export function averageProfit(result: SimResult, from: number, to: number): numb
 
 /** First valid tile (reading order) and rotation for a new piece, or null when the floor is full. */
 export function findSpot(s: RestaurantState, kind: FurnitureKind): Furniture | null {
-  const columns = s.expanded ? 14 : 10;
+  const columns = width(s);
   for (let z = 0; z < 10; z++) for (let x = 0; x < columns; x++) for (let rotation = 0; rotation < 4; rotation++) {
     const item = { id: -1, kind, x, z, rotation, level: 1 } as Furniture;
     if (!placementError(s, item)) return item;

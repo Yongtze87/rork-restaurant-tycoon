@@ -1,10 +1,10 @@
 import { accessPoints, localPoint, seatPoint } from '../layout';
 import { lookFor } from '../town';
-import { CATALOG, HEIGHT, entrance, type Furniture, type Guest, type Placement, type RestaurantState } from '../types';
+import { CATALOG, GROTTO_END, GROTTO_X, HEIGHT, entrance, isSeating, type Furniture, type Guest, type Placement, type RestaurantState } from '../types';
 import { sceneNight } from '../light';
 import { PALETTES, type BiomePalette } from '../ocean';
 import type { Ambience } from './ambience';
-import { diamondPath, drawFurniture, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
+import { diamondPath, drawArchLintel, drawArchPillar, drawBoothBack, drawBoulder, drawCrystals, drawCushion, drawFurniture, drawLockedSign, drawMareen, drawMeal, drawStool, LOOKS, shadow, staffLook } from './placeholders';
 import { depthOf, facing, toScreen, TILE_H, TILE_W, type ScreenPoint, type View } from './projection';
 import { drawSprite, furnitureSprite, spriteImage, SPRITES, type SpriteKey } from './sprites';
 
@@ -32,11 +32,11 @@ export function seabedDecor(columns: number, palette: BiomePalette = PALETTES.ho
   const list: Decor[] = []; let seed = 1337 + columns;
   const rimKind = (r: number): Decor['kind'] => palette.decor.includes('coral') && r < .5 ? 'coral' : palette.decor.includes('kelp') ? 'kelp' : palette.decor[0];
   const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
-  for (let x = -1; x < columns + 1; x += .9) list.push({ x: x + rnd() * .3, z: -1.15 - rnd() * .5, kind: rimKind(rnd()), tint: rnd() });
+  for (let x = -1; x < GROTTO_X - .5; x += .9) list.push({ x: x + rnd() * .3, z: -1.15 - rnd() * .5, kind: rimKind(rnd()), tint: rnd() });
   for (let z = 0; z < HEIGHT + 1; z += .9) list.push({ x: -1.15 - rnd() * .5, z: z + rnd() * .3, kind: rimKind(rnd()), tint: rnd() });
   for (let i = 0; i < 26; i++) {
     const x = -SEABED_MARGIN + rnd() * (columns + SEABED_MARGIN * 2), z = -SEABED_MARGIN + rnd() * (HEIGHT + SEABED_MARGIN * 2);
-    const inside = x > -2 && x < columns + .8 && z > -2 && z < HEIGHT + .8;
+    const inside = x > -2 && x < Math.max(columns, GROTTO_END) + .8 && z > -2 && z < HEIGHT + .8;
     if (!inside) list.push({ x, z, kind: palette.decor[Math.floor(rnd() * palette.decor.length)], tint: rnd() });
   }
   return list;
@@ -87,18 +87,22 @@ function drawGround(ctx: Ctx, f: FrameInput, palette: BiomePalette): void {
   fog.addColorStop(0, `rgba(${palette.fog}, 0)`); fog.addColorStop(1, `rgba(${palette.fog}, .95)`); ctx.fillStyle = fog;
   floorPolygon(ctx, view, -m - .5, -m - .5, columns - .5 + m, HEIGHT - .5 + m); ctx.fill();
   // Platform: thickness first, then tiles.
-  const depth = 12 * view.scale, fl = toScreen(view, -.5, HEIGHT - .5), fr = toScreen(view, columns - .5, HEIGHT - .5), br = toScreen(view, columns - .5, -.5);
-  ctx.fillStyle = palette.platform[0]; ctx.beginPath(); ctx.moveTo(fl.x, fl.y); ctx.lineTo(fr.x, fr.y); ctx.lineTo(fr.x, fr.y + depth); ctx.lineTo(fl.x, fl.y + depth); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = palette.platform[1]; ctx.beginPath(); ctx.moveTo(fr.x, fr.y); ctx.lineTo(br.x, br.y); ctx.lineTo(br.x, br.y + depth); ctx.lineTo(fr.x, fr.y + depth); ctx.closePath(); ctx.fill();
-  for (let x = 0; x < columns; x++) for (let z = 0; z < HEIGHT; z++) {
+  const depth = 12 * view.scale, main = Math.min(columns, GROTTO_X), face = (x0: number, z0: number, x1: number, z1: number, color: string) => {
+    const a = toScreen(view, x0, z0), b = toScreen(view, x1, z1); ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(b.x, b.y + depth); ctx.lineTo(a.x, a.y + depth); ctx.closePath(); ctx.fill();
+  };
+  face(-.5, HEIGHT - .5, main - .5, HEIGHT - .5, palette.platform[0]);
+  if (columns > main) { face(main - .5, HEIGHT - .5, columns - .5, HEIGHT - .5, '#262A44'); face(columns - .5, HEIGHT - .5, columns - .5, -.5, '#1C2036'); }
+  else face(columns - .5, HEIGHT - .5, columns - .5, -.5, palette.platform[1]);
+  for (let x = 0; x < main; x++) for (let z = 0; z < HEIGHT; z++) {
     const kitchen = x < 5 && z < 4, p = toScreen(view, x, z);
     ctx.fillStyle = kitchen ? (x + z) % 2 ? '#E7DCC2' : '#F3EBD8' : ['#7CC2BE', '#86CAC3', '#73B9B8'][(x * 17 + z * 3) % 3];
     diamondPath(ctx, p.x, p.y, TILE_W / 2 * view.scale, TILE_H / 2 * view.scale); ctx.fill();
   }
+  drawGrottoFloor(ctx, f);
   ctx.strokeStyle = 'rgba(255, 255, 255, .18)'; ctx.lineWidth = 1; floorPolygon(ctx, view, -.5, -.5, columns - .5, HEIGHT - .5); ctx.stroke();
-  // Caustics: drifting light on the floor.
+  // Caustics: drifting light on the floor (the grotto's rock ceiling keeps them out).
   if (!reduced) {
-    ctx.save(); floorPolygon(ctx, view, -.5, -.5, columns - .5, HEIGHT - .5); ctx.clip(); ctx.globalCompositeOperation = 'lighter';
+    ctx.save(); floorPolygon(ctx, view, -.5, -.5, main - .5, HEIGHT - .5); ctx.clip(); ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 10; i++) {
       const p = toScreen(view, (i * 3.7 + Math.sin(time * .3 + i) * 1.5) % columns, (i * 2.3 + Math.cos(time * .25 + i * 2) * 1.5) % HEIGHT);
       ctx.fillStyle = 'rgba(255, 255, 240, .07)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 46 * view.scale, 18 * view.scale, Math.sin(time * .2 + i) * .3, 0, Math.PI * 2); ctx.fill();
@@ -107,6 +111,57 @@ function drawGround(ctx: Ctx, f: FrameInput, palette: BiomePalette): void {
   }
   const selected = state.furniture.find(item => item.id === f.selected);
   if (selected && !f.draft) { const n = CATALOG[selected.kind].size; ctx.strokeStyle = '#F2B743'; ctx.lineWidth = 3; floorPolygon(ctx, view, selected.x - .5, selected.z - .5, selected.x + n - .5, selected.z + n - .5); ctx.stroke(); }
+}
+
+const LOCKED_DROP = 12, GROTTO_TILES = ['#2E4F66', '#35496A', '#2A5563', '#3B4572'], LOCKED_TILES = ['#3A4550', '#333D48', '#404A54'];
+const cellHash = (x: number, z: number): number => ((x * 73856093) ^ (z * 19349663)) >>> 0;
+/** The east grotto's cave floor: dark teal and violet stone with glowing dots; before it is bought, dim rock past the floor edge. */
+function drawGrottoFloor(ctx: Ctx, f: FrameInput): void {
+  const { view, state, time, reduced } = f, open = state.expanded, t = reduced ? 0 : time, hw = TILE_W / 2 * view.scale, hh = TILE_H / 2 * view.scale;
+  // Locked: a lower rock shelf, one platform-depth below the floor.
+  ctx.save(); if (!open) { ctx.translate(0, LOCKED_DROP * view.scale); floorPolygon(ctx, view, GROTTO_X - .6, -.6, GROTTO_END - .4, HEIGHT - .4); ctx.fillStyle = 'rgba(24, 34, 48, .6)'; ctx.fill(); }
+  for (let x = GROTTO_X; x < GROTTO_END; x++) for (let z = 0; z < HEIGHT; z++) {
+    const p = toScreen(view, x, z), h = cellHash(x, z);
+    ctx.fillStyle = open ? GROTTO_TILES[h % 4] : LOCKED_TILES[h % 3];
+    diamondPath(ctx, p.x, p.y, hw * (open ? 1 : .9), hh * (open ? 1 : .9)); ctx.fill();
+    if (open) { ctx.strokeStyle = 'rgba(165, 123, 255, .14)'; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  if (open) {
+    // A violet haze from the crystals.
+    const c = toScreen(view, (GROTTO_X + GROTTO_END - 1) / 2, (HEIGHT - 1) / 2), r = HEIGHT * TILE_H * .9 * view.scale, g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+    g.addColorStop(0, 'rgba(120, 80, 220, .16)'); g.addColorStop(1, 'rgba(120, 80, 220, 0)'); ctx.fillStyle = g;
+    floorPolygon(ctx, view, GROTTO_X - .5, -.5, GROTTO_END - .5, HEIGHT - .5); ctx.fill();
+  }
+  // Bioluminescent dots on about half the tiles.
+  for (let x = GROTTO_X; x < GROTTO_END; x++) for (let z = 0; z < HEIGHT; z++) {
+    const h = cellHash(x, z); if (h % 2) continue;
+    const p = toScreen(view, x + ((h >> 3) % 9) / 12 - .33, z + ((h >> 7) % 9) / 12 - .33), a = open ? .45 + Math.sin(t * 1.5 + h % 7) * .25 : .1, teal = (h >> 11) % 2;
+    ctx.fillStyle = teal ? `rgba(90, 255, 230, ${a * .35})` : `rgba(170, 130, 255, ${a * .35})`; ctx.beginPath(); ctx.ellipse(p.x, p.y, 6 * view.scale, 3 * view.scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = teal ? `rgba(200, 255, 245, ${a})` : `rgba(225, 205, 255, ${a})`; ctx.beginPath(); ctx.arc(p.x, p.y, 1.4 * view.scale, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+  if (!open) return;
+  // A seam of dark stones marks the cave mouth.
+  const a = toScreen(view, GROTTO_X - .5, -.5), b = toScreen(view, GROTTO_X - .5, HEIGHT - .5);
+  ctx.strokeStyle = 'rgba(40, 34, 72, .7)'; ctx.lineWidth = 3 * view.scale; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+}
+/** Depth-sorted grotto set pieces: the rock arch over the walkway, crystals along the cave walls and, while locked, fallen boulders and a sign. */
+const ARCH_Z = [3.5, 6.5] as const, CRYSTALS = [[10.2, -1], [11.7, -1.25], [13.1, -.95], [14.25, 1.4], [14.4, 4.5], [14.2, 7.6], [14.05, 9.4]] as const;
+const BOULDERS = [[10.5, 2.2, 1], [12.2, 5.1, 1.2], [11.1, 7.6, .9], [13, 1.2, .8], [12.7, 8.5, 1], [10.4, 5, 1.1], [11.4, 3.6, .7], [13.2, 6.6, .9]] as const;
+function grottoPieces(ctx: Ctx, f: FrameInput, t: number, items: Drawable[], glows: Glow[]): void {
+  const { view, state } = f, open = state.expanded, x = GROTTO_X - .5, mid = (ARCH_Z[0] + ARCH_Z[1]) / 2;
+  for (const z of ARCH_Z) items.push({ depth: depthOf(x, z), draw: () => at(ctx, view, x, z, 0, () => drawArchPillar(ctx, t, open)) });
+  for (const z of [-.5, HEIGHT - .5]) items.push({ depth: depthOf(x, z), draw: () => at(ctx, view, x, z, 0, () => drawArchPillar(ctx, t, open)) });
+  const half = toScreen(view, x, ARCH_Z[0]), centre = toScreen(view, x, mid), dx = (half.x - centre.x) / view.scale, dy = (half.y - centre.y) / view.scale;
+  items.push({ depth: depthOf(x, ARCH_Z[1]) + .01, draw: () => at(ctx, view, x, mid, 0, () => drawArchLintel(ctx, dx, dy, t, open)) });
+  CRYSTALS.forEach(([cx, cz], i) => {
+    items.push({ depth: depthOf(cx, cz), draw: () => at(ctx, view, cx, cz, open ? 0 : -LOCKED_DROP, () => drawCrystals(ctx, t, open, i)) });
+    if (open) glows.push({ ...toScreen(view, cx, cz, 20), r: 46 * view.scale, color: i % 2 ? '95, 242, 224' : '165, 123, 255', strength: .5 });
+  });
+  if (open) { glows.push({ ...toScreen(view, x, mid, 98), r: 40 * view.scale, color: '150, 255, 240', strength: .45 }); return; }
+  BOULDERS.forEach(([bx, bz, size], i) => items.push({ depth: depthOf(bx, bz), draw: () => at(ctx, view, bx, bz, -LOCKED_DROP, () => drawBoulder(ctx, size, (i * .37) % 1)) }));
+  items.push({ depth: depthOf(11.8, 4.4), draw: () => at(ctx, view, 11.8, 4.4, -LOCKED_DROP, drawLockedSign.bind(null, ctx)) });
 }
 
 function drawBuildGrid(ctx: Ctx, f: FrameInput): void {
@@ -167,21 +222,24 @@ export function renderFrame(ctx: Ctx, f: FrameInput, dt: number): FrameOutput {
   for (const d of decor) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette)) });
   const working = new Set(state.staff.filter(s => s.task === 'cooking').map(s => s.stationId));
   const night = sceneNight(state), glows: Glow[] = [];
+  grottoPieces(ctx, f, t, items, glows);
   for (const item of state.furniture) {
     if (item.id === draft?.id) continue;
     const n = CATALOG[item.kind].size, cx = item.x + (n - 1) / 2, cz = item.z + (n - 1) / 2, key = furnitureSprite(item.kind, item.level), slot = SPRITES[key];
     if (night > 0 && item.kind === 'lamp') glows.push({ ...toScreen(view, cx, cz, 72), r: 74 * view.scale, color: '150, 230, 255', strength: .55 });
+    if (night > 0 && item.kind === 'booth') glows.push({ ...toScreen(view, cx, cz, 30), r: 56 * view.scale, color: '165, 123, 255', strength: .45 });
+    if (item.kind === 'booth') { const look = lookFor(item.level); items.push({ depth: depthOf(item.x - .15, item.z - .15), draw: () => at(ctx, view, item.x - .15, item.z - .15, 0, () => { if (!drawSprite(ctx, 'furniture.boothBack')) drawBoothBack(ctx, look); }) }); }
     if (night > 0 && item.kind === 'grill') glows.push({ ...toScreen(view, cx, cz, 22), r: 44 * view.scale, color: '255, 170, 90', strength: working.has(item.id) ? .6 : .32 });
     items.push({ depth: depthOf(cx, cz), draw: () => at(ctx, view, cx, cz, 0, () => { if (!drawSprite(ctx, key)) drawFurniture(ctx, item.kind, t, working.has(item.id), lookFor(item.level)); }) });
     if (building) badges.push(() => at(ctx, view, cx, cz, 0, () => drawLevelBadge(ctx, item.level, n)));
     const p = toScreen(view, cx, cz);
     hits.push({ id: item.id, left: p.x - n * TILE_W / 2 * view.scale, right: p.x + n * TILE_W / 2 * view.scale, top: p.y - slot.ay * view.scale, bottom: p.y + n * TILE_H / 2 * view.scale });
-    if (item.kind === 'table') for (const seat of [0, 1]) { const s = seatPoint(item, seat); items.push({ depth: depthOf(s.x, s.z) - .01, draw: () => at(ctx, view, s.x, s.z, 0, () => { if (!drawSprite(ctx, 'furniture.stool')) drawStool(ctx); }) }); }
+    if (isSeating(item.kind)) for (const seat of [0, 1]) { const s = seatPoint(item, seat), booth = item.kind === 'booth'; items.push({ depth: depthOf(s.x, s.z) - .01, draw: () => at(ctx, view, s.x, s.z, 0, () => { if (!drawSprite(ctx, booth ? 'furniture.cushion' : 'furniture.stool')) (booth ? drawCushion : drawStool)(ctx); }) }); }
   }
   hits.sort((a, b) => a.bottom - b.bottom);
   const tableTop = (table: Furniture, seat: number) => localPoint(table, seat ? .82 : .18, .4);
   // Plates sit on the drawn tabletop: the art's surface height, or the placeholder's.
-  const tableSurface = (table: Furniture) => { const key = furnitureSprite('table', table.level); return spriteImage(key) ? SPRITES[key].surface ?? 24 : 24; };
+  const tableSurface = (table: Furniture) => { const key = furnitureSprite(table.kind, table.level); return spriteImage(key) ? SPRITES[key].surface ?? 24 : 24; };
   for (const guest of state.guests) if (guest.stage === 'eating') {
     const table = state.furniture.find(item => item.id === guest.tableId); if (!table) continue;
     const p = tableTop(table, guest.seat); items.push({ depth: depthOf(table.x + .5, table.z + .5) + .005, draw: () => at(ctx, view, p.x, p.z, tableSurface(table), () => { if (!drawSprite(ctx, `meal.${guest.dish}`)) drawMeal(ctx, guest.dish); }) });
