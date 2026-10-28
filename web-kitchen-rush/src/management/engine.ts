@@ -1,6 +1,6 @@
 import { accessPoints, findPath, inBounds, layoutError, occupied, placementError, seatPoint } from './layout';
 import { localDateKey, dateNumber } from './calendar';
-import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, INGREDIENT_IDS, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type DishId, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
+import { BOOTH, CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, INGREDIENT_IDS, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, isSeating, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type DishId, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
@@ -199,7 +199,7 @@ export class RestaurantEngine {
   /** After moving a piece while open: guests at a table sit at its new seats, and whoever works there follows it. */
   private followMove(item: Furniture): void {
     const s = this.state, yaw = Math.PI - item.rotation * Math.PI / 2;
-    if (item.kind === 'table') for (const g of s.guests) {
+    if (isSeating(item.kind)) for (const g of s.guests) {
       if (g.tableId !== item.id || g.stage === 'leaving') continue;
       const seat = seatPoint(item, g.seat);
       if (g.stage === 'arriving') { const path = this.route(g, accessPoints(item)[g.seat]); g.route = [...(path ?? []), seat]; }
@@ -207,7 +207,7 @@ export class RestaurantEngine {
     }
     for (const m of s.staff) {
       const g = s.guests.find(x => x.id === m.guestId);
-      if (item.kind === 'table') {
+      if (isSeating(item.kind)) {
         if (m.task === 'deliver' && g?.tableId === item.id) m.route = this.route(m, accessPoints(item)[g.seat]) ?? [];
         else if (m.task === 'clean' && m.stationId === item.id) m.route = this.route(m, accessPoints(item)[m.guestId ?? 0]) ?? [];
       } else if (m.stationId === item.id) {
@@ -220,7 +220,7 @@ export class RestaurantEngine {
   /** Before selling a piece while open: its seated guests leave (unpaid ones count as missed), and dishes it was making start over. Returns guests sent away. */
   private clearFor(item: Furniture): number {
     const s = this.state; let sent = 0;
-    if (item.kind === 'table') {
+    if (isSeating(item.kind)) {
       for (const g of s.guests) if (g.tableId === item.id && g.stage !== 'leaving') { const paid = g.paid || g.stage === 'eating'; this.leave(g, paid); if (!paid) sent++; }
       s.dirty = s.dirty.filter(key => !key.startsWith(`${item.id}:`));
       s.staff.filter(m => m.task === 'clean' && m.stationId === item.id).forEach(resetStaff);
@@ -331,7 +331,7 @@ export class RestaurantEngine {
     if (this.state.expanded) return 'Your east grotto is already open.';
     if (this.state.history.length < 3) return 'Finish 3 shifts to unlock the east grotto.';
     if (this.state.cash < 900) return 'The east grotto costs $900.';
-    this.state.cash -= 900; this.state.expanded = true; this.changed('The east grotto is yours. Forty new tiles, endless possibilities.'); return null;
+    this.state.cash -= 900; this.state.expanded = true; this.changed('The east grotto is yours. Forty new tiles and room for VIP booths.'); return null;
   }
   claim(id: string): string | null {
     const goal = GOALS.find(g => g.id === id);
@@ -403,7 +403,8 @@ export class RestaurantEngine {
     const s = this.state;
     if (s.guests.length >= 20) return;
     let selected: { table: Furniture; seat: number } | undefined;
-    for (const table of s.furniture.filter(f => f.kind === 'table')) for (let seat = 0; seat < 2; seat++) {
+    // VIP booths fill first.
+    for (const table of s.furniture.filter(f => f.kind === 'booth').concat(s.furniture.filter(f => f.kind === 'table'))) for (let seat = 0; seat < 2; seat++) {
       if (!selected && !s.dirty.includes(`${table.id}:${seat}`) && !s.guests.some(g => g.tableId === table.id && g.seat === seat && g.stage !== 'leaving')) selected = { table, seat };
     }
     if (!selected) { s.totals.missed++; this.event = 'A guest found no free seat. More tables or faster clearing would help.'; return; }
@@ -496,13 +497,13 @@ export class RestaurantEngine {
       } else if (staff.task === 'deliver') {
         guest.stage = 'eating'; guest.timer = 10; guest.happy = true;
         if (!guest.paid) {
-          const table = s.furniture.find(f => f.id === guest.tableId);
-          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1) + this.fameBonuses().tips) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips * REACTION_TIP[guest.reaction]));
-          const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; recordServed(s.collections, guest.dish);
+          const table = s.furniture.find(f => f.id === guest.tableId), vip = table?.kind === 'booth', price = vip ? Math.round(guest.price * BOOTH.price) : guest.price;
+          const tip = Math.max(0, Math.round(price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1) + (vip ? BOOTH.tip : 0) + this.fameBonuses().tips) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips * REACTION_TIP[guest.reaction]));
+          const earned = price + tip; s.cash += earned; s.totals.revenue += price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; recordServed(s.collections, guest.dish);
           if (this.inSeason(guest.dish)) { this.note(guest.dish, 'sold'); const group = DISHES[guest.dish].ingredient; s.collections.seasonSold[group] = (s.collections.seasonSold[group] ?? 0) + 1; } guest.paid = true;
           this.recordIncome(earned, 'service', guest.id, tip);
           this.event = `${DISHES[guest.dish].name} served. +$${earned}${tip ? ` including $${tip} tip` : ''}`;
-          for (const challenge of advanceDailyChallenges(s.dailyChallenges, guest, tip)) {
+          for (const challenge of advanceDailyChallenges(s.dailyChallenges, { ...guest, price }, tip)) {
             s.cash += challenge.reward; s.lifetimeChallengeBonus += challenge.reward;
             this.recordIncome(challenge.reward, 'challenge');
             this.event = `Daily challenge complete: ${challengeTitle(challenge)}. +$${challenge.reward} automatically added.`;

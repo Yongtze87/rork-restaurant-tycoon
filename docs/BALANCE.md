@@ -343,3 +343,18 @@ Plankton bloom and Shoal run no longer roll; kelp and fish have seasons instead 
 +5–35%, ×2 demand). The simulated owner keeps suggested prices, so this measures the floor, not a player who prices
 well: balanced Coral Reef real day 2, Twilight 12, Abyss 28; builder 3 / 17 / 30; cautious 5 / 17 / 38. A player
 who finds a good in-season price earns somewhat more than this.
+
+## Town on tiles (roads and building sizes)
+
+Roads cost $10 a tile; a plot's streets are 7 tiles ($70). The simulated owners lay a plot's streets when they unlock it and
+place each building on a spot a road already joins to the restaurant. 56-day runs, real day reached (before → after):
+
+| Owner | Coral Reef | Twilight | Abyss |
+|---|---|---|---|
+| balanced | 2 → 2 | 12 → 13 | 28 → 25 |
+| builder | 3 → 2 | 17 → 16 | 30 → 28 |
+| cautious | 5 → 4 | 17 → 18 | 38 → 46 |
+
+"Near" (touching or one tile apart) reaches up to 8 plots around the restaurant instead of 4, so the hub bonus is easier to
+get; producer and garden caps still hold. The cautious owner's slower Abyss comes from its plain (non-adjacency) building
+order on smaller footprints; worth a look if it matters.
