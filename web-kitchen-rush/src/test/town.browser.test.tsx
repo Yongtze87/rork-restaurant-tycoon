@@ -110,3 +110,15 @@ it('shows atmosphere on a phone, pays debt with pearls and demolishes a town bui
   await screen.getByRole('button', { name: /Tap again: demolish for \$125/ }).click();
   expect(s.town.buildings).toHaveLength(1); expect(s.cash).toBe(cash + refund);
 });
+
+it('shows each builder over the town: free, or the job with its time left, and opens that building on tap', async () => {
+  const s = restaurant.state; s.cash = 5000; restaurant.unlockPlot(C + 1, C);
+  const screen = await render(<ManagementGame />);
+  await screen.getByRole('button', { name: 'Town', exact: true }).click();
+  const builders = screen.getByTestId('builder-status');
+  await expect.element(builders).toHaveTextContent('Builder free'); await expect.element(builders).toHaveTextContent('2nd builder');
+  expect(restaurant.build('kelpFarm', (C + 1) * PARCEL, C * PARCEL)).toBeNull(); restaurant.notify();
+  await expect.element(builders.getByRole('button', { name: /Builder: Kelp farm being built/ })).toBeVisible();
+  await builders.getByRole('button', { name: /Builder: Kelp farm/ }).click();
+  await expect.element(screen.getByRole('region', { name: 'Kelp farm' })).toBeVisible();
+});

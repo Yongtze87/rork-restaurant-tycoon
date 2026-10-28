@@ -60,6 +60,7 @@ There is **no separate map screen and no restart**. The Town view *is* the world
 - **Town life.** Bubble-carts drive on the roads and Mareen folk walk along their edges (`iso/traffic.ts`). More roads and homes bring more of them. Purely visual: nothing is saved, and reduced motion keeps them still.
 - **Town bonuses.** The Town card shows what all buildings add up to (guests, kelp, fish, crew, crew speed, build speed), each against its cap, with a breakdown on tap (`TownBonuses.tsx`, `townBreakdown`). A building's card shows its own share and the town total for its kind.
 - **Short cards.** Building choices are a picture, a name, a price and a size; the description and exact effect sit behind ⓘ. Effects on cards use `shortEffect` ("+5% guests", "Kelp −6%").
+- **Builders over the town.** A small panel in the town scene (`BuilderStatus.tsx`) shows free builders and each job with its building, time left and progress; a tap opens that building. With one builder, a locked slot leads to the pearl shop.
 - **Taps on overlapping art** pick the building whose picture is nearest the finger.
 
 ## Guests follow the dining room
