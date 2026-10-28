@@ -162,7 +162,7 @@ describe('town effects on the restaurant', () => {
     put(town, 'kelpFarm', C + 1, C, 5); put(town, 'fishery', 0, 0, 5);
     expect(townEffects(town).kelpCost).toBeCloseTo(1 - 5 * .06 * 1.5); expect(townEffects(town).fishCost).toBeCloseTo(1 - 5 * .06);
     put(town, 'garden', C, C + 1, 4); put(town, 'homes', C, C + 2, 6, { z: (C + 1) * PARCEL + 2 });
-    const e = townEffects(town); expect(e.arrivalBonus).toBeCloseTo(4 * .03 * 1.5); expect(e.crewSpeed).toBeCloseTo(1.04); expect(e.extraCrew).toBe(2);
+    const e = townEffects(town); expect(e.arrivalBonus).toBeCloseTo(4 * .03 * 1.5); expect(e.crewSpeed).toBeCloseTo(1.04); expect(e.extraCrew).toBe(5);
   });
   it('cheaper ingredients and more crew slots change real service results', () => {
     const plain = new RestaurantEngine(), farmed = new RestaurantEngine();
@@ -197,7 +197,7 @@ describe('saves from before tiles', () => {
     // The lone fishery's plot is not joined to the rest: it waits for a road, like any building.
     expect(connected(town, town.buildings[0])).toBe(false);
     joinRoads(town, { x: 0, z: 0 });
-    const e = townEffects(town); expect(e.kelpCost).toBeCloseTo(1 - 5 * .06 * 1.5); expect(e.fishCost).toBeCloseTo(1 - 5 * .06); expect(e.extraCrew).toBe(2);
+    const e = townEffects(town); expect(e.kelpCost).toBeCloseTo(1 - 5 * .06 * 1.5); expect(e.fishCost).toBeCloseTo(1 - 5 * .06); expect(e.extraCrew).toBe(5);
     expect(migrateTown(town)).toBe(town);
   });
 });
@@ -266,5 +266,16 @@ describe('ways out of debt', () => {
     const cash = e.state.cash; expect(e.demolish(farm.id)).toBeNull(); expect(e.state.cash).toBe(cash + Math.round(spent / 2));
     expect(town.buildings).toHaveLength(1); expect(buildingAt(town, T + 4, T)).toBeUndefined();
     expect(e.demolish(hall(town).id)).toBe('Your restaurant stays.'); expect(e.demolishRefund(hall(town).id)).toBe(0);
+  });
+});
+
+describe('Mareen homes', () => {
+  it('add one crew slot per level and stop at level 5, with a town-wide cap', () => {
+    const town = createTown(), homes = put(town, 'homes', C, C + 1, 1);
+    for (let level = 1; level <= 5; level++) { homes.level = level; expect(townEffects(town).extraCrew).toBe(level); }
+    const { e } = rich(); const h = put(e.state.town, 'homes', C, C + 1, 5); expect(e.upgrade(h.id)).toBe('Already at the highest level.');
+    expect(e.crewLimit()).toBe(11);
+    for (const [x, z] of [[C + 1, C], [C - 1, C], [C, C - 1]]) put(e.state.town, 'homes', x, z, 5, { z: z * PARCEL + 1 }); // beside each plot's street
+    expect(e.townEffects().extraCrew).toBe(12);
   });
 });

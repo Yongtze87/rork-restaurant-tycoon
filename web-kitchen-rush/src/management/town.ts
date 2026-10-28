@@ -18,6 +18,12 @@ export const TOWN_SIZE = HOME_SIZE;
 /** Saves from before depth zones used a 5×5 town around the same restaurant. */
 export const LEGACY_TOWN_SIZE = 5;
 export const MAX_LEVEL = 15;
+/** Mareen homes stop at level 5: one crew slot per level. */
+export const HOMES_MAX_LEVEL = 5;
+/** Extra crew slots the whole town can add. */
+export const CREW_CAP = 12;
+/** The highest level a kind of building reaches. */
+export const maxLevelOf = (kind: BuildingKind): number => kind === 'homes' ? HOMES_MAX_LEVEL : MAX_LEVEL;
 export const LEVELS_PER_LOOK = 5;
 export const MAX_BUILDERS = 2;
 
@@ -93,7 +99,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingInfo> = {
   restaurant: { size: [3, 3], name: 'Restaurant', description: 'Your restaurant. Each level draws guests a little more often.', adjacency: '', looks: ['Reef shack', 'Coral hall', 'Bubble-dome palace'], buildCost: 0, buildSeconds: 0 },
   kelpFarm: { size: [3, 2], name: 'Kelp farm', description: 'Grows your own kelp. Kelp dishes cost less to make.', adjacency: 'Near the restaurant or a branch: 50% stronger.', looks: ['Kelp patch', 'Kelp terraces', 'Glowing kelp forest'], buildCost: 300, buildSeconds: 90 },
   fishery: { size: [2, 3], name: 'Fishery', description: 'Catches your own fish. Fish dishes cost less to make.', adjacency: 'Near the restaurant or a branch: 50% stronger.', looks: ['Fish traps', 'Net house', 'Pearl-shell fishery'], buildCost: 350, buildSeconds: 120 },
-  homes: { size: [2, 2], name: 'Mareen homes', description: 'Room for more crew. +1 crew slot, +1 more every 5 levels.', adjacency: 'Near a glow garden: crew work faster.', looks: ['Shell huts', 'Coral cottages', 'Pearl villas'], buildCost: 300, buildSeconds: 90 },
+  homes: { size: [2, 2], name: 'Mareen homes', description: 'Room for more crew: +1 crew slot per level, up to level 5.', adjacency: 'Near a glow garden: crew work faster.', looks: ['Shell huts', 'Coral cottages', 'Pearl villas'], buildCost: 300, buildSeconds: 90 },
   garden: { size: [2, 1], name: 'Glow garden', description: 'A glowing attraction. Guests arrive more often.', adjacency: 'Near the restaurant or a branch: 50% stronger. Near homes: crew work faster.', looks: ['Anemone bed', 'Jelly garden', 'Bioluminescent grove'], buildCost: 250, buildSeconds: 60 },
   workshop: { size: [2, 3], name: 'Workshop', description: 'Mareen engineers. All building and upgrading finishes faster.', adjacency: '', looks: ['Driftwood shed', 'Stone workshop', 'Crystal forge'], buildCost: 500, buildSeconds: 150 },
   branch: { size: [3, 3], name: 'Branch restaurant', description: 'A second restaurant your crew runs on its own. It earns money at the end of every shift.', adjacency: 'One per region, outside the Home Reef. Producers and gardens near it are 50% stronger.', looks: ['Kelp kiosk', 'Coral bistro', 'Pearl brasserie'], buildCost: 1200, buildSeconds: 240 },
@@ -238,6 +244,8 @@ export const buildableAt = (town: Town, plot: Pick<Plot, 'x' | 'z'>): BuildingKi
 export const neighbours = (town: Town, plot: Pick<Plot, 'x' | 'z'>): Plot[] => [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => plotAt(town, plot.x + dx, plot.z + dz)).filter((p): p is Plot => Boolean(p));
 /** The art look (1–3) for a level: levels 1–5, 6–10 and 11–15 share one image each. */
 export const lookFor = (level: number): 1 | 2 | 3 => Math.min(3, Math.max(1, Math.ceil(level / LEVELS_PER_LOOK))) as 1 | 2 | 3;
+/** A building's look at a level: homes change at levels 2 and 4 (they stop at 5), the rest every 5 levels. */
+export const buildingLook = (kind: BuildingKind, level: number): 1 | 2 | 3 => kind === 'homes' ? (level >= 4 ? 3 : level >= 2 ? 2 : 1) : lookFor(level);
 /** Owned plots in one region (the home town by default). */
 export const ownedCount = (town: Town, id = HOME_ID): number => (id === HOME_ID ? town.plots.filter(inHome) : plotsIn(town, id)).filter(p => p.owned).length;
 /** Home plot price grows polynomially: $250 for the first, about $3.8k by the 11th, $14k for the 25th, $93k for the last of 80. */
@@ -320,7 +328,7 @@ export function townBreakdown(town: Town): TownBreakdown {
   return {
     gardens: gardens.reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.gardenPerLevel * boost(b), 0), gardenCap: TOWN_BALANCE.gardenCap,
     kelp: producer('kelpFarm'), fish: producer('fishery'), producerCap: TOWN_BALANCE.producerCap,
-    homes: working(town, 'homes').reduce((sum, b) => sum + 1 + Math.floor(activeLevel(b) / LEVELS_PER_LOOK), 0), crewCap: 6,
+    homes: working(town, 'homes').reduce((sum, b) => sum + Math.min(HOMES_MAX_LEVEL, activeLevel(b)), 0), crewCap: CREW_CAP,
     restaurant: (activeLevel(restaurantOf(town)) - 1) * .03, zones: zoneArrivalBonus(town),
     crewSpeed: gardens.filter(b => nearKind(town, rectOf(b), 'homes', true)).reduce((sum, b) => sum + activeLevel(b) * .01, 0), crewSpeedCap: .15,
     workshop: working(town, 'workshop').reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.workshopPerLevel * boostOf(buildingPlot(b), 'workshop'), 0), workshopCap: TOWN_BALANCE.workshopCap,
@@ -341,7 +349,7 @@ export function shortEffect(town: Town, spot: Spot, level: number, fameBranch = 
   if (kind === 'restaurant') return `+${pct((level - 1) * .03)} guests`;
   if (kind === 'kelpFarm') return `Kelp −${pct(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))}`;
   if (kind === 'fishery') return `Fish −${pct(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))}`;
-  if (kind === 'homes') return `+${1 + Math.floor(level / 5)} crew`;
+  if (kind === 'homes') return `+${Math.min(HOMES_MAX_LEVEL, level)} crew`;
   if (kind === 'garden') return `+${pct(level * TOWN_BALANCE.gardenPerLevel * boost)} guests`;
   return `Builds ${pct(Math.min(TOWN_BALANCE.workshopCap, level * TOWN_BALANCE.workshopPerLevel * boost))} faster`;
 }
@@ -359,7 +367,7 @@ export function effectText(town: Town, spot: Spot, level: number, fameBranch = 0
   if (kind === 'restaurant') return level > 1 ? `Guests arrive ${percent((level - 1) * .03)} more often` : 'Upgrade to draw guests more often';
   if (kind === 'kelpFarm') return `Kelp dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
   if (kind === 'fishery') return `Fish dishes cost ${percent(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))} less to make`;
-  if (kind === 'homes') return `+${1 + Math.floor(level / 5)} crew slot${level >= 5 ? 's' : ''}`;
+  if (kind === 'homes') return `+${Math.min(HOMES_MAX_LEVEL, level)} crew slot${level > 1 ? 's' : ''}`;
   if (kind === 'garden') return `Guests arrive ${percent(level * TOWN_BALANCE.gardenPerLevel * boost)} more often (all gardens: up to ${percent(TOWN_BALANCE.gardenCap)})${nearSpot(town, spot, 'homes') ? ` · crew ${percent(Math.min(.15, level * .01))} faster` : ''}`;
   return `All building finishes ${percent(Math.min(TOWN_BALANCE.workshopCap, level * TOWN_BALANCE.workshopPerLevel * boost))} faster`;
 }

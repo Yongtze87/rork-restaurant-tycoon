@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { lookFor, type BuildingKind } from './town';
+import { buildingLook, type BuildingKind } from './town';
 import { drawBuilding } from './iso/town-art';
 import { drawSprite } from './iso/sprites';
 
@@ -8,7 +8,7 @@ export function BuildingThumb({ kind, level = 1, size = 44 }: { kind: BuildingKi
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current, ctx = canvas?.getContext('2d'); if (!canvas || !ctx) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1), look = lookFor(level);
+    const dpr = Math.min(2, window.devicePixelRatio || 1), look = buildingLook(kind, level);
     canvas.width = Math.round(size * dpr); canvas.height = Math.round(size * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, size, size);
     ctx.translate(size / 2, size * .74); ctx.scale(size / 72, size / 72);

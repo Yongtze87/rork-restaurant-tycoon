@@ -8,7 +8,7 @@
 import { GOALS, OFFLINE_SERVICE_DAYS, OFFLINE_SERVICE_HOURS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
 import { CATALOG, DAY_LENGTH, width, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, isSeating, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
-import { CHARMS, MAX_BUILDERS, MAX_LEVEL, PARCEL, SHOP, TOWN_SIZE, placementError as townPlacementError, activeLevel, branchIn, buildingPlot, busyBuilders, connected, nearSpot, neighbours, plotLockReason, plotsIn, restaurantOf, siteIn, type Building, type BuildingKind, type Plot, type Spot } from '../town';
+import { CHARMS, MAX_BUILDERS, PARCEL, maxLevelOf, SHOP, TOWN_SIZE, placementError as townPlacementError, activeLevel, branchIn, buildingPlot, busyBuilders, connected, nearSpot, neighbours, plotLockReason, plotsIn, restaurantOf, siteIn, type Building, type BuildingKind, type Plot, type Spot } from '../town';
 import { claimGate, claimableRegions, regionById, type BoostKind, type Region } from '../ocean';
 import { inHome, regionCenter } from '../world';
 import { ZONE_IDS, ZONES, hasZone, zoneError, zoneRequirements, type ZoneId } from '../zones';
@@ -331,7 +331,7 @@ export class Simulation {
       return this.buildKind(kind, budget);
     }
     // Upgrade towards the zone's level requirement, then anything with spare cash.
-    const plots = town.buildings.filter(b => !b.job && b.level < MAX_LEVEL && connected(town, b));
+    const plots = town.buildings.filter(b => !b.job && b.level < maxLevelOf(b.kind) && connected(town, b));
     if (!plots.length) return false;
     const best = Math.max(...this.homeBuildings().map(b => b.level));
     let target: Building | undefined;

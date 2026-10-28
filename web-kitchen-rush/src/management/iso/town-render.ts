@@ -1,4 +1,4 @@
-import { PARCEL, TOWN_SIZE, activeLevel, buildingAt, buildingRegion, canUnlock, connected, footprint, lookFor, occupancy, parcelOf, plotAt, plotZone, rectOf, roadSet, type Building, type Plot, type Rect, type Spot, type Town } from '../town';
+import { PARCEL, TOWN_SIZE, activeLevel, buildingLook, buildingAt, buildingRegion, canUnlock, connected, footprint, occupancy, parcelOf, plotAt, plotZone, rectOf, roadSet, type Building, type Plot, type Rect, type Spot, type Town } from '../town';
 import { ZONES, hasZone, type ZoneId } from '../zones';
 import type { Ambience } from './ambience';
 import { BIOMES, PALETTES, hash01, regionAt, regionStatus, type BiomeId, type Ocean, type RegionStatus } from '../ocean';
@@ -171,7 +171,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
     for (const d of regionDecor(c.x, c.y, c.status === 'claimable')) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette), c.status === 'claimable' ? .7 : 1) });
   }
   const drawPiece = (kind: Building['kind'], level: number, job: Building['job'], r: Rect, alpha = 1, wide = false, turned = false) => {
-    const look = lookFor(level);
+    const look = buildingLook(kind, level);
     rectPolygon(ctx, view, r, .03); ctx.globalAlpha = alpha; ctx.fillStyle = PAD[kind]; ctx.fill(); ctx.strokeStyle = 'rgba(18,15,46,.35)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
     // The restaurant's grotto row is a rock annex; the hall stands on the other 3×3.
     let body = r;
@@ -221,7 +221,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
   const night = f.night ?? 0;
   if (night > 0) drawNight(ctx, f, night, visible.flatMap((b): Glow[] => {
     if (!activeLevel(b)) return [];
-    const look = lookFor(b.level), glows: Glow[] = [], r = rectOf(b), c = rectCentre(r), k = artScale(r.x1 - r.x0 + 1, r.z1 - r.z0 + 1);
+    const look = buildingLook(b.kind, b.level), glows: Glow[] = [], r = rectOf(b), c = rectCentre(r), k = artScale(r.x1 - r.x0 + 1, r.z1 - r.z0 + 1);
     if (b.kind === 'garden') glows.push({ ...toScreen(view, c.x, c.z, 12 * k), r: 52 * s * k, color: '165, 123, 255', strength: .2 + look * .1 });
     if (b.kind === 'restaurant' || b.kind === 'branch') glows.push({ ...toScreen(view, c.x, c.z, 10 * k), r: 26 * s * k, color: '255, 226, 122', strength: .4 });
     if (look === 3) glows.push({ ...toScreen(view, c.x, c.z, 30 * k), r: 58 * s * k, color: b.kind === 'homes' || b.kind === 'branch' ? '255, 226, 122' : '77, 240, 255', strength: .35 });

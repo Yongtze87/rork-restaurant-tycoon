@@ -10,7 +10,7 @@ import { TIDES, rollTide, type TideEffects } from './tides';
 import { EFFICIENCY_STEP, EFFICIENCY_WINDOW, advise, summarize, type Advice, type Efficiency, type EfficiencySample } from './efficiency';
 import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
 import { HOME_ID, claimGate, claimPrice, fameBonuses, isClaimable as regionClaimable, isClaimed, masteryFame, masteryKey, regionAt, regionById, regionPlotCost, type FameBonuses, type MasteryKind, type Region, type RegionModifiers } from './ocean';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_BALANCE, activeLevel, addRegion, addRoads, branchIn, branchIncome, buildingById, buildingPlot, buildingRegion, busyBuilders, completeJobs, ensureRegionPlots, finishCost, grottoSpaceError, isRoad, jobSeconds, lookFor, ownedCount, parcelOf, placementError as sitingError, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, roadError, streetTiles, tileKey, townEffects, unlockCost, upgradeCost, widenRestaurant, type Building, type BuildingKind, type CharmKind, type TownEffects } from './town';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, SHOP, maxLevelOf, TOWN_BALANCE, activeLevel, addRegion, addRoads, branchIn, branchIncome, buildingById, buildingPlot, buildingRegion, busyBuilders, completeJobs, ensureRegionPlots, finishCost, grottoSpaceError, isRoad, jobSeconds, lookFor, ownedCount, parcelOf, placementError as sitingError, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, roadError, streetTiles, tileKey, townEffects, unlockCost, upgradeCost, widenRestaurant, type Building, type BuildingKind, type CharmKind, type TownEffects } from './town';
 import { inHome, regionCenter } from './world';
 
 export const GOALS = [
@@ -786,7 +786,7 @@ export class RestaurantEngine {
     const town = this.state.town, b = buildingById(town, id);
     if (!b) return 'Build something here first.';
     if (b.job) return 'This building is already under construction.';
-    if (b.level >= MAX_LEVEL) return 'Already at the highest level.';
+    if (b.level >= maxLevelOf(b.kind)) return 'Already at the highest level.';
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
     const p = buildingPlot(b), cost = this.upgradePrice(b.kind, b.level + 1, p.x, p.z); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
     const reserve = this.reserveError(cost); if (reserve) return reserve;
