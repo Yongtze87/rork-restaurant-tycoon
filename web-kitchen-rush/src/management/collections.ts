@@ -1,5 +1,5 @@
 import { BUILDABLE, BUILDINGS, activeLevel } from './town';
-import { DISHES, DISH_IDS, type Collections, type DishId, type Report, type RestaurantState } from './types';
+import { DISHES, DISH_IDS, INGREDIENTS, INGREDIENT_IDS, type Collections, type DishId, type Report, type RestaurantState } from './types';
 import { TIDES, TIDE_KINDS, type TideKind } from './tides';
 import { ZONES, ZONE_IDS } from './zones';
 import { BIOMES, VISITABLE_BIOMES, biomesClaimed } from './ocean';
@@ -15,7 +15,7 @@ export const FAMILIES: Record<FamilyId, { name: string; description: string }> =
   builder: { name: 'Builder', description: 'Grow your reef town.' },
   explorer: { name: 'Explorer', description: 'Reach every depth zone.' },
   ocean: { name: 'Ocean voyager', description: 'Claim regions across the Ocean, see every biome and grow your branches.' },
-  tide: { name: 'Tide watcher', description: 'Serve guests under every tide.' },
+  tide: { name: 'Tides & seasons', description: 'Serve guests under every tide and in every season.' },
   host: { name: 'Host', description: 'Keep your guests happy.' },
   craft: { name: 'Craft', description: 'Upgrade your furniture.' },
 };
@@ -38,6 +38,7 @@ const bestFurniture = (s: RestaurantState) => Math.max(s.collections.bestFurnitu
 const flag = (yes: boolean) => yes ? 1 : 0;
 const bestBranch = (s: RestaurantState) => Math.max(0, ...s.town.plots.filter(p => p.building === 'branch').map(activeLevel));
 const reward = (pearls: number, tideCharms = 0): Reward => ({ pearls, tideCharms });
+const SEASON_GOAL = 40;
 type Step = Omit<Achievement, 'family' | 'chain' | 'step' | 'steps'>;
 const chain = (family: FamilyId, name: string, steps: Step[]): Achievement[] => steps.map((a, i) => ({ ...a, family, chain: name, step: i + 1, steps: steps.length }));
 const single = (family: FamilyId, a: Step): Achievement[] => chain(family, a.id, [a]);
@@ -61,7 +62,8 @@ export const ACHIEVEMENTS: Achievement[] = [
     { id: 'branch-level-6', title: 'Second kitchen', text: 'Get a branch restaurant to level 6', target: 6, reward: reward(15, 1), value: bestBranch },
     { id: 'branch-level-11', title: 'Restaurant chain', text: 'Get a branch restaurant to level 11', target: 11, reward: reward(30, 1), value: bestBranch },
   ]),
-  ...TIDE_KINDS.map(kind => single('tide', { id: `tide-${kind}`, title: TIDES[kind].name, text: `Finish a shift during a ${TIDES[kind].name.toLowerCase()}`, target: 1, reward: reward(3), value: s => flag(s.collections.tides.includes(kind)) })).flat(),
+  ...TIDE_KINDS.filter(kind => TIDES[kind].weight > 0).map(kind => single('tide', { id: `tide-${kind}`, title: TIDES[kind].name, text: `Finish a shift during a ${TIDES[kind].name.toLowerCase()}`, target: 1, reward: reward(3), value: s => flag(s.collections.tides.includes(kind)) })).flat(),
+  ...INGREDIENT_IDS.map(group => single('tide', { id: `season-${group}`, title: INGREDIENTS[group].season, text: `Sell ${SEASON_GOAL} dishes during ${INGREDIENTS[group].season.toLowerCase()}`, target: SEASON_GOAL, reward: reward(3), value: s => s.collections.seasonSold[group] ?? 0 })).flat(),
   ...chain('host', 'served', [100, 500, 2000].map((n, i) => ({ id: `served-${n}`, title: ['Friendly face', 'Reef regular', 'Legend of the reef'][i], text: `Serve ${n.toLocaleString('en-US')} guests in total`, target: n, reward: reward([5, 10, 25][i]), value: (s: RestaurantState) => s.lifetimeServed }))),
   ...single('host', { id: 'perfect-day', title: 'Perfect day', text: `Finish a shift with no missed guests and at least ${PERFECT_DAY_MIN_SERVED} served`, target: 1, reward: reward(10), value: s => flag(s.collections.perfectDays > 0) }),
   ...single('host', { id: 'five-star-day', title: 'Five stars', text: 'Finish a shift with a 5.0 rating', target: 1, reward: reward(15), value: s => flag(s.collections.fiveStarDays > 0) }),

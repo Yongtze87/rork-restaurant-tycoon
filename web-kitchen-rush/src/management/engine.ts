@@ -1,6 +1,6 @@
 import { accessPoints, findPath, inBounds, layoutError, occupied, placementError, seatPoint } from './layout';
 import { localDateKey, dateNumber } from './calendar';
-import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
+import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, INGREDIENT_IDS, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type DishId, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
@@ -24,6 +24,16 @@ export interface AwaySummary { seconds: number; days: number; served: number; ca
 export const OFFLINE_SERVICE_HOURS = 4;
 /** While away the crew works at most this many service days; the rest of the time passes without service (keeps real-day pacing, see docs/BALANCE.md). */
 export const OFFLINE_SERVICE_DAYS = 1;
+/** A dish's price may change on this many shifts a day; each change beyond upsets regulars (−0.05 reputation). */
+export const PRICE_CHANGES_PER_DAY = 2;
+/** Bargains earn bigger tips, steep prices smaller ones. */
+const REACTION_TIP = { bargain: 1.25, fair: 1, pricey: .75 } as const;
+/** Small integer hash for season rolls, separate from the guest random stream. */
+function hash(a: number, b: number): number {
+  let n = (Math.imul(a, 0x9e3779b1) ^ Math.imul(b + 1, 0x85ebca6b)) >>> 0;
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  return (n ^ (n >>> 16)) >>> 0;
+}
 export interface StorageAdapter { getItem(key: string): string | null; setItem(key: string, value: string): void; }
 const resetStaff = (staff: Staff): void => { staff.task = 'idle'; staff.guestId = null; staff.stationId = null; staff.timer = 0; staff.route = []; };
 const seatKey = (g: Pick<Guest, 'tableId' | 'seat'>): string => `${g.tableId}:${g.seat}`;
@@ -252,7 +262,41 @@ export class RestaurantEngine {
     const zone = DISHES[dish].zone;
     if (!hasZone(this.state.town, zone)) return `Reach ${ZONES[zone].place} to cook ${DISHES[dish].name.toLowerCase()}.`;
     if (!enabled && !Object.entries(this.state.menu).some(([key, value]) => key !== dish && value.enabled)) return 'Keep at least one dish on the menu.';
-    this.state.menu[dish] = { enabled, price: Math.max(MIN_PRICE, Math.min(MAX_PRICE, Math.round(price))) }; this.changed(); return null;
+    const next = Math.max(MIN_PRICE, Math.min(MAX_PRICE, Math.round(price)));
+    if (next !== this.state.menu[dish].price && this.state.pricing.auto) { this.state.pricing.auto = false; this.event = 'Auto price is off: you set prices yourself now.'; }
+    this.state.menu[dish] = { enabled, price: next }; this.changed(); return null;
+  }
+  /** Auto price: off-season dishes at the suggested price, in-season ones a little above it. Never the best price, never a bad one. */
+  setAutoPrice(on: boolean): void { this.state.pricing.auto = on; if (on) this.applyAutoPrices(); this.changed(on ? 'Auto price is on.' : 'Auto price is off.'); }
+  private applyAutoPrices(): void {
+    for (const dish of DISH_IDS) {
+      const price = Math.max(MIN_PRICE, Math.min(MAX_PRICE, Math.round(DISHES[dish].fair * (this.inSeason(dish) ? 1.05 : 1))));
+      this.state.menu[dish].price = price; this.state.pricing.last[dish] = price;
+    }
+  }
+  inSeason(dish: DishId): boolean { return this.state.season?.group === DISHES[dish].ingredient; }
+  /** What guests expect to pay today: the suggested price, stretched in season by a hidden amount. */
+  fairPrice(dish: DishId): number { const season = this.state.season; return DISHES[dish].fair * (season && this.inSeason(dish) ? 1 + season.stretch * (DISHES[dish].stretch ?? 1) : 1); }
+  /** How strongly guests lean towards a dish: its appeal, its season and its price against what they expect. */
+  private demand(dish: DishId): number {
+    const fair = this.fairPrice(dish), price = this.state.menu[dish].price;
+    return (DISHES[dish].appeal ?? 1) * (this.inSeason(dish) ? 2 : 1) * Math.max(.5, Math.min(1.6, 1 + (fair - price) / fair * 1.5));
+  }
+  private note(dish: DishId, kind: 'sold' | 'walked'): void {
+    const season = this.state.season; if (!season || !this.inSeason(dish)) return;
+    const notes = season.notes[dish] ?? (season.notes[dish] = { sold: 0, walked: 0 }); notes[kind]++;
+  }
+  /** A new season every two or three real days, for a different ingredient group, with a hidden price stretch. */
+  private startSeason(): void {
+    const s = this.state, index = s.calendar.index, h = hash(s.seed, index), others = INGREDIENT_IDS.filter(g => g !== s.season?.group);
+    s.season = { group: others[h % others.length] ?? INGREDIENT_IDS[0], start: index, length: 2 + hash(h, 1) % 2, stretch: Math.round((.05 + (hash(h, 2) % 1000) / 1000 * .3) * 100) / 100, notes: {} };
+    if (s.pricing.auto) this.applyAutoPrices();
+  }
+  private checkSeason(): void { const s = this.state; if (!s.season || s.calendar.index >= s.season.start + s.season.length) this.startSeason(); }
+  /** Season days left, including today, and a loose hint at the hidden stretch. */
+  seasonInfo(): { daysLeft: number; hint: 'strong' | 'mild' } | null {
+    const season = this.state.season; if (!season) return null;
+    return { daysLeft: Math.max(1, season.start + season.length - this.state.calendar.index), hint: season.stretch >= .2 ? 'strong' : 'mild' };
   }
   expand(): string | null {
     if (this.state.expanded) return 'Your east grotto is already open.';
@@ -335,13 +379,17 @@ export class RestaurantEngine {
     }
     if (!selected) { s.totals.missed++; this.event = 'A guest found no free seat. More tables or faster clearing would help.'; return; }
     const dishes = DISH_IDS.filter(dish => s.menu[dish].enabled && s.furniture.some(f => f.kind === DISHES[dish].station));
-    const dish = dishes[Math.floor(this.random() * dishes.length)]; if (!dish) { s.totals.missed++; this.event = 'A guest found nothing on the menu your kitchen can make.'; return; }
-    const price = s.menu[dish].price;
-    if (this.random() < Math.max(0, (price / DISHES[dish].fair - 1) * .7)) { s.totals.missed++; this.event = 'A guest thought the menu was too expensive.'; return; }
+    if (!dishes.length) { s.totals.missed++; this.event = 'A guest found nothing on the menu your kitchen can make.'; return; }
+    // Guests lean towards popular, in-season and well-priced dishes.
+    const weights = dishes.map(d => this.demand(d)); let pick = this.random() * weights.reduce((sum, w) => sum + w, 0), dish = dishes[dishes.length - 1];
+    for (let i = 0; i < dishes.length; i++) { pick -= weights[i]; if (pick < 0) { dish = dishes[i]; break; } }
+    const price = s.menu[dish].price, fair = this.fairPrice(dish);
+    if (this.random() < Math.max(0, (price / fair - 1) * .7)) { s.totals.missed++; this.note(dish, 'walked'); this.event = `A guest found the ${DISHES[dish].name.toLowerCase()} too pricey.`; return; }
+    const reaction = price <= fair * .9 ? 'bargain' : price > fair * 1.02 ? 'pricey' : 'fair';
     const route = this.route(entrance, accessPoints(selected.table)[selected.seat]); if (!route) return;
     route.push(seatPoint(selected.table, selected.seat));
     const special = isSpecialGuest(s.day, s.nextId);
-    s.guests.push({ id: s.nextId++, special, ...entrance, yaw: Math.PI, route, look: (['coral', 'pearl', 'lagoon', 'dusk'] as const)[Math.floor(this.random() * 4)], tableId: selected.table.id, seat: selected.seat, dish, price, stage: 'arriving', waiting: 0, timer: 0, happy: false, stationId: null, paid: false });
+    s.guests.push({ id: s.nextId++, special, ...entrance, yaw: Math.PI, route, look: (['coral', 'pearl', 'lagoon', 'dusk'] as const)[Math.floor(this.random() * 4)], tableId: selected.table.id, seat: selected.seat, dish, price, reaction, stage: 'arriving', waiting: 0, timer: 0, happy: false, stationId: null, paid: false });
   }
   private leave(guest: Guest, happy: boolean): void {
     const table = this.state.furniture.find(f => f.id === guest.tableId); if (!table) return;
@@ -420,8 +468,9 @@ export class RestaurantEngine {
         guest.stage = 'eating'; guest.timer = 10; guest.happy = true;
         if (!guest.paid) {
           const table = s.furniture.find(f => f.id === guest.tableId);
-          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1) + this.fameBonuses().tips) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips));
-          const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; recordServed(s.collections, guest.dish); guest.paid = true;
+          const tip = Math.max(0, Math.round(guest.price * (.04 + comfort(s) * .001 + tableTipBonus(table?.level ?? 1) + this.fameBonuses().tips) * Math.max(.15, 1 - guest.waiting / 60) * this.tideEffects().tips * REACTION_TIP[guest.reaction]));
+          const earned = guest.price + tip; s.cash += earned; s.totals.revenue += guest.price; s.totals.tips += tip; s.totals.served++; s.lifetimeServed++; recordServed(s.collections, guest.dish);
+          if (this.inSeason(guest.dish)) { this.note(guest.dish, 'sold'); const group = DISHES[guest.dish].ingredient; s.collections.seasonSold[group] = (s.collections.seasonSold[group] ?? 0) + 1; } guest.paid = true;
           this.recordIncome(earned, 'service', guest.id, tip);
           this.event = `${DISHES[guest.dish].name} served. +$${earned}${tip ? ` including $${tip} tip` : ''}`;
           for (const challenge of advanceDailyChallenges(s.dailyChallenges, guest, tip)) {
@@ -509,15 +558,15 @@ export class RestaurantEngine {
   /** Real-day rollover at local midnight: archive the day, roll its tide and a fresh challenge board. A clock set back changes nothing. */
   private rollCalendar(at: number): void {
     const s = this.state, c = s.calendar, key = localDateKey(at);
-    if (c.date === key) return;
-    if (!c.date) { Object.assign(c, { date: key, start: key, index: 1 }); if (s.phase === 'service') this.startChallenges(); return; }
+    if (c.date === key) { if (!s.season) this.checkSeason(); return; }
+    if (!c.date) { Object.assign(c, { date: key, start: key, index: 1 }); this.checkSeason(); if (s.phase === 'service') this.startChallenges(); return; }
     if (dateNumber(key) < dateNumber(c.date)) return;
     if (c.totals.shifts > 0 || s.dailyChallenges.length) {
       const t = c.totals;
       s.days = [...s.days, { revenue: t.revenue, tips: t.tips, ingredients: t.ingredients, served: t.served, missed: t.missed, wages: t.wages, rent: t.rent, debtPayment: t.debtPayment, branch: t.branch, profit: t.profit, shifts: t.shifts, rating: t.shifts ? Math.round(t.ratingSum / t.shifts * 100) / 100 : s.reputation, challenges: s.dailyChallenges.map(ch => ({ ...ch })), day: c.index, date: c.date, tide: s.tide }].slice(-30);
     }
     Object.assign(c, { date: key, index: Math.max(c.index + 1, dateNumber(key) - dateNumber(c.start) + 1), totals: freshDayTotals() });
-    this.rollTide(); s.dailyChallenges = []; if (s.phase === 'service') this.startChallenges();
+    this.rollTide(); this.checkSeason(); s.pricing.changes = {}; s.dailyChallenges = []; if (s.phase === 'service') this.startChallenges();
     this.event = 'A new day: fresh challenges and a new tide.';
   }
   /** Today so far: finished shifts plus the one in progress. */
@@ -619,7 +668,18 @@ export class RestaurantEngine {
     for (const key of ['revenue', 'tips', 'ingredients', 'served', 'missed'] as const) today[key] += s.totals[key];
     Object.assign(today, { wages: today.wages + wages, rent: today.rent + rent, debtPayment: today.debtPayment + debtPayment, branch: today.branch + branch, profit: today.profit + shiftProfit, shifts: today.shifts + 1, ratingSum: today.ratingSum + rating });
     s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips + branch - s.totals.ingredients - wages - rent - debtPayment, rating, tide: s.tide, branch }); s.history = s.history.slice(-20);
+    // Regulars notice a price that keeps moving: more than PRICE_CHANGES_PER_DAY changes a day cost reputation.
+    const upset: string[] = [];
+    for (const dish of DISH_IDS) {
+      const price = s.menu[dish].price, last = s.pricing.last[dish];
+      if (last !== undefined && last !== price && s.menu[dish].enabled) {
+        const n = (s.pricing.changes[dish] ?? 0) + 1; s.pricing.changes[dish] = n;
+        if (n > PRICE_CHANGES_PER_DAY) { s.reputation = Math.max(1, Math.round((s.reputation - .05) * 100) / 100); upset.push(DISHES[dish].name.toLowerCase()); }
+      }
+      s.pricing.last[dish] = price;
+    }
     this.beginNextDay();
+    if (upset.length) this.event = `Regulars grumble about the changing price of the ${upset.join(' and ')}.`;
     if (covered) this.event = 'The bank covered the payroll. The shortfall is repaid $30 a shift.';
     this.changed();
   }

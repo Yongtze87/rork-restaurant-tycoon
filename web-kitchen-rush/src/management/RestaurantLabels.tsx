@@ -21,7 +21,7 @@ export function RestaurantLabels({ state, labels, receipts = [], paused = false,
         className="pointer-events-none invisible absolute left-0 top-0 z-[2] flex w-max flex-col items-center">
         <span aria-hidden="true" data-label-line className="pointer-events-none absolute left-1/2 top-1/2 -z-10 w-px origin-top bg-teal/60" />
         {receipt && <GuestPayment key={receipt.id} receipt={receipt} age={state.clock - receipt.clock} paused={paused} speed={speed} />}
-        <GuestSatisfactionBar special={guest.special} id={guest.id} value={value} mood={guestMood(value, guest.stage, guest.happy)} stage={guest.stage} />
+        <GuestSatisfactionBar special={guest.special} reaction={guest.reaction} id={guest.id} value={value} mood={guestMood(value, guest.stage, guest.happy)} stage={guest.stage} />
       </div>;
     })}
     {state.staff.filter(member => member.task === 'cooking').map(member => {

@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { Armchair, ArrowUpRight, ChefHat, Check, Coins, Flame, Flower2, Lamp, Leaf, LockKeyhole, Minus, Plus, Sprout, Star, Trash2, TrendingUp, UserPlus, UtensilsCrossed } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { GOALS, restaurant } from './engine';
-import { DISHES, DISH_IDS, MAX_PRICE, MIN_PRICE, staffWage, type DishId, type FurnitureKind, type RestaurantState } from './types';
+import { GOALS, PRICE_CHANGES_PER_DAY, restaurant } from './engine';
+import { DISHES, DISH_IDS, INGREDIENTS, MAX_PRICE, MIN_PRICE, staffWage, type DishId, type FurnitureKind, type RestaurantState } from './types';
 import { ZONES, hasZone } from './zones';
 import { DailyChallenges } from './DailyChallenges';
 import { money, moneyCents } from './format';
@@ -12,6 +12,7 @@ import { CollectionPanel } from './CollectionPanel';
 import { Info, Stat } from './GameWindow';
 import { guardSpend } from './spend-guard';
 import { dayNames } from './calendar';
+import { SeasonIcon } from './TideCard';
 
 const furnitureIcons = { table: Armchair, prep: ChefHat, grill: Flame, plant: Flower2, divider: Sprout, lamp: Lamp };
 export type Panel = 'build' | 'team' | 'menu' | 'ledger' | 'town';
@@ -57,19 +58,28 @@ export function TeamPanel({ state, action }: { state: RestaurantState; action: A
 /** The menu: what is offered and at what price. New prices apply to the next guests who order. */
 export function MenuPanel({ state, action }: { state: RestaurantState; action: Action }) {
   const unlocked = DISH_IDS.filter(dish => hasZone(state.town, DISHES[dish].zone)), locked = DISH_IDS.filter(dish => !unlocked.includes(dish));
+  const season = state.season, info = restaurant.seasonInfo();
   return <>
-    <div className="mb-2 flex items-center justify-between"><p className="text-xs text-ink/60">Prices apply to the next guests.</p><Info>Stay near the suggested price: above it, some guests walk away. A dish is only ordered when you have its station (kelp counter or vent grill). Deeper zones unlock new dishes.</Info></div>
+    {season && info && <div data-testid="season-banner" className="mb-2 flex items-center gap-2.5 rounded-xl border border-gold/40 bg-gold/10 p-2.5"><SeasonIcon group={season.group} size={20} className="shrink-0 text-gold" /><div className="min-w-0 flex-1 leading-tight"><p className="font-display text-base">{INGREDIENTS[season.group].season} · {info.daysLeft === 1 ? 'last day' : `${info.daysLeft} days left`}</p><p className="text-[11px] text-ink/65">{INGREDIENTS[season.group].name} dishes are in demand and guests may pay more. Demand looks {info.hint}.</p></div></div>}
+    <div className="mb-2 flex items-center gap-2 rounded-xl bg-ink/[.06] px-2.5 py-1.5"><div className="min-w-0 flex-1 leading-tight"><p className="text-sm font-extrabold">Auto price</p><p className="text-[11px] text-ink/60">{state.pricing.auto ? 'Sensible prices, set each season' : 'You set every price'}</p></div>
+      <Info>Above what guests expect, some walk away; below it, more of them order it and they tip more. In season guests accept a higher price, but how much is a secret that changes every season: watch how many walk away. Changing a dish’s price on more than {PRICE_CHANGES_PER_DAY} shifts a day upsets regulars and costs reputation. Auto price plays it safe; you can beat it.</Info>
+      <Switch aria-label="Auto price" checked={state.pricing.auto} onCheckedChange={on => restaurant.setAutoPrice(on)} /></div>
     <ul className="space-y-2">{unlocked.map(dish => {
       const recipe = DISHES[dish], item = state.menu[dish], cost = restaurant.dishCost(dish), station = state.furniture.some(f => f.kind === recipe.station);
-      return <li key={dish} className={cn('rounded-xl border border-ink/10 p-2.5', recipe.station === 'prep' ? 'bg-teal/[.07]' : 'bg-tomato/[.08]')}>
-        <div className="flex items-center gap-2.5"><DishIcon dish={dish} /><div className="min-w-0 flex-1"><h3 className="truncate font-display text-base leading-tight">{recipe.name}</h3><p className="truncate text-[11px] text-ink/55">{recipe.seconds}s · {stationName[recipe.station]}{!station ? ' · no station yet' : ''}</p></div>
+      const inSeason = restaurant.inSeason(dish), notes = inSeason ? season?.notes[dish] : undefined, changes = state.pricing.changes[dish] ?? 0;
+      return <li key={dish} className={cn('rounded-xl border p-2.5', inSeason ? 'border-gold/50' : 'border-ink/10', recipe.station === 'prep' ? 'bg-teal/[.07]' : 'bg-tomato/[.08]')}>
+        <div className="flex items-center gap-2.5"><DishIcon dish={dish} /><div className="min-w-0 flex-1"><h3 className="flex items-center gap-1.5 truncate font-display text-base leading-tight">{recipe.name}{inSeason && <span className="shrink-0 rounded-full bg-gold/25 px-1.5 font-body text-[10px] font-extrabold text-gold">In season</span>}</h3><p className="truncate text-[11px] text-ink/55">{recipe.seconds}s · {stationName[recipe.station]}{!station ? ' · no station yet' : ''}</p></div>
           <Switch aria-label={`Offer ${recipe.name}`} checked={item.enabled} onCheckedChange={checked => action(restaurant.setDish(dish, checked, item.price))} /></div>
         <div className="mt-2 flex items-center gap-2">
           <SmallButton label={`Lower ${recipe.name} price`} disabled={item.price <= MIN_PRICE} onClick={() => action(restaurant.setDish(dish, item.enabled, item.price - 2))}><Minus size={14} /></SmallButton>
           <p className="w-14 text-center font-display text-lg tabular-nums">{money(item.price)}</p>
           <SmallButton label={`Raise ${recipe.name} price`} disabled={item.price >= MAX_PRICE} onClick={() => action(restaurant.setDish(dish, item.enabled, item.price + 2))}><Plus size={14} /></SmallButton>
-          <div className="ml-auto text-right text-[11px] leading-tight"><p className="font-extrabold text-teal">+{moneyCents(item.price - cost)} each</p><p className={item.price > recipe.fair ? 'font-bold text-gold' : 'text-ink/50'}>{item.price > recipe.fair ? 'Above suggested' : `Suggested ${money(recipe.fair)}`}</p></div>
+          <div className="ml-auto text-right text-[11px] leading-tight"><p className="font-extrabold text-teal">+{moneyCents(item.price - cost)} each</p><p className="text-ink/50">{inSeason ? `Usually ${money(recipe.fair)}` : `Suggested ${money(recipe.fair)}`}</p></div>
         </div>
+        {(notes || changes > 0) && <p data-testid={`price-notes-${dish}`} className="mt-1.5 flex flex-wrap justify-between gap-x-2 text-[10px] font-bold">
+          {notes ? <span className="text-ink/65">This season: {notes.sold} sold{notes.walked ? <span className="text-danger"> · {notes.walked} walked away over the price</span> : ''}</span> : <span />}
+          {changes > 0 && <span className={changes > PRICE_CHANGES_PER_DAY ? 'text-danger' : changes === PRICE_CHANGES_PER_DAY ? 'text-gold' : 'text-ink/55'}>{changes > PRICE_CHANGES_PER_DAY ? 'Regulars are upset' : `Price changed ${changes}/${PRICE_CHANGES_PER_DAY} today`}</span>}
+        </p>}
       </li>;
     })}</ul>
     {locked.length > 0 && <section aria-label="Locked dishes" className="mt-4"><h3 className="mb-2 font-display text-base">Deeper dishes</h3><ul className="grid grid-cols-2 gap-2">{locked.map(dish => {

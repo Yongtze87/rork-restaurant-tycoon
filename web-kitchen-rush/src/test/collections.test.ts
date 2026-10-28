@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { ACHIEVEMENTS, FAMILY_IDS, FIVE_STAR_RATING, PERFECT_DAY_MIN_SERVED, achievement, claimableAchievements, isClaimable, recordDay, visibleSteps } from '@/management/collections';
 import { BUILDABLE, TOWN_SIZE } from '@/management/town';
-import { TIDE_KINDS } from '@/management/tides';
-import { DISH_IDS, SAVE_KEY, createRestaurant, freshCollections, restaurantSchema, type Report } from '@/management/types';
+import { TIDE_KINDS, TIDES } from '@/management/tides';
+import { DISH_IDS, SAVE_KEY, createRestaurant, freshCollections, restaurantSchema, type Report, INGREDIENT_IDS } from '@/management/types';
 
 // These tests compare long offline replays with live play, so the crew may work more than one day while away.
 beforeEach(() => { RestaurantEngine.offlineDays = Infinity; });
@@ -26,7 +26,8 @@ describe('achievement definitions', () => {
     expect(ACHIEVEMENTS.every(a => a.reward.pearls > 0 && a.target > 0)).toBe(true);
     for (const dish of DISH_IDS) expect(ACHIEVEMENTS.filter(a => a.chain === `dish-${dish}`).map(a => a.target)).toEqual([10, 50, 200]);
     for (const kind of BUILDABLE) expect(achievement(`own-${kind}`)).toBeDefined();
-    for (const tide of TIDE_KINDS) expect(achievement(`tide-${tide}`)).toBeDefined();
+    for (const tide of TIDE_KINDS) if (TIDES[tide].weight > 0) expect(achievement(`tide-${tide}`)).toBeDefined();
+    for (const group of INGREDIENT_IDS) expect(achievement(`season-${group}`)).toBeDefined();
     expect(['zone-reef', 'zone-twilight', 'zone-abyss'].every(id => achievement(id))).toBe(true);
     expect(FAMILY_IDS.every(f => ACHIEVEMENTS.some(a => a.family === f))).toBe(true);
   });

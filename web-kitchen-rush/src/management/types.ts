@@ -18,17 +18,23 @@ export type DishId = z.infer<typeof dishId>;
 export type Dish = DishId;
 export const MIN_PRICE = 10, MAX_PRICE = 120;
 const priceSchema = z.number().int().min(MIN_PRICE).max(MAX_PRICE);
-export interface DishInfo { name: string; /** For "Sell 5 …" objectives. */ plural: string; cost: number; fair: number; seconds: number; station: 'prep' | 'grill'; ingredient: 'kelp' | 'fish'; zone: ZoneId; description: string; }
+/** Ingredient groups. Each has a season; a new group here brings its own season, and a dish joins it through `ingredient`. */
+export const INGREDIENTS = { kelp: { name: 'Kelp', season: 'Kelp season' }, fish: { name: 'Fish', season: 'Shoal season' } } as const;
+export const INGREDIENT_IDS = Object.keys(INGREDIENTS) as (keyof typeof INGREDIENTS)[];
+export type IngredientId = keyof typeof INGREDIENTS;
+export interface DishInfo { name: string; /** For "Sell 5 …" objectives. */ plural: string; cost: number; fair: number; seconds: number; station: 'prep' | 'grill'; ingredient: IngredientId; zone: ZoneId; description: string;
+  /** How often guests pick it, relative to other dishes (default 1). */ appeal?: number;
+  /** How far its in-season price can stretch, relative to the season's hidden range (default 1). */ stretch?: number; }
 /** The whole menu. Deeper dishes cost more, take longer and earn more per guest. */
 export const DISHES: Record<DishId, DishInfo> = {
-  salad: { name: 'Kelp salad', plural: 'kelp salads', cost: 7, fair: 24, seconds: 6, station: 'prep', ingredient: 'kelp', zone: 'shallows', description: 'Crisp ribbon kelp, sea grapes and a squeeze of brine-lime.' },
+  salad: { name: 'Kelp salad', plural: 'kelp salads', cost: 7, fair: 24, seconds: 6, station: 'prep', ingredient: 'kelp', zone: 'shallows', stretch: .8, description: 'Crisp ribbon kelp, sea grapes and a squeeze of brine-lime.' },
   burger: { name: 'Vent-seared fish cake', plural: 'vent-seared fish cakes', cost: 12, fair: 38, seconds: 10, station: 'grill', ingredient: 'fish', zone: 'shallows', description: 'Seared over a warm sea vent, golden outside, tender inside.' },
   sushi: { name: 'Sea-grape sushi', plural: 'plates of sea-grape sushi', cost: 14, fair: 44, seconds: 8, station: 'prep', ingredient: 'fish', zone: 'reef', description: 'Reef fish over pressed rice, crowned with popping sea grapes.' },
-  lobster: { name: 'Grilled reef lobster', plural: 'grilled reef lobsters', cost: 20, fair: 58, seconds: 12, station: 'grill', ingredient: 'fish', zone: 'reef', description: 'Split, buttered and charred over the vent. A coral-red treat.' },
+  lobster: { name: 'Grilled reef lobster', plural: 'grilled reef lobsters', cost: 20, fair: 58, seconds: 12, station: 'grill', ingredient: 'fish', zone: 'reef', appeal: .8, stretch: 1.3, description: 'Split, buttered and charred over the vent. A coral-red treat.' },
   jellySalad: { name: 'Moon-jelly salad', plural: 'moon-jelly salads', cost: 18, fair: 56, seconds: 10, station: 'prep', ingredient: 'kelp', zone: 'twilight', description: 'Cool ribbons of moon jelly on twilight kelp. It glows a little.' },
   squidSkewers: { name: 'Glow-squid skewers', plural: 'glow-squid skewers', cost: 26, fair: 72, seconds: 14, station: 'grill', ingredient: 'fish', zone: 'twilight', description: 'Tender glow squid, seared on coral skewers with deep-sea pepper.' },
   pearlDumplings: { name: 'Vent pearl dumplings', plural: 'vent pearl dumplings', cost: 28, fair: 84, seconds: 13, station: 'prep', ingredient: 'kelp', zone: 'abyss', description: 'Silky kelp dough folded around warm vent pearls. Rare and soft.' },
-  inkNoodles: { name: 'Abyssal ink noodles', plural: 'bowls of abyssal ink noodles', cost: 36, fair: 100, seconds: 17, station: 'grill', ingredient: 'fish', zone: 'abyss', description: 'Midnight-black noodles tossed with fish from the deepest vents.' },
+  inkNoodles: { name: 'Abyssal ink noodles', plural: 'bowls of abyssal ink noodles', cost: 36, fair: 100, seconds: 17, station: 'grill', ingredient: 'fish', zone: 'abyss', appeal: .8, stretch: 1.3, description: 'Midnight-black noodles tossed with fish from the deepest vents.' },
 };
 /** A piece being placed: new purchases always start at level 1 and moves keep the placed level. */
 export type Placement = Omit<Furniture, 'level'> & { level?: number };
@@ -37,7 +43,7 @@ export type Role = z.infer<typeof roleSchema>;
 const agentSchema = pointSchema.extend({ yaw: z.number().finite(), route: z.array(pointSchema).max(200) });
 const staffSchema = agentSchema.extend({ id: z.number().int(), name: z.string().max(30), role: roleSchema, level: z.number().int().min(1).max(3), task: z.enum(['idle', 'toKitchen', 'cooking', 'collect', 'deliver', 'clean']), guestId: z.number().int().nullable(), stationId: z.number().int().nullable(), timer: z.number().finite().nonnegative() });
 export type Staff = Validated<z.infer<typeof staffSchema>>;
-const guestSchema = agentSchema.extend({ id: z.number().int(), look: z.enum(['coral', 'pearl', 'lagoon', 'dusk']), tableId: z.number().int(), seat: z.number().int().min(0).max(1), dish: dishId, price: z.number().min(MIN_PRICE).max(MAX_PRICE), stage: z.enum(['arriving', 'waiting', 'cooking', 'ready', 'delivering', 'eating', 'leaving']), waiting: z.number().nonnegative(), timer: z.number().nonnegative(), happy: z.boolean(), stationId: z.number().int().nullable(), paid: z.boolean(), special: z.boolean().default(false) });
+const guestSchema = agentSchema.extend({ /** How the price felt against what the guest expected (shown on their meter, changes the tip). */ reaction: z.enum(['bargain', 'fair', 'pricey']).default('fair'), id: z.number().int(), look: z.enum(['coral', 'pearl', 'lagoon', 'dusk']), tableId: z.number().int(), seat: z.number().int().min(0).max(1), dish: dishId, price: z.number().min(MIN_PRICE).max(MAX_PRICE), stage: z.enum(['arriving', 'waiting', 'cooking', 'ready', 'delivering', 'eating', 'leaving']), waiting: z.number().nonnegative(), timer: z.number().nonnegative(), happy: z.boolean(), stationId: z.number().int().nullable(), paid: z.boolean(), special: z.boolean().default(false) });
 export type Guest = Validated<z.infer<typeof guestSchema>>;
 const totalsSchema = z.object({ revenue: z.number().nonnegative(), ingredients: z.number().nonnegative(), served: z.number().int().nonnegative(), missed: z.number().int().nonnegative(), tips: z.number().nonnegative() });
 export type Totals = Validated<z.infer<typeof totalsSchema>>;
@@ -62,6 +68,12 @@ export type DayRecord = Validated<z.infer<typeof dayRecordSchema>>;
 const dayTotalsSchema = totalsSchema.extend({ wages: z.number().nonnegative(), rent: z.number().nonnegative(), debtPayment: z.number().nonnegative(), branch: z.number().nonnegative(), profit: z.number().finite(), shifts: z.number().int().nonnegative(), ratingSum: z.number().nonnegative() });
 export type DayTotals = Validated<z.infer<typeof dayTotalsSchema>>;
 export const freshDayTotals = (): DayTotals => ({ ...freshTotals(), wages: 0, rent: 0, debtPayment: 0, branch: 0, profit: 0, shifts: 0, ratingSum: 0 });
+const seasonNotes = z.object({ sold: z.number().int().nonnegative(), walked: z.number().int().nonnegative() });
+const seasonSchema = z.object({ group: z.enum(INGREDIENT_IDS as [IngredientId, ...IngredientId[]]), start: z.number().int().positive(), length: z.number().int().min(1).max(7), stretch: z.number().min(0).max(1),
+  /** Per dish this season: plates sold and guests who walked away over the price. */ notes: z.record(z.string(), seasonNotes).default({}) });
+export type Season = Validated<z.infer<typeof seasonSchema>>;
+const pricingSchema = z.object({ auto: z.boolean(), last: z.record(z.string(), z.number()), changes: z.record(z.string(), z.number().int().nonnegative()) });
+export const newPricing = () => ({ auto: false, last: {} as Record<string, number>, changes: {} as Record<string, number> });
 /** The real calendar: today's date, the date the restaurant started, which calendar day this is, and today's running totals. */
 const calendarSchema = z.object({ date: z.string().max(10), start: z.string().max(10), index: z.number().int().positive(), totals: dayTotalsSchema });
 export const newCalendar = () => ({ date: '', start: '', index: 1, totals: freshDayTotals() });
@@ -71,11 +83,13 @@ const menuSchema = z.object(Object.fromEntries(DISH_IDS.map(dish => [dish, menuI
 export type Menu = Validated<z.infer<typeof menuSchema>>;
 const counter = z.number().int().nonnegative().default(0);
 const unique = (list: unknown[]): boolean => new Set(list).size === list.length;
-export const freshCollections = () => ({ served: Object.fromEntries(DISH_IDS.map(dish => [dish, 0])) as Record<DishId, number>, tides: [] as TideKind[], perfectDays: 0, fiveStarDays: 0, bestFurniture: 1, claimed: [] as string[] });
+export const freshCollections = () => ({ seasonSold: {} as Record<string, number>, served: Object.fromEntries(DISH_IDS.map(dish => [dish, 0])) as Record<DishId, number>, tides: [] as TideKind[], perfectDays: 0, fiveStarDays: 0, bestFurniture: 1, claimed: [] as string[] });
 /** Long-term achievement progress. Counters only move when the real event happens (see `collections.ts`). */
 const collectionsSchema = z.object({
   served: z.object(Object.fromEntries(DISH_IDS.map(dish => [dish, counter])) as { [K in DishId]: typeof counter }).default(() => freshCollections().served),
   tides: z.array(tideKind).max(tideKind.options.length).default([]).refine(unique, 'Duplicate tides'),
+  /** Dishes sold in their own season, per ingredient group. */
+  seasonSold: z.record(z.string(), counter).default({}),
   perfectDays: counter, fiveStarDays: counter, bestFurniture: z.number().int().min(1).max(MAX_LEVEL).default(1),
   claimed: z.array(z.string().max(40)).max(200).default([]).refine(unique, 'Duplicate achievements'),
 });
@@ -101,6 +115,10 @@ export const restaurantSchema = z.preprocess(migrateTutorial, z.object({
   calendar: calendarSchema.default(newCalendar),
   /** The last 30 real days, newest last. `history` keeps the last 20 work shifts. */
   days: z.array(dayRecordSchema).max(30).default([]),
+  /** The current dish season. `stretch` is hidden from the player: how much more guests will pay for in-season dishes. */
+  season: seasonSchema.nullable().default(null),
+  /** Auto price, and how often each price changed today (more than twice upsets regulars). */
+  pricing: pricingSchema.default(newPricing),
 }));
 export type RestaurantState = Validated<z.infer<typeof restaurantSchema>>;
 export type CatalogItem = { name: string; description: string; price: number; size: number; category: 'Dining' | 'Kitchen' | 'Atmosphere'; comfort: number };
@@ -161,6 +179,6 @@ export function createRestaurant(): RestaurantState {
     ], guests: [], dirty: [], menu: createMenu(),
     lastActiveAt: 0, isPaused: false, renovation: false, dailyChallenges: [], lifetimeChallengeBonus: 0, tide: rollTide(91273, 1),
     phase: 'planning', elapsed: 0, nextArrival: 1, clock: 0, nextId: 20, seed: 91273, totals: freshTotals(), history: [], lifetimeServed: 0, claimed: [], music: false, welcomed: false, town: createTown(), tutorial: newTutorial(),
-    collections: freshCollections(), ingredientCarry: 0, ocean: createOcean(), calendar: newCalendar(), days: [],
+    collections: freshCollections(), ingredientCarry: 0, ocean: createOcean(), calendar: newCalendar(), days: [], season: null, pricing: newPricing(),
   };
 }

@@ -1,4 +1,5 @@
-import { CloudFog, Fish, Sprout, UtensilsCrossed, Waves, Wind, type LucideProps } from 'lucide-react';
+import { CloudFog, Fish, Leaf, Sparkles, Sprout, UtensilsCrossed, Waves, Wind, type LucideProps } from 'lucide-react';
+import type { IngredientId } from './types';
 import { TIDES, tideEffectText, type TideKind } from './tides';
 
 const icons: Record<TideKind, typeof Waves> = { calm: Waves, feast: UtensilsCrossed, current: Wind, whale: Fish, plankton: Sprout, shoal: Fish, murky: CloudFog };
@@ -12,3 +13,7 @@ export function TideCard({ tide, day }: { tide: TideKind; day?: number }) {
     <span className="min-w-0 flex-1 text-[11px] leading-tight"><strong className="block">{info.name} <span className="font-semibold text-ink/60">· today’s tide</span></strong><span className="text-ink/60">{effect}</span></span>
   </div>;
 }
+
+const seasonIcons: Record<string, typeof Waves> = { kelp: Leaf, fish: Fish };
+/** The icon of an ingredient group's season; new groups fall back to a sparkle. */
+export function SeasonIcon({ group, ...props }: { group: IngredientId } & LucideProps) { const Icon = seasonIcons[group] ?? Sparkles; return <Icon aria-hidden="true" {...props} />; }

@@ -336,3 +336,10 @@ while away):
 | cautious | 5 | 18 | 40 |
 
 The simulator's rows and "svc day" columns still count shifts.
+
+## Seasons replace the cost tides
+
+Plankton bloom and Shoal run no longer roll; kelp and fish have seasons instead (2–3 days, hidden price stretch
++5–35%, ×2 demand). The simulated owner keeps suggested prices, so this measures the floor, not a player who prices
+well: balanced Coral Reef real day 2, Twilight 12, Abyss 28; builder 3 / 17 / 30; cautious 5 / 17 / 38. A player
+who finds a good in-season price earns somewhat more than this.

@@ -12,13 +12,14 @@ export interface TideInfo { name: string; description: string; weight: number; e
 
 const NEUTRAL: TideEffects = { arrival: 1, crewSpeed: 1, tips: 1, kelpCost: 1, fishCost: 1, patience: 1 };
 const tide = (name: string, description: string, weight: number, effects: Partial<TideEffects>): TideInfo => ({ name, description, weight, effects: { ...NEUTRAL, ...effects } });
+/** Plankton bloom and Shoal run (weight 0) no longer roll: kelp and fish now have seasons instead. They stay readable on old receipts. */
 export const TIDES: Record<TideKind, TideInfo> = {
-  calm: tide('Calm waters', 'A quiet, ordinary evening on the reef.', 40, {}),
-  feast: tide('Feast tide', 'The whole reef is hungry tonight.', 12, { arrival: 1.25 }),
+  calm: tide('Calm waters', 'A quiet, ordinary day on the reef.', 40, {}),
+  feast: tide('Feast tide', 'The whole reef is hungry today.', 12, { arrival: 1.25 }),
   current: tide('Strong current', 'Crew fight the current, and grateful guests tip more.', 10, { crewSpeed: .9, tips: 1.1 }),
   whale: tide('Whale passing', 'Tourists follow a passing whale to your door.', 10, { arrival: 1.15, tips: 1.15 }),
-  plankton: tide('Plankton bloom', 'Kelp grows thick in the bloom.', 10, { kelpCost: .7 }),
-  shoal: tide('Shoal run', 'A big shoal swims through. Fish are plentiful.', 10, { fishCost: .7 }),
+  plankton: tide('Plankton bloom', 'Kelp grows thick in the bloom.', 0, { kelpCost: .7 }),
+  shoal: tide('Shoal run', 'A big shoal swims through. Fish are plentiful.', 0, { fishCost: .7 }),
   murky: tide('Murky water', 'Cloudy water makes guests a little restless.', 8, { patience: .9 }),
 };
 export const TIDE_KINDS = tideKind.options;

@@ -16,7 +16,7 @@ beforeEach(async () => { localStorage.removeItem('vast-ocean-updates-open'); res
 
 it.each([320, 1280])('shows today’s tide next to the daily challenges at %spx', async size => {
   await page.viewport(size, 800); const screen = await render(<ManagementGame />);
-  await expect.element(screen.getByRole('button', { name: /Show today/ })).toHaveTextContent(TIDES[restaurant.state.tide].name);
+  await expect.element(screen.getByRole('button', { name: new RegExp(`Show today.*${TIDES[restaurant.state.tide].name}`) })).toBeVisible();
   await screen.getByRole('button', { name: /Show today/ }).click();
   const card = screen.getByTestId('tide-card');
   await expect.element(card).toHaveTextContent(TIDES[restaurant.state.tide].name);
