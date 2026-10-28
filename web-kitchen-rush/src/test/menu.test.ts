@@ -3,7 +3,8 @@ import { RestaurantEngine } from '@/management/engine';
 import { advanceDailyChallenges, challengeObjective, challengeTitle, createDailyChallenges } from '@/management/daily-challenges';
 import { DISHES, DISH_IDS, MAX_PRICE, MIN_PRICE, createRestaurant, restaurantSchema, type DishId } from '@/management/types';
 import { ZONE_IDS } from '@/management/zones';
-import { plotAt, townEffects, createTown } from '@/management/town';
+import { townEffects, createTown } from '@/management/town';
+import { put } from './town-helpers';
 
 function storage(raw = '') { return { getItem: () => raw || null, setItem: (_key: string, value: string) => { raw = value; }, read: () => JSON.parse(raw) }; }
 const reach = (e: RestaurantEngine, ...zones: ('reef' | 'twilight' | 'abyss')[]) => { e.state.town.zones.push(...zones); };
@@ -123,10 +124,10 @@ describe('older saves and challenges', () => {
 describe('ingredient town effects', () => {
   it('kelp farms cheapen kelp dishes and fisheries cheapen fish dishes, whatever the zone', () => {
     const e = new RestaurantEngine(), c = 4;
-    Object.assign(plotAt(e.state.town, c + 1, c)!, { owned: true, building: 'kelpFarm', level: 10 }); // 10 × 6% × 1.5 → capped 60%
+    put(e.state.town, 'kelpFarm', c + 1, c, 10); // 10 × 6% × 1.5 → capped 60%
     expect(e.townEffects()).toMatchObject({ kelpCost: .4, fishCost: 1 });
     for (const dish of DISH_IDS) expect(e.dishCost(dish)).toBe(DISHES[dish].ingredient === 'kelp' ? Math.max(1, Math.round(DISHES[dish].cost * .4 * 100) / 100) : DISHES[dish].cost);
-    Object.assign(plotAt(e.state.town, c - 1, c)!, { owned: true, building: 'fishery', level: 5 });
+    put(e.state.town, 'fishery', c - 1, c, 5, { x: (c - 1) * 4 + 1 }); // across the street from the restaurant
     expect(e.townEffects().fishCost).toBeCloseTo(.55); // 5 × 6% × 1.5
     expect(e.dishCost('lobster')).toBeCloseTo(20 * .55); expect(e.dishCost('sushi')).toBeCloseTo(14 * .55); expect(e.dishCost('jellySalad')).toBeCloseTo(18 * .4);
   });
@@ -134,7 +135,7 @@ describe('ingredient town effects', () => {
     const e = new RestaurantEngine();
     e.state.tide = 'plankton'; expect(e.dishCost('jellySalad')).toBeLessThan(18); expect(e.dishCost('pearlDumplings')).toBeLessThan(28); expect(e.dishCost('sushi')).toBe(14);
     e.state.tide = 'shoal'; expect(e.dishCost('sushi')).toBeLessThan(14); expect(e.dishCost('inkNoodles')).toBeLessThan(36); expect(e.dishCost('jellySalad')).toBe(18);
-    const shoal = e.dishCost('lobster'); Object.assign(plotAt(e.state.town, 5, 4)!, { owned: true, building: 'fishery', level: 5 }); expect(e.dishCost('lobster')).toBeLessThan(shoal);
+    const shoal = e.dishCost('lobster'); put(e.state.town, 'fishery', 5, 4, 5); expect(e.dishCost('lobster')).toBeLessThan(shoal);
   });
   it('is neutral for a new town', () => { expect(townEffects(createTown())).toEqual({ kelpCost: 1, fishCost: 1, extraCrew: 0, arrivalBonus: 0, crewSpeed: 1 }); });
 });

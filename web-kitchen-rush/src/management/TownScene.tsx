@@ -2,18 +2,23 @@ import { useEffect, useRef } from 'react';
 import { useReducedMotionQuery } from '@/hooks/use-reduced-motion';
 import { restaurant } from './engine';
 import { SceneBoundary } from './RestaurantScene';
-import { TOWN_SIZE, plotAt } from './town';
+import { PARCEL, TOWN_SIZE, plotOfTile, type Spot } from './town';
 import { claimableRegions, regionAt, regionStatus, worldBounds } from './ocean';
 import { REGION_PITCH, cellOf, regionId } from './world';
 import { sceneNight } from './light';
 import { createAmbience, stepAmbience } from './iso/ambience';
 import { fitView, toGrid, toScreen, type View } from './iso/projection';
-import { renderTown, type RegionLabel } from './iso/town-render';
+import { renderTown, type BuildingBox, type RegionLabel } from './iso/town-render';
 import { usePanTap, type PanLimits } from './iso/use-pan-tap';
 
 interface TownSceneProps {
+  /** The tapped tile, in tile coordinates. */
   selected: { x: number; z: number } | null; selectedRegion?: string | null; zoom: number; viewKey?: number;
-  onPlot: (plot: { x: number; z: number }) => void; onRegion?: (id: string) => void;
+  /** A building being placed or moved (`id` when moving), and whether it fits. */
+  draft?: { spot: Spot; ok: boolean; id?: number } | null;
+  roadMode?: boolean;
+  /** A tile was tapped; `building` is set when the tap hit a building's art. */
+  onTile: (tile: { x: number; z: number }, building?: number) => void; onRegion?: (id: string) => void;
   /** The region under the middle of the screen, whenever it changes. */
   onLook?: (id: string) => void;
   /** Centre the camera on a world plot whenever `n` changes (e.g. a region picked in the panel). */
@@ -23,7 +28,7 @@ interface TownSceneProps {
 /** The whole world in one scene: the home town, claimed regions, claimable regions and fog. Drawing reads the engine; taps select a plot or a region. */
 export default function TownScene(props: TownSceneProps) {
   const { zoom, viewKey = 0 } = props;
-  const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), view = useRef<View | null>(null), labels = useRef<RegionLabel[]>([]), looking = useRef('');
+  const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), view = useRef<View | null>(null), labels = useRef<RegionLabel[]>([]), boxes = useRef<BuildingBox[]>([]), looking = useRef('');
   const size = useRef({ w: 0, h: 0 }), focused = useRef(0), lastScale = useRef(0);
   const latest = useRef(props); latest.current = props;
   const reduced = useReducedMotionQuery();
@@ -39,8 +44,13 @@ export default function TownScene(props: TownSceneProps) {
     const v = view.current; if (!v) return;
     const label = labels.current.find(l => p.x >= l.left && p.x <= l.right && p.y >= l.top && p.y <= l.bottom);
     if (label) { latest.current.onRegion?.(label.id); return; }
-    const g = toGrid(v, p.x, p.y), x = Math.round(g.x), z = Math.round(g.z);
-    if (plotAt(restaurant.state.town, x, z)) { latest.current.onPlot({ x, z }); return; }
+    const { draft, roadMode } = latest.current, g = toGrid(v, p.x, p.y), tx = Math.floor((g.x + .5) * PARCEL), tz = Math.floor((g.z + .5) * PARCEL);
+    // A tap on a building's roof picks the building, unless a building or road is being placed.
+    const hit = draft || roadMode ? undefined : boxes.current.filter(b => p.x >= b.left && p.x <= b.right && p.y >= b.top && p.y <= b.bottom).sort((a, b) => b.depth - a.depth)[0];
+    const building = hit && restaurant.state.town.buildings.find(b => b.id === hit.id);
+    if (building) { latest.current.onTile({ x: building.x, z: building.z }, building.id); return; }
+    if (plotOfTile(restaurant.state.town, tx, tz)) { latest.current.onTile({ x: tx, z: tz }); return; }
+    const x = Math.round(g.x), z = Math.round(g.z);
     const c = cellOf(x, z), id = regionId(c.x, c.y), status = regionStatus(restaurant.state.ocean, id);
     if (status === 'claimable' || status === 'claimed') latest.current.onRegion?.(id);
   }, limits);
@@ -72,18 +82,19 @@ export default function TownScene(props: TownSceneProps) {
       if (look !== looking.current) { looking.current = look; latest.current.onLook?.(look); }
       const state = restaurant.state, lookStatus = regionStatus(state.ocean, look);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      labels.current = renderTown(ctx, {
+      const drawn = renderTown(ctx, {
         town: state.town, ocean: state.ocean, cash: state.cash, view: v, width: w, height: h, windowTop: rect.top, windowHeight: window.innerHeight, time: now / 1000, now: Date.now(),
-        ambience, reduced: reduced.matches, selected: latest.current.selected, selectedRegion: latest.current.selectedRegion, night: sceneNight(state),
+        ambience, reduced: reduced.matches, selected: latest.current.selected, selectedRegion: latest.current.selectedRegion, draft: latest.current.draft, roadMode: latest.current.roadMode, night: sceneNight(state),
         biome: lookStatus === 'fog' ? 'home' : regionAt(cell.x, cell.y).biome,
         plotPrice: (x, z) => restaurant.plotPrice(x, z), claim: id => ({ price: restaurant.claimPrice(id), error: restaurant.claimError(id) }),
       });
+      labels.current = drawn.labels; boxes.current = drawn.buildings;
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
   }, [reduced, pan]);
-  const state = restaurant.state, town = state.town, built = town.plots.filter(p => p.building).length, building = town.plots.filter(p => p.job).length;
+  const state = restaurant.state, town = state.town, built = town.buildings.length, building = town.buildings.filter(b => b.job).length;
   return <SceneBoundary><div ref={host} className="relative h-full w-full touch-none select-none" data-testid="town-view" {...handlers}>
-    <canvas ref={canvas} className="absolute inset-0 h-full w-full" role="img" aria-label={`Your reef world: ${state.ocean.regions.length + 1} ${state.ocean.regions.length ? 'regions' : 'region'} claimed, ${claimableRegions(state.ocean).length} to claim, ${town.plots.filter(p => p.owned).length} plots owned, ${built} buildings, ${building} under construction. Tap a plot or a region, or use the town panel, to unlock, build and claim.`} />
+    <canvas ref={canvas} className="absolute inset-0 h-full w-full" role="img" aria-label={`Your reef world: ${state.ocean.regions.length + 1} ${state.ocean.regions.length ? 'regions' : 'region'} claimed, ${claimableRegions(state.ocean).length} to claim, ${town.plots.filter(p => p.owned).length} plots owned, ${built} buildings, ${building} under construction. ${town.roads.length} road tiles. Tap a plot or a region, or use the town panel, to unlock, build, lay roads and claim.`} />
   </div></SceneBoundary>;
 }

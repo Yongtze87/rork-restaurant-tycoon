@@ -32,11 +32,11 @@ export const PERFECT_DAY_MIN_SERVED = 15;
 /** Shown as "5.0" on the receipt, which rounds to one decimal. */
 export const FIVE_STAR_RATING = 4.95;
 
-const finished = (s: RestaurantState) => s.town.plots.filter(p => p.building && activeLevel(p) > 0);
+const finished = (s: RestaurantState) => s.town.buildings.filter(b => activeLevel(b) > 0);
 const bestBuilding = (s: RestaurantState) => Math.max(0, ...finished(s).map(activeLevel));
 const bestFurniture = (s: RestaurantState) => Math.max(s.collections.bestFurniture, ...s.furniture.map(f => f.level));
 const flag = (yes: boolean) => yes ? 1 : 0;
-const bestBranch = (s: RestaurantState) => Math.max(0, ...s.town.plots.filter(p => p.building === 'branch').map(activeLevel));
+const bestBranch = (s: RestaurantState) => Math.max(0, ...s.town.buildings.filter(b => b.kind === 'branch').map(activeLevel));
 const reward = (pearls: number, tideCharms = 0): Reward => ({ pearls, tideCharms });
 const SEASON_GOAL = 40;
 type Step = Omit<Achievement, 'family' | 'chain' | 'step' | 'steps'>;
@@ -48,12 +48,12 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: `dish-${dish}-${tier.name.toLowerCase()}`, title: `${DISHES[dish].name} · ${tier.name}`, text: `Serve ${tier.target} ${DISHES[dish].plural}`,
     target: tier.target, reward: reward(tier.pearls), value: (s: RestaurantState) => s.collections.served[dish as DishId],
   })))),
-  ...BUILDABLE.flatMap(kind => single('builder', { id: `own-${kind}`, title: BUILDINGS[kind].name, text: `Finish building a ${BUILDINGS[kind].name.toLowerCase()}`, target: 1, reward: reward(5), value: s => flag(finished(s).some(p => p.building === kind)) })),
+  ...BUILDABLE.flatMap(kind => single('builder', { id: `own-${kind}`, title: BUILDINGS[kind].name, text: `Finish building a ${BUILDINGS[kind].name.toLowerCase()}`, target: 1, reward: reward(5), value: s => flag(finished(s).some(b => b.kind === kind)) })),
   ...chain('builder', 'building-level', [
     { id: 'building-level-6', title: 'Master builder', text: 'Get any building to level 6', target: 6, reward: reward(10, 1), value: bestBuilding },
     { id: 'building-level-11', title: 'Grand architect', text: 'Get any building to level 11', target: 11, reward: reward(25, 1), value: bestBuilding },
   ]),
-  ...chain('builder', 'building-count', [5, 10, 20].map((n, i) => ({ id: `buildings-${n}`, title: ['Little village', 'Busy town', 'Reef city'][i], text: `Have ${n} finished buildings in town`, target: n, reward: reward([5, 10, 20][i]), value: (s: RestaurantState) => finished(s).filter(p => p.building !== 'restaurant').length }))),
+  ...chain('builder', 'building-count', [5, 10, 20].map((n, i) => ({ id: `buildings-${n}`, title: ['Little village', 'Busy town', 'Reef city'][i], text: `Have ${n} finished buildings in town`, target: n, reward: reward([5, 10, 20][i]), value: (s: RestaurantState) => finished(s).filter(b => b.kind !== 'restaurant').length }))),
   ...chain('explorer', 'zones', ZONE_IDS.filter(id => id !== 'shallows').map((id, i) => ({ id: `zone-${id}`, title: ZONES[id].name, text: `Reach ${ZONES[id].place}`, target: 1, reward: reward([15, 25, 40][i], 1), value: (s: RestaurantState) => flag(s.town.zones.includes(id)) }))),
   // Colony-build achievement ids (colonies-*, biome-*) may stay in old saves' claimed lists; they are simply not shown.
   ...chain('ocean', 'regions', [1, 3, 10].map((n, i) => ({ id: `regions-${n}`, title: ['New horizons', 'Island hopper', 'Ocean empire'][i], text: `Claim ${n} ocean ${n === 1 ? 'region' : 'regions'}`, target: n, reward: reward([20, 40, 80][i], [1, 1, 2][i]), value: (s: RestaurantState) => s.ocean.regions.length }))),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
-import { BUILDINGS, MAX_LEVEL, TOWN_BALANCE, TOWN_SIZE, baseSeconds, createTown, finishCost, jobSeconds, lookFor, plotAt, townEffects, unlockCost, upgradeCost } from '@/management/town';
+import { BUILDINGS, MAX_LEVEL, PARCEL, TOWN_BALANCE, baseSeconds, buildingAt, connected, createTown, finishCost, jobSeconds, lookFor, migrateTown, network, plotAt, restaurantOf, streetTiles, townEffects, townSchema, unlockCost, upgradeCost, type Town } from '@/management/town';
+import { C, joinRoads, on, put } from './town-helpers';
 import { restaurantSchema } from '@/management/types';
 
 function harness() {
@@ -8,13 +9,17 @@ function harness() {
   const storage = { getItem: () => raw || null, setItem: (_key: string, value: string) => { raw = value; } };
   return { storage, now: () => now, advance: (seconds: number) => { now += seconds * 1000; } };
 }
-const C = Math.floor(TOWN_SIZE / 2);
 function rich(h = harness()) { const e = new RestaurantEngine(h.storage, h.now); e.state.cash = 100_000; return { e, h }; }
 
+const T = C * PARCEL; // the restaurant's corner tile
+const hall = (town: Town) => restaurantOf(town);
+
 describe('town plots', () => {
-  it('starts with only the restaurant plot and neutral effects', () => {
+  it('starts with the restaurant plot, its streets and neutral effects', () => {
     const town = createTown();
-    expect(town.plots.filter(p => p.owned)).toEqual([{ x: C, z: C, owned: true, building: 'restaurant', level: 1, job: null }]);
+    expect(town.plots.filter(p => p.owned)).toEqual([{ x: C, z: C, owned: true }]);
+    expect(town.buildings).toEqual([{ id: 1, kind: 'restaurant', x: T, z: T, turned: false, level: 1, job: null }]);
+    expect(town.roads).toEqual(streetTiles(C, C)); expect(network(town).size).toBe(7);
     expect(townEffects(town)).toEqual({ kelpCost: 1, fishCost: 1, extraCrew: 0, arrivalBonus: 0, crewSpeed: 1 });
   });
   it('unlocks only plots touching the town, charging a growing price', () => {
@@ -32,65 +37,113 @@ describe('town plots', () => {
   });
 });
 
+describe('buildings of different sizes on tiles', () => {
+  it('needs your own land, free tiles and a road along one side', () => {
+    const { e } = rich(), town = e.state.town;
+    expect(e.build('kelpFarm', T + 4, T)).toBe('Part of this spot is not your land yet.');
+    e.unlockPlot(C + 1, C); e.unlockPlot(C - 1, C);
+    expect(e.build('kelpFarm', T + 2, T)).toBe('Another building is in the way.');
+    expect(e.build('kelpFarm', T + 3, T)).toBe('A road is in the way.');
+    expect(e.build('kelpFarm', T - 4, T)).toBe('Buildings need a road along one side.');
+    // A 3×2 kelp farm beside the restaurant's street; turned, a 2×3 fishery fits under it.
+    expect(e.build('kelpFarm', T + 4, T)).toBeNull(); expect(buildingAt(town, T + 6, T + 1)?.kind).toBe('kelpFarm'); expect(buildingAt(town, T + 6, T + 2)).toBeUndefined();
+    town.builders = 2; expect(e.placeError('fishery', T + 4, T + 1, true)).toBe('Another building is in the way.'); expect(e.placeError('fishery', T + 4, T + 2, true)).toBeNull();
+    expect(e.placeError('fishery', T + 4, T + 2, false)).toBe('Part of this spot is not your land yet.');
+    expect(e.build('restaurant', T + 4, T + 2)).toBe('You already have a restaurant.');
+    expect(e.build('branch', T + 4, T + 2)).toMatch(/Branches open in other regions/);
+  });
+  it('lays roads one tile at a time or a whole plot of streets, and lifts them for free', () => {
+    const { e } = rich(), town = e.state.town; e.unlockPlot(C - 1, C);
+    expect(e.placeRoad(T - 6, T + 8)).toBe('Roads go on your own land.');
+    const cash = e.state.cash; expect(e.placeRoad(T - 1, T)).toBeNull(); expect(e.state.cash).toBe(cash - TOWN_BALANCE.road);
+    expect(e.placeRoad(T - 1, T)).toMatch(/already/); expect(e.placeRoad(T, T)).toBe('A building is in the way.');
+    const streets = e.streetsFor(C - 1, C); expect(streets.tiles).toHaveLength(6); expect(streets.price).toBe(60);
+    expect(e.layStreets(C - 1, C)).toBeNull(); expect(e.layStreets(C - 1, C)).toMatch(/already has its streets/);
+    expect(e.removeRoad(T - 1, T)).toBeNull(); expect(e.removeRoad(T - 1, T)).toBe('There is no road here.'); expect(town.roads).not.toContain(`${T - 1},${T}`);
+  });
+  it('a building only works while a road joins it to the restaurant', () => {
+    const { e } = rich(), town = e.state.town; e.unlockPlot(C + 1, C); e.unlockPlot(C + 2, C);
+    // Two plots out, with a road of its own that does not reach the restaurant's streets.
+    e.placeRoad(T + 11, T); expect(e.build('fishery', T + 9, T)).toBeNull(); e.finishNow(town.buildings[1].id);
+    town.pearls = 100; e.finishNow(town.buildings[1].id);
+    const fishery = town.buildings[1]; expect(fishery.job).toBeNull(); expect(connected(town, fishery)).toBe(false); expect(e.townEffects().fishCost).toBe(1);
+    expect(e.layStreets(C + 1, C)).toBeNull(); expect(e.layStreets(C + 2, C)).toBeNull();
+    expect(connected(town, fishery)).toBe(true); expect(e.townEffects().fishCost).toBeCloseTo(.94);
+    // Lifting the joining street cuts it off again.
+    e.removeRoad(T + 7, T + 3); e.removeRoad(T + 4, T + 3); e.removeRoad(T + 5, T + 3); e.removeRoad(T + 6, T + 3);
+    for (let z = T; z < T + 3; z++) e.removeRoad(T + 7, z);
+    expect(e.townEffects().fishCost).toBe(1);
+  });
+  it('moves and turns a building for free, keeping its level and timer', () => {
+    const { e } = rich(), town = e.state.town; e.unlockPlot(C, C + 1);
+    expect(e.build('homes', T, T + 4)).toBeNull(); const homes = town.buildings[1], job = homes.job;
+    const cash = e.state.cash;
+    expect(e.moveBuilding(homes.id, T + 2, T + 4, false)).toBeNull(); expect(homes).toMatchObject({ x: T + 2, z: T + 4, job }); expect(e.state.cash).toBe(cash);
+    expect(e.moveBuilding(homes.id, T, T + 2, false)).toBe('Another building is in the way.');
+    expect(e.moveBuilding(hall(town).id, T + 1, T, false)).toBe('A road is in the way.');
+  });
+});
+
 describe('construction time', () => {
   it('builds in real time, applies effects only when finished, and survives a reload', () => {
     const { e, h } = rich();
-    e.unlockPlot(C + 1, C); expect(e.build(C + 1, C, 'kelpFarm')).toBeNull();
+    e.unlockPlot(C + 1, C); expect(e.build('kelpFarm', T + 4, T, true)).toBeNull();
     expect(e.state.cash).toBe(100_000 - unlockCost(createTown()) - BUILDINGS.kelpFarm.buildCost);
     expect(e.dishCost('salad')).toBe(7);
-    h.advance(BUILDINGS.kelpFarm.buildSeconds - 1); e.update(.1); expect(plotAt(e.state.town, C + 1, C)!.job).not.toBeNull();
+    const farm = () => on(e.state.town, C + 1, C)!;
+    h.advance(BUILDINGS.kelpFarm.buildSeconds - 1); e.update(.1); expect(farm().job).not.toBeNull();
     const reloaded = new RestaurantEngine(h.storage, h.now); expect(reloaded.state.town).toEqual(e.state.town);
     h.advance(1); reloaded.update(.1);
-    expect(plotAt(reloaded.state.town, C + 1, C)!.job).toBeNull(); expect(reloaded.lastCompletion?.text).toBe('Kelp farm is built.');
-    // Level 1 next to the restaurant: 6% × 1.5 = 9% cheaper ($7 → $6.37; the cents carry between dishes).
+    expect(on(reloaded.state.town, C + 1, C)!.job).toBeNull(); expect(reloaded.lastCompletion?.text).toBe('Kelp farm is built.');
+    // Level 1 near the restaurant: 6% × 1.5 = 9% cheaper ($7 → $6.37; the cents carry between dishes).
     expect(reloaded.townEffects().kelpCost).toBeCloseTo(.91); expect(reloaded.dishCost('salad')).toBeCloseTo(6.37);
     expect(restaurantSchema.safeParse(reloaded.state).success).toBe(true);
   });
   it('finishes construction while the owner is away, even with the restaurant closed', async () => {
-    const { e, h } = rich(); e.unlockPlot(C, C + 1); e.build(C, C + 1, 'homes'); e.suspend();
+    const { e, h } = rich(); e.unlockPlot(C, C + 1); e.build('homes', T, T + 4); e.suspend();
     h.advance(3600);
     const back = new RestaurantEngine(h.storage, h.now); await back.resume();
-    expect(plotAt(back.state.town, C, C + 1)!.job).toBeNull(); expect(back.crewLimit()).toBe(7);
+    expect(on(back.state.town, C, C + 1)!.job).toBeNull(); expect(back.crewLimit()).toBe(7);
   });
   it('allows one job per builder, and a second builder bought with pearls', () => {
-    const { e } = rich(); e.unlockPlot(C + 1, C); e.unlockPlot(C - 1, C);
-    expect(e.build(C + 1, C, 'garden')).toBeNull();
-    expect(e.build(C - 1, C, 'workshop')).toMatch(/builder is busy/);
+    const { e } = rich(); e.unlockPlot(C + 1, C); e.unlockPlot(C, C + 1);
+    expect(e.build('garden', T + 4, T)).toBeNull();
+    expect(e.build('workshop', T, T + 4)).toMatch(/builder is busy/);
     expect(e.buy('builder')).toMatch(/costs 150 pearls/);
     e.state.town.pearls = 200; expect(e.buy('builder')).toBeNull(); expect(e.state.town.pearls).toBe(50);
-    expect(e.build(C - 1, C, 'workshop')).toBeNull(); expect(e.buy('builder')).toMatch(/every builder/);
+    expect(e.build('workshop', T, T + 4)).toBeNull(); expect(e.buy('builder')).toMatch(/every builder/);
   });
   it('grows from about a minute to hours, and the workshop shortens every job', () => {
     expect(baseSeconds('restaurant', 2)).toBe(93); expect(baseSeconds('garden', MAX_LEVEL) / 3600).toBeGreaterThan(7);
-    const town = createTown(); Object.assign(town.plots[0], { owned: true, building: 'workshop', level: 10 });
+    const town = createTown(); put(town, 'workshop', 0, 0, 10);
     expect(jobSeconds(town, 'restaurant', 5)).toBe(Math.round(baseSeconds('restaurant', 5) * .7));
     expect(upgradeCost('kelpFarm', 3)).toBeGreaterThan(upgradeCost('kelpFarm', 2));
     expect([1, 5, 6, 10, 11, 15].map(lookFor)).toEqual([1, 1, 2, 2, 3, 3]);
   });
   it('upgrades raise the level only on completion and stop at the top level', () => {
-    const { e, h } = rich();
-    expect(e.upgrade(C, C)).toBeNull(); expect(plotAt(e.state.town, C, C)!.level).toBe(1);
+    const { e, h } = rich(), id = hall(e.state.town).id;
+    expect(e.upgrade(id)).toBeNull(); expect(hall(e.state.town).level).toBe(1);
     h.advance(baseSeconds('restaurant', 2)); e.update(.1);
-    expect(plotAt(e.state.town, C, C)!.level).toBe(2); expect(e.townEffects().arrivalBonus).toBeCloseTo(.03);
-    plotAt(e.state.town, C, C)!.level = MAX_LEVEL; expect(e.upgrade(C, C)).toMatch(/highest level/);
+    expect(hall(e.state.town).level).toBe(2); expect(e.townEffects().arrivalBonus).toBeCloseTo(.03);
+    hall(e.state.town).level = MAX_LEVEL; expect(e.upgrade(id)).toMatch(/highest level/);
   });
 });
 
 describe('time skips', () => {
   it('charms cut 15 minutes or an hour; pearls finish the rest', () => {
-    const { e, h } = rich(); plotAt(e.state.town, C, C)!.level = 10; e.upgrade(C, C); // level 11 takes about 80 minutes
-    const job = () => plotAt(e.state.town, C, C)!.job;
+    const { e, h } = rich(), id = hall(e.state.town).id; hall(e.state.town).level = 10; e.upgrade(id); // level 11 takes about 80 minutes
+    const job = () => hall(e.state.town).job;
     const before = job()!.endsAt; e.state.town.charms = { current: 1, tide: 1 };
-    expect(e.useCharm(C, C, 'current')).toBeNull(); expect(job()!.endsAt).toBe(before - 15 * 60_000);
-    expect(e.useCharm(C, C, 'current')).toMatch(/no Current charms/);
-    expect(e.useCharm(C, C, 'tide')).toBeNull(); expect(job()!.endsAt).toBe(before - 75 * 60_000);
+    expect(e.useCharm(id, 'current')).toBeNull(); expect(job()!.endsAt).toBe(before - 15 * 60_000);
+    expect(e.useCharm(id, 'current')).toMatch(/no Current charms/);
+    expect(e.useCharm(id, 'tide')).toBeNull(); expect(job()!.endsAt).toBe(before - 75 * 60_000);
     const cost = finishCost(job()!, h.now()); e.state.town.pearls = cost - 1;
-    expect(e.finishNow(C, C)).toMatch(/needs/); e.state.town.pearls = cost;
-    expect(e.finishNow(C, C)).toBeNull(); expect(job()).toBeNull(); expect(plotAt(e.state.town, C, C)!.level).toBe(11); expect(e.state.town.pearls).toBe(0);
+    expect(e.finishNow(id)).toMatch(/needs/); e.state.town.pearls = cost;
+    expect(e.finishNow(id)).toBeNull(); expect(job()).toBeNull(); expect(hall(e.state.town).level).toBe(11); expect(e.state.town.pearls).toBe(0);
   });
   it('a charm larger than the time left completes the job immediately', () => {
-    const { e } = rich(); e.unlockPlot(C + 1, C); e.build(C + 1, C, 'garden');
-    expect(e.useCharm(C + 1, C, 'current')).toBeNull(); expect(plotAt(e.state.town, C + 1, C)!.job).toBeNull();
+    const { e } = rich(); e.unlockPlot(C + 1, C); e.build('garden', T + 4, T);
+    const id = e.state.town.buildings[1].id; expect(e.useCharm(id, 'current')).toBeNull(); expect(e.state.town.buildings[1].job).toBeNull();
   });
   it('gives one daily gift per calendar day', async () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now), start = e.state.town.charms.current;
@@ -104,22 +157,21 @@ describe('time skips', () => {
 });
 
 describe('town effects on the restaurant', () => {
-  it('neighbours matter: producers and gardens are stronger next to the restaurant, gardens next to homes speed up crew', () => {
-    const town = createTown(), set = (x: number, z: number, building: 'kelpFarm' | 'fishery' | 'garden' | 'homes', level: number) => Object.assign(plotAt(town, x, z)!, { owned: true, building, level });
-    set(C + 1, C, 'kelpFarm', 5); set(0, 0, 'fishery', 5);
+  it('nearness matters: producers and gardens are stronger near the restaurant, gardens near homes speed up crew', () => {
+    const town = createTown();
+    put(town, 'kelpFarm', C + 1, C, 5); put(town, 'fishery', 0, 0, 5);
     expect(townEffects(town).kelpCost).toBeCloseTo(1 - 5 * .06 * 1.5); expect(townEffects(town).fishCost).toBeCloseTo(1 - 5 * .06);
-    set(C, C + 1, 'garden', 4); set(C, C + 2, 'homes', 6);
+    put(town, 'garden', C, C + 1, 4); put(town, 'homes', C, C + 2, 6, { z: (C + 1) * PARCEL + 2 });
     const e = townEffects(town); expect(e.arrivalBonus).toBeCloseTo(4 * .03 * 1.5); expect(e.crewSpeed).toBeCloseTo(1.04); expect(e.extraCrew).toBe(2);
   });
   it('cheaper ingredients and more crew slots change real service results', () => {
     const plain = new RestaurantEngine(), farmed = new RestaurantEngine();
-    Object.assign(plotAt(farmed.state.town, C + 1, C)!, { owned: true, building: 'kelpFarm', level: 10 });
-    Object.assign(plotAt(farmed.state.town, C - 1, C)!, { owned: true, building: 'fishery', level: 10 });
+    put(farmed.state.town, 'kelpFarm', C + 1, C, 10); put(farmed.state.town, 'fishery', C - 1, C, 10);
     for (const e of [plain, farmed]) { e.open(); for (let i = 0; i < 1200; i++) e.update(.1); }
     expect(farmed.state.totals.served + farmed.state.lifetimeServed).toBeGreaterThan(0);
     const perMeal = (e: RestaurantEngine) => (e.state.history.reduce((s, r) => s + r.ingredients, 0) + e.state.totals.ingredients) / Math.max(1, e.state.lifetimeServed);
     expect(perMeal(farmed)).toBeLessThan(perMeal(plain));
-    Object.assign(plotAt(farmed.state.town, C, C + 1)!, { owned: true, building: 'homes', level: 1 });
+    put(farmed.state.town, 'homes', C, C + 1, 1);
     expect(farmed.crewLimit()).toBe(7);
   });
 });
@@ -127,15 +179,33 @@ describe('town effects on the restaurant', () => {
 describe('garden cap', () => {
   it('limits the combined guest bonus from glow gardens', () => {
     const town = createTown();
-    for (const [x, z] of [[0, 0], [8, 8], [0, 8], [8, 0]]) Object.assign(plotAt(town, x, z)!, { owned: true, building: 'garden', level: 15 });
+    for (const [x, z] of [[0, 0], [8, 8], [0, 8], [8, 0]]) put(town, 'garden', x, z, 15);
     expect(townEffects(town).arrivalBonus).toBeCloseTo(TOWN_BALANCE.gardenCap);
+  });
+});
+
+describe('saves from before tiles', () => {
+  it('moves each building to its plot corner and gives every owned plot its streets, with the same effects', () => {
+    const legacy = { plots: createTown().plots.map(p => ({ ...p, building: null as string | null, level: 0, job: null })), builders: 1, pearls: 5, charms: { current: 1, tide: 0 }, lastGiftDay: '', zones: ['shallows'] };
+    const set = (x: number, z: number, building: string, level: number) => Object.assign(legacy.plots.find(p => p.x === x && p.z === z)!, { owned: true, building, level });
+    set(C, C, 'restaurant', 3); set(C + 1, C, 'kelpFarm', 5); set(C, C + 1, 'garden', 4); set(C, C + 2, 'homes', 6); set(0, 0, 'fishery', 5);
+    expect(townSchema.safeParse(legacy).success).toBe(true);
+    const town = townSchema.parse(legacy) as Town;
+    expect(town.buildings.map(b => [b.kind, b.x, b.z, b.level])).toEqual([['fishery', 0, 0, 5], ['restaurant', T, T, 3], ['kelpFarm', T + 4, T, 5], ['garden', T, T + 4, 4], ['homes', T, T + 8, 6]]);
+    expect(town.nextBuildingId).toBe(6); expect(town.plots[0]).toEqual({ x: 0, z: 0, owned: true });
+    expect(town.buildings.filter(b => b.kind !== 'fishery').every(b => connected(town, b))).toBe(true);
+    // The lone fishery's plot is not joined to the rest: it waits for a road, like any building.
+    expect(connected(town, town.buildings[0])).toBe(false);
+    joinRoads(town, { x: 0, z: 0 });
+    const e = townEffects(town); expect(e.kelpCost).toBeCloseTo(1 - 5 * .06 * 1.5); expect(e.fishCost).toBeCloseTo(1 - 5 * .06); expect(e.extraCrew).toBe(2);
+    expect(migrateTown(town)).toBe(town);
   });
 });
 
 describe('exact ingredient costs and the closing reserve', () => {
   it('carries fractions of a dollar so a small discount adds up over many dishes', () => {
     const plain = new RestaurantEngine(), farmed = new RestaurantEngine();
-    Object.assign(plotAt(farmed.state.town, 0, 0)!, { owned: true, building: 'kelpFarm', level: 1 }); // not next to the restaurant: 6%
+    put(farmed.state.town, 'kelpFarm', 0, 0, 1); // not near the restaurant: 6%
     expect(farmed.dishCost('salad')).toBeCloseTo(6.58);
     for (const e of [plain, farmed]) { e.state.menu.burger.enabled = false; e.open(); for (let i = 0; i < 3000; i++) e.update(.1); }
     const perSalad = (e: RestaurantEngine) => (e.state.history.reduce((s, r) => s + r.ingredients, 0) + e.state.totals.ingredients) / e.state.lifetimeServed;

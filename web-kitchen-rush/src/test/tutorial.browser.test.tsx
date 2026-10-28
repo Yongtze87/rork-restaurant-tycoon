@@ -68,7 +68,9 @@ it.each([[390, 844], [1280, 800]])('walks a new owner through the first session 
 
   // 6. Build on it and see the timer.
   await expect.element(coach).toHaveTextContent('Build something');
-  await tap('build-building', width);
+  await tap('build-building', width); // Place: the building appears beside a road
+  await expect.element(coach).toHaveTextContent('Buildings need a road along one side');
+  await tap('build-building', width); // Build
   await expect.element(screen.getByTestId('construction')).toHaveTextContent('Building');
 
   // 7. Use the free Current charm.
@@ -76,7 +78,7 @@ it.each([[390, 844], [1280, 800]])('walks a new owner through the first session 
   const charms = restaurant.state.town.charms.current; expect(charms).toBeGreaterThanOrEqual(1);
   await tap('use-current', width);
   expect(restaurant.state.town.charms.current).toBe(charms - 1);
-  expect(restaurant.state.town.plots.find(p => p.building && p.building !== 'restaurant')!.job).toBeNull();
+  expect(restaurant.state.town.buildings.find(b => b.kind !== 'restaurant')!.job).toBeNull();
 
   // 8. Wrap-up.
   await expect.element(coach).toHaveTextContent('You’re all set');

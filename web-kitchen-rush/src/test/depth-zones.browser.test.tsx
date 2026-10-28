@@ -4,7 +4,8 @@ import { vi } from 'vitest';
 import { restaurant } from '@/management/engine';
 import ManagementGame from '@/management/ManagementGame';
 import { TownPanel } from '@/management/TownPanel';
-import { TOWN_SIZE, plotZone } from '@/management/town';
+import { PARCEL, TOWN_SIZE, plotZone } from '@/management/town';
+import { put } from './town-helpers';
 import '@/index.css';
 
 vi.mock('@/management/RestaurantScene', async importOriginal => ({ ...(await importOriginal<object>()), default: () => <div>Restaurant world</div> }));
@@ -12,7 +13,7 @@ beforeEach(async () => { restaurant.reset(); restaurant.welcome(); await page.vi
 const C = Math.floor(TOWN_SIZE / 2);
 function meetReef(): void {
   const s = restaurant.state; s.reputation = 3.9; s.cash = 7000;
-  s.town.plots.filter(p => plotZone(p) === 'shallows' && !p.building && Math.abs(p.x - C) + Math.abs(p.z - C) === 1).forEach(p => Object.assign(p, { owned: true, building: 'garden', level: 1, job: null }));
+  s.town.plots.filter(p => plotZone(p) === 'shallows' && Math.abs(p.x - C) + Math.abs(p.z - C) === 1).forEach(p => put(s.town, 'garden', p.x, p.z));
   restaurant.notify();
 }
 
@@ -63,7 +64,7 @@ it('explains why a plot in a locked zone cannot be unlocked, and keeps the zone 
   await expect.element(zones).toBeVisible();
   const rect = zones.element().getBoundingClientRect(); expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(320);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
-  const panel = await render(<TownPanel selected={{ x: C + 3, z: C }} onSelect={() => undefined} onEnterRestaurant={() => undefined} onShop={() => undefined} onOverview={() => undefined} action={() => undefined} />);
+  const panel = await render(<TownPanel selected={{ x: (C + 3) * PARCEL, z: C * PARCEL }} onSelect={() => undefined} draft={null} onDraft={() => undefined} roadMode={false} onRoadMode={() => undefined} onEnterRestaurant={() => undefined} onShop={() => undefined} onOverview={() => undefined} action={() => undefined} />);
   const plot = panel.getByRole('region', { name: 'Locked plot' });
   await expect.element(plot).toHaveTextContent('Coral Reef');
   await expect.element(plot).toHaveTextContent('Reach the Coral Reef first.');

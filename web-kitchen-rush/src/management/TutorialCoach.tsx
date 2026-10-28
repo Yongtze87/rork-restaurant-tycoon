@@ -2,21 +2,21 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { ArrowRight, Shell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { restaurant } from './engine';
-import { plotAt } from './town';
+import { buildingAt, plotOfTile } from './town';
 import { TUTORIAL_STEPS, currentStep, type TutorialStep } from './tutorial';
 import type { Panel } from './Panels';
-import type { PlotRef } from './TownPanel';
+import type { TileRef } from './TownPanel';
 
 /** What the shell is showing, so a step can point at the next control to tap. */
-export interface TutorialView { panel: Panel | null; view: 'restaurant' | 'town'; plot: PlotRef | null; placing: boolean; inspecting: boolean; capitalWarning: boolean; /** Shown inside an open menu window instead of over the scene. */ docked?: boolean }
+export interface TutorialView { panel: Panel | null; view: 'restaurant' | 'town'; plot: TileRef | null; /** A town building is being placed. */ townPlacing?: boolean; placing: boolean; inspecting: boolean; capitalWarning: boolean; /** Shown inside an open menu window instead of over the scene. */ docked?: boolean }
 interface Guide { title: string; text: string; targets: string[]; action?: { label: string; run: () => void } }
 
 const next = (step: TutorialStep) => () => restaurant.tutorialTo(TUTORIAL_STEPS.indexOf(step) + 1);
 const townTab = (text: string) => ({ text, targets: ['town-tab'] });
 
 function guide(step: TutorialStep, ui: TutorialView): Guide {
-  const s = restaurant.state, town = s.town, selected = ui.plot && plotAt(town, ui.plot.x, ui.plot.z), inTown = ui.view === 'town';
-  const busy = town.plots.find(p => p.building && p.building !== 'restaurant' && p.job);
+  const s = restaurant.state, town = s.town, selected = ui.plot && plotOfTile(town, ui.plot.x, ui.plot.z), inTown = ui.view === 'town';
+  const picked = ui.plot && buildingAt(town, ui.plot.x, ui.plot.z), busy = town.buildings.find(b => b.kind !== 'restaurant' && b.job);
   switch (step) {
     case 'welcome': return { title: 'Welcome to the reef', text: 'The Mareen are a reef folk with little fin-like ears, and they love a good meal. You’re opening their newest restaurant, so let’s set it up together.', targets: [], action: { label: 'Let’s start', run: next('welcome') } };
     case 'table': return { title: 'Add a coral table', ...ui.placing
@@ -33,10 +33,11 @@ function guide(step: TutorialStep, ui: TutorialView): Guide {
       : selected && !selected.owned ? { text: 'Tap Unlock to claim this plot for your town.', targets: ['unlock-plot'] }
       : { text: 'Tap a plot to unlock it, on the map or in the row below.', targets: ['plot-locked'] } };
     case 'build': return { title: 'Build something', ...!inTown ? townTab('Tap Town to choose a building for your new plot.')
-      : selected?.owned && !selected.building ? { text: 'Pick any building. Each one helps your restaurant in its own way.', targets: ['build-building'] }
+      : ui.townPlacing ? { text: 'Buildings need a road along one side. Tap the map to move it, then tap Build.', targets: ['build-building'] }
+      : selected?.owned && !picked ? { text: 'Pick any building and tap Place. Each one helps your restaurant in its own way.', targets: ['build-building'] }
       : { text: 'Tap your empty plot to choose a building.', targets: ['plot-empty'] } };
     case 'charm': return { title: 'Speed it up', ...!inTown ? townTab('Tap Town to check on your builder.')
-      : busy && selected?.x === busy.x && selected.z === busy.z ? town.charms.current > 0
+      : busy && picked?.id === busy.id ? town.charms.current > 0
         ? { text: 'See the timer? Building takes real time, even while you’re away. Tap Current charm to skip 15 minutes.', targets: ['use-current'] }
         : { text: 'See the timer? Building takes real time, even while you’re away. It finishes on its own, and a free charm arrives each day.', targets: [] }
       : { text: 'Tap the plot under construction to see its timer.', targets: ['plot-busy'] } };

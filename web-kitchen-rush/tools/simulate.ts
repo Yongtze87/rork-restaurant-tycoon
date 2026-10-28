@@ -80,7 +80,7 @@ if (flag('payback')) {
   }
   const s = snap.state;
   console.log(`Snapshot after ${s.day - 1} days: cash $${Math.round(s.cash)}, rep ${s.reputation}, comfort ${comfort(s)}, ${s.furniture.filter(f => f.kind === 'table').length} tables, crew ${s.staff.map(m => m.role[0] + m.level).join(' ')}, menu ${DISH_IDS.filter(d => s.menu[d].enabled).join(',')}`);
-  console.log(`  town ${s.town.plots.filter(p => p.building).map(p => `${p.building}:${p.level}`).join(' ')} · zones ${s.town.zones.join(',')}`);
+  console.log(`  town ${s.town.buildings.map(b => `${b.kind}:${b.level}`).join(' ')} · zones ${s.town.zones.join(',')}`);
   const furn = (kind: FurnitureKind) => (e: RestaurantEngine) => buyFurniture(e, kind);
   const up = (kind: FurnitureKind) => (e: RestaurantEngine) => { const f = e.state.furniture.filter(x => x.kind === kind).sort((a, b) => a.level - b.level)[0]; return f ? e.upgradeFurniture(f.id) : 'none'; };
   const upAll = (kind: FurnitureKind) => (e: RestaurantEngine) => { for (const f of e.state.furniture.filter(x => x.kind === kind)) { const err = e.upgradeFurniture(f.id); if (err) return err; } return null; };

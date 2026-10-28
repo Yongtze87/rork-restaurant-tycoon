@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Town } from './town';
-import { inHome } from './world';
+import { PARCEL, inHome } from './world';
 
 /**
  * Depth zones are the long-term chapters: Shallows → Coral Reef → Twilight → Abyss.
@@ -34,14 +34,14 @@ export const zoneArrivalBonus = (town: Pick<Town, 'zones'>): number => ZONE_IDS.
 export interface ZoneRequirement { label: string; met: boolean; error: string; }
 interface ZoneProgress { reputation: number; cash: number; town: Town; }
 /** Zones are the home town's chapters: only buildings in the Home Reef count. */
-const finished = (town: Town) => town.plots.filter(p => inHome(p) && p.building && p.job?.kind !== 'build');
+const finished = (town: Town) => town.buildings.filter(b => inHome({ x: Math.floor(b.x / PARCEL), z: Math.floor(b.z / PARCEL) }) && b.job?.kind !== 'build');
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 /** Every requirement for a zone with the player's current progress. Empty for the starting zone. `price` is the price with the fame discount applied. */
 export function zoneRequirements(state: ZoneProgress, id: ZoneId, price = ZONES[id].price): ZoneRequirement[] {
   const info = ZONES[id], prev = previousZone(id), list: ZoneRequirement[] = [];
   if (!prev) return list;
-  const built = finished(state.town).filter(p => p.building !== 'restaurant').length, best = Math.max(0, ...finished(state.town).map(p => p.level));
+  const built = finished(state.town).filter(b => b.kind !== 'restaurant').length, best = Math.max(0, ...finished(state.town).map(b => b.level));
   if (prev !== 'shallows') list.push({ label: `Reach ${ZONES[prev].place}`, met: hasZone(state.town, prev), error: `Reach ${ZONES[prev].place} first.` });
   list.push({ label: `Reputation ${info.reputation.toFixed(1)} · now ${state.reputation.toFixed(1)}`, met: state.reputation >= info.reputation, error: `Reach a ${info.reputation.toFixed(1)} reputation first.` });
   list.push({ label: `${info.buildings} buildings in town · ${Math.min(built, info.buildings)}/${info.buildings}`, met: built >= info.buildings, error: `Build ${info.buildings} buildings in town first.` });

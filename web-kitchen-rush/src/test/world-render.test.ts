@@ -28,7 +28,7 @@ const frame = (e: RestaurantEngine, zoom: number, width = 1280, height = 800) =>
 
 describe('world rendering', () => {
   it('labels every claimable region in view with its name, stars and price or gate', () => {
-    const e = world(), { ctx, counts } = stubContext(), labels = renderTown(ctx, frame(e, .3));
+    const e = world(), { ctx, counts } = stubContext(), labels = renderTown(ctx, frame(e, .3)).labels;
     const claimable = claimableRegions(e.state.ocean).map(r => r.id).sort();
     expect(labels.map(l => l.id).sort()).toEqual(claimable);
     expect(counts.text).toContain('Bluefall Trench'); expect(counts.text).toContain('★★★ · Open trench');

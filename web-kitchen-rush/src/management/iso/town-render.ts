@@ -1,4 +1,4 @@
-import { TOWN_SIZE, activeLevel, canUnlock, lookFor, plotAt, plotZone, type Plot, type Town } from '../town';
+import { PARCEL, TOWN_SIZE, activeLevel, buildingAt, buildingRegion, canUnlock, connected, footprint, lookFor, occupancy, parcelOf, plotAt, plotZone, rectOf, roadSet, type Building, type Plot, type Rect, type Spot, type Town } from '../town';
 import { ZONES, hasZone, type ZoneId } from '../zones';
 import type { Ambience } from './ambience';
 import { BIOMES, PALETTES, hash01, regionAt, regionStatus, type BiomeId, type Ocean, type RegionStatus } from '../ocean';
@@ -10,7 +10,13 @@ import { drawBuilding, drawScaffold } from './town-art';
 
 export interface TownFrame {
   town: Town; ocean: Pick<Ocean, 'regions'>; cash: number; view: View; width: number; height: number; windowTop: number; windowHeight: number;
-  time: number; now: number; ambience: Ambience; reduced: boolean; selected: { x: number; z: number } | null;
+  time: number; now: number; ambience: Ambience; reduced: boolean;
+  /** The tapped tile (tile coordinates); a building covering it is outlined. */
+  selected: { x: number; z: number } | null;
+  /** A building being placed or moved, and whether it fits there. */
+  draft?: { spot: Spot; ok: boolean; /** The building being moved: hidden from its old spot. */ id?: number } | null;
+  /** The road tool is on: every tile of your land is outlined. */
+  roadMode?: boolean;
   /** The region whose details are open; its block is outlined. */
   selectedRegion?: string | null;
   /** Evening darkness, 0 (dusk) to 1 (night); visual only. */
@@ -24,6 +30,15 @@ export interface TownFrame {
 }
 /** A floating region label on screen, for taps. */
 export interface RegionLabel { id: string; left: number; top: number; right: number; bottom: number; }
+/** A building's art on screen, for taps on its roof. */
+export interface BuildingBox { id: number; left: number; top: number; right: number; bottom: number; depth: number; }
+/** Tile coordinates to the plot grid the view uses: tile t spans [edge(t), edge(t + 1)]. */
+export const tileEdge = (t: number): number => t / PARCEL - .5;
+export const rectCentre = (r: Rect): { x: number; z: number } => ({ x: (tileEdge(r.x0) + tileEdge(r.x1 + 1)) / 2, z: (tileEdge(r.z0) + tileEdge(r.z1 + 1)) / 2 });
+const rectPolygon = (ctx: CanvasRenderingContext2D, view: View, r: Rect, inset = 0) => floorPolygon(ctx, view, tileEdge(r.x0) + inset, tileEdge(r.z0) + inset, tileEdge(r.x1 + 1) - inset, tileEdge(r.z1 + 1) - inset);
+/** Art is authored for a whole plot (about 60 px wide); a footprint is (w + d) × 8 px wide. */
+const artScale = (w: number, d: number) => (w + d) / 7.2;
+const PAD: Record<Building['kind'], string> = { restaurant: '#E7C9A4', branch: '#E7C9A4', kelpFarm: '#8FB47E', fishery: '#9DB4C4', homes: '#D8C2A8', garden: '#8F86B8', workshop: '#A9A39A' };
 type Ctx = CanvasRenderingContext2D;
 const GAP = .07;
 
@@ -75,7 +90,7 @@ export function visibleCells(view: View, width: number, height: number): { x0: n
 }
 
 /** Draw the whole world: the home town, claimed regions, claimable regions and fog. Reads state only; returns label boxes for taps. */
-export function renderTown(ctx: Ctx, f: TownFrame): RegionLabel[] {
+export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; buildings: BuildingBox[] } {
   const { town, ocean, view, time, now, reduced, selected } = f, t = reduced ? 0 : time, s = view.scale;
   const homePalette = PALETTES.home, price = (p: Plot) => f.plotPrice?.(p.x, p.z) ?? 0;
   drawWater(ctx, { ...f, palette: PALETTES[f.biome ?? 'home'] });
@@ -117,61 +132,104 @@ export function renderTown(ctx: Ctx, f: TownFrame): RegionLabel[] {
     const b = regionBlock(c.x, c.y);
     for (let z = b.z0; z < b.z0 + b.size; z++) for (let x = b.x0; x < b.x0 + b.size; x++) { const p = plotAt(town, x, z); if (p) plots.push(p); }
   }
-  const openPlots = new Set(plots.filter(p => canUnlock(town, p)));
+  const openPlots = new Set(plots.filter(p => canUnlock(town, p))), taken = occupancy(town), roads = roadSet(town), grid = f.roadMode || Boolean(f.draft) || s >= 1.3;
+  const usedPlots = new Set<string>(); for (const key of taken.keys()) { const [x, z] = key.split(',').map(Number), p = parcelOf(x, z); usedPlots.add(`${p.x},${p.z}`); }
   for (const plot of plots) {
-    const open = openPlots.has(plot), x0 = plot.x - .5 + GAP, z0 = plot.z - .5 + GAP, x1 = plot.x + .5 - GAP, z1 = plot.z + .5 - GAP;
+    const open = openPlots.has(plot), x0 = plot.x - .5 + GAP / 2, z0 = plot.z - .5 + GAP / 2, x1 = plot.x + .5 - GAP / 2, z1 = plot.z + .5 - GAP / 2;
     floorPolygon(ctx, view, x0, z0, x1, z1);
-    ctx.fillStyle = plot.owned ? (plot.building ? '#86CAC3' : '#A9D8D0') : open ? 'rgba(255,242,215,.35)' : 'rgba(40,60,80,.28)'; ctx.fill();
+    ctx.fillStyle = plot.owned ? '#A9D8D0' : open ? 'rgba(255,242,215,.35)' : 'rgba(40,60,80,.28)'; ctx.fill();
     if (open) { ctx.setLineDash([5, 4]); ctx.strokeStyle = f.cash >= price(plot) ? '#4DF0FF' : 'rgba(233,230,255,.6)'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
-    if (selected && selected.x === plot.x && selected.z === plot.z) { ctx.strokeStyle = '#FFE27A'; ctx.lineWidth = 3; floorPolygon(ctx, view, x0, z0, x1, z1); ctx.stroke(); }
+    if (!plot.owned) continue;
+    // Roads, then (zoomed in, or while placing) the tile grid on your land.
+    for (let tz = plot.z * PARCEL; tz < (plot.z + 1) * PARCEL; tz++) for (let tx = plot.x * PARCEL; tx < (plot.x + 1) * PARCEL; tx++) {
+      if (!roads.has(`${tx},${tz}`)) continue;
+      floorPolygon(ctx, view, tileEdge(tx), tileEdge(tz), tileEdge(tx + 1), tileEdge(tz + 1)); ctx.fillStyle = '#5B6684'; ctx.fill();
+      if (s >= .8) { floorPolygon(ctx, view, tileEdge(tx) + .07, tileEdge(tz) + .07, tileEdge(tx + 1) - .07, tileEdge(tz + 1) - .07); ctx.strokeStyle = 'rgba(233,230,255,.22)'; ctx.lineWidth = 1; ctx.stroke(); }
+    }
+    if (grid) {
+      ctx.strokeStyle = f.roadMode ? 'rgba(77,240,255,.45)' : 'rgba(18,15,46,.14)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 1; i < PARCEL; i++) {
+        const a = toScreen(view, plot.x - .5 + i / PARCEL, plot.z - .5), b = toScreen(view, plot.x - .5 + i / PARCEL, plot.z + .5), c = toScreen(view, plot.x - .5, plot.z - .5 + i / PARCEL), d = toScreen(view, plot.x + .5, plot.z - .5 + i / PARCEL);
+        ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+      }
+      ctx.stroke();
+    }
   }
+  // Selection: the tapped building's footprint, or the tapped tile.
+  const picked = selected ? buildingAt(town, selected.x, selected.z) : undefined;
+  if (selected) {
+    if (picked) rectPolygon(ctx, view, rectOf(picked), -.02); else floorPolygon(ctx, view, tileEdge(selected.x), tileEdge(selected.z), tileEdge(selected.x + 1), tileEdge(selected.z + 1));
+    ctx.strokeStyle = '#FFE27A'; ctx.lineWidth = 3; ctx.stroke();
+  }
+  const regions = new Set(claimed.map(c => c.id)), visible = town.buildings.filter(b => regions.has(buildingRegion(b)) && b.id !== f.draft?.id);
   // Decor and buildings, back to front.
-  const items: { depth: number; draw: () => void }[] = [];
+  const items: { depth: number; draw: () => void }[] = [], boxes: BuildingBox[] = [];
   for (const c of cells) {
     if (c.status === 'fog' || c.status === 'home') continue;
     const palette = PALETTES[regionAt(c.x, c.y).biome];
     for (const d of regionDecor(c.x, c.y, c.status === 'claimable')) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette), c.status === 'claimable' ? .7 : 1) });
   }
-  for (const plot of plots) {
-    if (!plot.building) continue;
-    const look = lookFor(plot.level), building = plot.building, job = plot.job;
-    items.push({ depth: depthOf(plot.x, plot.z), draw: () => at(ctx, view, plot.x, plot.z, 0, () => {
+  const drawPiece = (kind: Building['kind'], level: number, job: Building['job'], r: Rect, alpha = 1) => {
+    const { w, d } = { w: r.x1 - r.x0 + 1, d: r.z1 - r.z0 + 1 }, centre = rectCentre(r), k = artScale(w, d), look = lookFor(level);
+    rectPolygon(ctx, view, r, .02); ctx.globalAlpha = alpha; ctx.fillStyle = PAD[kind]; ctx.fill(); ctx.globalAlpha = 1;
+    at(ctx, view, centre.x, centre.z, 0, () => {
+      ctx.scale(k, k);
       if (job?.kind === 'build') { ctx.fillStyle = 'rgba(122,90,62,.8)'; ctx.beginPath(); ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2); ctx.fill(); }
-      else if (!drawSprite(ctx, `building.${building}.${look}`)) drawBuilding(ctx, building, look, t);
+      else if (!drawSprite(ctx, `building.${kind}.${look}`)) drawBuilding(ctx, kind, look, t);
       if (job) drawScaffold(ctx);
-    }) });
+    }, alpha);
+  };
+  for (const b of visible) {
+    const r = rectOf(b), centre = rectCentre(r), { w, d } = footprint(b.kind, b.turned), k = artScale(w, d), depth = depthOf(centre.x, centre.z);
+    items.push({ depth, draw: () => drawPiece(b.kind, b.level, b.job, r) });
+    const p = toScreen(view, centre.x, centre.z);
+    boxes.push({ id: b.id, left: p.x - 30 * k * s, right: p.x + 30 * k * s, top: p.y - 60 * k * s, bottom: p.y + 10 * k * s, depth });
+  }
+  const draft = f.draft;
+  if (draft) {
+    const r = rectOf(draft.spot), centre = rectCentre(r);
+    items.push({ depth: depthOf(centre.x, centre.z) + .01, draw: () => {
+      drawPiece(draft.spot.kind, 1, null, r, .7);
+      rectPolygon(ctx, view, r); ctx.fillStyle = draft.ok ? 'rgba(77,240,255,.28)' : 'rgba(255,92,108,.35)'; ctx.fill();
+      ctx.setLineDash([6, 4]); ctx.strokeStyle = draft.ok ? '#4DF0FF' : '#FF5C6C'; ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
+    } });
   }
   items.sort((a, b) => a.depth - b.depth).forEach(item => item.draw());
   const night = f.night ?? 0;
-  if (night > 0) drawNight(ctx, f, night, plots.flatMap((plot): Glow[] => {
-    if (!plot.building || !activeLevel(plot)) return [];
-    const look = lookFor(plot.level), glows: Glow[] = [];
-    if (plot.building === 'garden') glows.push({ ...toScreen(view, plot.x, plot.z, 12), r: 52 * s, color: '165, 123, 255', strength: .2 + look * .1 });
-    if (plot.building === 'restaurant' || plot.building === 'branch') glows.push({ ...toScreen(view, plot.x, plot.z, 10), r: 26 * s, color: '255, 226, 122', strength: .4 });
-    if (look === 3) glows.push({ ...toScreen(view, plot.x, plot.z, 30), r: 58 * s, color: plot.building === 'homes' || plot.building === 'branch' ? '255, 226, 122' : '77, 240, 255', strength: .35 });
+  if (night > 0) drawNight(ctx, f, night, visible.flatMap((b): Glow[] => {
+    if (!activeLevel(b)) return [];
+    const look = lookFor(b.level), glows: Glow[] = [], r = rectOf(b), c = rectCentre(r), k = artScale(r.x1 - r.x0 + 1, r.z1 - r.z0 + 1);
+    if (b.kind === 'garden') glows.push({ ...toScreen(view, c.x, c.z, 12 * k), r: 52 * s * k, color: '165, 123, 255', strength: .2 + look * .1 });
+    if (b.kind === 'restaurant' || b.kind === 'branch') glows.push({ ...toScreen(view, c.x, c.z, 10 * k), r: 26 * s * k, color: '255, 226, 122', strength: .4 });
+    if (look === 3) glows.push({ ...toScreen(view, c.x, c.z, 30 * k), r: 58 * s * k, color: b.kind === 'homes' || b.kind === 'branch' ? '255, 226, 122' : '77, 240, 255', strength: .35 });
     return glows;
   }));
-  // Badges after the buildings so they are never hidden: level, construction progress, unlock price.
+  // Badges after the buildings so they are never hidden: level, construction progress, no road, unlock price.
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   // Zoomed far out only construction bars stay; the region labels carry the information. Prices need a closer look.
   const detail = s >= .6, close = s >= .9;
+  for (const b of visible) {
+    const r = rectOf(b), c = rectCentre(r), p = toScreen(view, c.x, c.z), k = artScale(r.x1 - r.x0 + 1, r.z1 - r.z0 + 1), u = Math.min(s, 1.1);
+    if (b.job) {
+      const span = b.job.endsAt - b.job.startedAt, done = span > 0 ? Math.min(1, (now - b.job.startedAt) / span) : 1, y = p.y - 66 * s * k;
+      ctx.fillStyle = 'rgba(18,15,46,.9)'; ctx.beginPath(); ctx.roundRect(p.x - 30 * u, y - 9 * u, 60 * u, 18 * u, 9 * u); ctx.fill();
+      ctx.fillStyle = '#4DF0FF'; ctx.beginPath(); ctx.roundRect(p.x - 28 * u, y + 5 * u, 56 * u * done, 2.5 * u, 1.5 * u); ctx.fill();
+      if (detail) { ctx.fillStyle = '#E9E6FF'; ctx.font = `700 ${Math.max(9, 9 * u)}px Quicksand, sans-serif`; ctx.fillText(formatDuration(b.job.endsAt - now), p.x, y - 1 * u); }
+    } else if (detail && (!connected(town, b) || 30 * s * k >= 24)) {
+      // Level badges only once a building is big enough on screen to carry one; a missing road always shows.
+      const y = p.y + 6 * s * k, off = !connected(town, b);
+      ctx.fillStyle = off ? 'rgba(160,30,48,.92)' : 'rgba(18,15,46,.85)'; ctx.beginPath(); ctx.roundRect(p.x - (off ? 26 : 15) * u, y - 6 * u, (off ? 52 : 30) * u, 12 * u, 6 * u); ctx.fill();
+      ctx.fillStyle = off ? '#FFF2D7' : '#FFE27A'; ctx.font = `700 ${Math.max(8, 8 * u)}px Quicksand, sans-serif`; ctx.fillText(off ? 'No road' : `Lv ${b.level}`, p.x, y + .5 * u);
+    }
+  }
   for (const plot of plots) {
-    const p = toScreen(view, plot.x, plot.z);
-    if (plot.job) {
-      const span = plot.job.endsAt - plot.job.startedAt, done = span > 0 ? Math.min(1, (now - plot.job.startedAt) / span) : 1, y = p.y - 66 * s;
-      ctx.fillStyle = 'rgba(18,15,46,.9)'; ctx.beginPath(); ctx.roundRect(p.x - 30 * s, y - 9 * s, 60 * s, 18 * s, 9 * s); ctx.fill();
-      ctx.fillStyle = '#4DF0FF'; ctx.beginPath(); ctx.roundRect(p.x - 28 * s, y + 5 * s, 56 * s * done, 2.5 * s, 1.5 * s); ctx.fill();
-      if (detail) { ctx.fillStyle = '#E9E6FF'; ctx.font = `700 ${Math.max(9, 9 * s)}px Quicksand, sans-serif`; ctx.fillText(formatDuration(plot.job.endsAt - now), p.x, y - 1 * s); }
-    } else if (plot.building && detail) {
-      const y = p.y + 14 * s;
-      ctx.fillStyle = 'rgba(18,15,46,.85)'; ctx.beginPath(); ctx.roundRect(p.x - 15 * s, y - 6 * s, 30 * s, 12 * s, 6 * s); ctx.fill();
-      if (detail) { ctx.fillStyle = '#FFE27A'; ctx.font = `700 ${Math.max(8, 8 * s)}px Quicksand, sans-serif`; ctx.fillText(`Lv ${plot.level}`, p.x, y + .5 * s); }
-    } else if (openPlots.has(plot) && close) {
-      const cost = price(plot); ctx.fillStyle = f.cash >= cost ? '#E9E6FF' : 'rgba(233,230,255,.6)'; ctx.font = `700 ${Math.max(9, 9 * s)}px "Baloo 2", sans-serif`; ctx.fillText(fmt(cost), p.x, p.y);
-    } else if (plot.owned && !plot.building && detail) {
+    const p = toScreen(view, plot.x, plot.z), u = Math.min(s, 1.1);
+    if (openPlots.has(plot) && close) {
+      const cost = price(plot); ctx.fillStyle = f.cash >= cost ? '#E9E6FF' : 'rgba(233,230,255,.6)'; ctx.font = `700 ${Math.max(10, 13 * u)}px "Baloo 2", sans-serif`; ctx.fillText(fmt(cost), p.x, p.y);
+    } else if (plot.owned && !usedPlots.has(`${plot.x},${plot.z}`) && detail && !f.draft && !f.roadMode) {
       // An empty plot of your own: a small + inviting a building.
-      ctx.fillStyle = 'rgba(18,15,46,.45)'; ctx.beginPath(); ctx.arc(p.x, p.y, 7 * s, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#4DF0FF'; ctx.font = `800 ${Math.max(9, 11 * s)}px "Baloo 2", sans-serif`; ctx.fillText('+', p.x, p.y + .5 * s);
+      ctx.fillStyle = 'rgba(18,15,46,.45)'; ctx.beginPath(); ctx.arc(p.x, p.y, 10 * u, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4DF0FF'; ctx.font = `800 ${Math.max(11, 15 * u)}px "Baloo 2", sans-serif`; ctx.fillText('+', p.x, p.y + .5 * u);
     }
   }
   if (cells.some(c => c.status === 'home')) for (const [id, spot] of Object.entries(ZONE_LABEL) as [Exclude<ZoneId, 'shallows'>, { x: number; z: number }][]) {
@@ -190,7 +248,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): RegionLabel[] {
     labels.push({ id: c.id, ...box });
   }
   drawParticles(ctx, f);
-  return labels;
+  return { labels, buildings: boxes };
 }
 
 /** A rounded label of one to three lines centred on a point; returns its screen box. */

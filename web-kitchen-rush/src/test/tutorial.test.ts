@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
 import { SAVE_KEY, createRestaurant, restaurantSchema } from '@/management/types';
 import { LAST_TUTORIAL_STEP, currentStep, migrateTutorial } from '@/management/tutorial';
-import { plotAt } from '@/management/town';
+import { C, buildOn } from './town-helpers';
 
 function storageWith(save: unknown) {
   let raw = JSON.stringify(save);
@@ -44,10 +44,9 @@ describe('tutorial save migration', () => {
     expect(e.open()).toBeNull(); expect(currentStep(e.state)).toBe(3);
     for (let i = 0; i < 3000 && e.state.lifetimeServed < 1; i++) e.update(.1);
     expect(currentStep(e.state)).toBe(4);
-    const c = e.state.town.plots.find(p => p.building === 'restaurant')!;
-    expect(e.unlockPlot(c.x + 1, c.z)).toBeNull(); expect(currentStep(e.state)).toBe(5);
-    expect(e.build(c.x + 1, c.z, 'garden')).toBeNull(); expect(currentStep(e.state)).toBe(6);
-    expect(e.useCharm(c.x + 1, c.z, 'current')).toBeNull(); expect(plotAt(e.state.town, c.x + 1, c.z)!.job).toBeNull();
+    expect(e.unlockPlot(C + 1, C)).toBeNull(); expect(currentStep(e.state)).toBe(5);
+    expect(buildOn(e, 'garden', C + 1, C)).toBeNull(); expect(currentStep(e.state)).toBe(6);
+    const garden = e.state.town.buildings[1]; expect(e.useCharm(garden.id, 'current')).toBeNull(); expect(garden.job).toBeNull();
     expect(currentStep(e.state)).toBe(LAST_TUTORIAL_STEP); // the wrap-up waits for the owner
   });
 });

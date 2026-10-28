@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
-import { LEGACY_TOWN_SIZE, TOWN_SIZE, createTown, migrateTown, ownedCount, plotAt, plotZone, townEffects, unlockCost, type Plot, type Town } from '@/management/town';
+import { LEGACY_TOWN_SIZE, createTown, migrateTown, ownedCount, plotAt, plotZone, restaurantOf, townEffects, unlockCost, type BuildingKind, type Job, type Plot, type Town } from '@/management/town';
+import { C, on, put } from './town-helpers';
 import { ZONES, ZONE_ARRIVAL_BONUS, zoneArrivalBonus, zoneError, zoneRequirements } from '@/management/zones';
 import { createRestaurant, restaurantSchema } from '@/management/types';
 
@@ -8,18 +9,19 @@ function harness(raw = '') {
   let now = 1_800_000_000_000;
   return { storage: { getItem: () => raw || null, setItem: (_k: string, v: string) => { raw = v; } }, now: () => now, advance: (s: number) => { now += s * 1000; }, read: () => JSON.parse(raw) };
 }
-const C = Math.floor(TOWN_SIZE / 2);
+/** A plot as saves before tiles stored it, with its one building. */
+type LegacyPlot = Plot & { building: BuildingKind | null; level: number; job: Job | null };
 /** Finished buildings on owned plots of the Shallows, closest to the restaurant first. */
 function addBuildings(town: Town, count: number, level = 1): void {
-  const free = town.plots.filter(p => !p.building && plotZone(p) === 'shallows').sort((a, b) => Math.abs(a.x - C) + Math.abs(a.z - C) - Math.abs(b.x - C) - Math.abs(b.z - C));
-  free.slice(0, count).forEach(p => Object.assign(p, { owned: true, building: 'homes', level, job: null }));
+  const free = town.plots.filter(p => !on(town, p.x, p.z) && plotZone(p) === 'shallows').sort((a, b) => Math.abs(a.x - C) + Math.abs(a.z - C) - Math.abs(b.x - C) - Math.abs(b.z - C));
+  free.slice(0, count).forEach(p => put(town, 'homes', p.x, p.z, level));
 }
 
 describe('zone layout', () => {
   it('is a 9×9 town: the original 5×5 Shallows in the middle, then a Coral Reef ring and a Twilight ring', () => {
     const town = createTown(), count = (zone: string) => town.plots.filter(p => plotZone(p) === zone).length;
     expect(town.plots).toHaveLength(81); expect(town.zones).toEqual(['shallows']);
-    expect(plotAt(town, C, C)?.building).toBe('restaurant');
+    expect(on(town, C, C)?.kind).toBe('restaurant');
     expect([count('shallows'), count('reef'), count('twilight'), count('abyss')]).toEqual([25, 24, 32, 0]);
     expect([plotZone({ x: C + 2, z: C - 2 }), plotZone({ x: C + 3, z: C }), plotZone({ x: 0, z: 0 })]).toEqual(['shallows', 'reef', 'twilight']);
   });
@@ -46,10 +48,10 @@ describe('zone requirements', () => {
     expect(zoneError(s, 'twilight')).toBe('Reach the Coral Reef first.');
     s.town.zones.push('reef');
     expect(zoneError(s, 'twilight')).toBe('Upgrade a building to level 8 first.');
-    plotAt(s.town, C, C)!.level = 8; expect(zoneError(s, 'twilight')).toBeNull();
+    restaurantOf(s.town).level = 8; expect(zoneError(s, 'twilight')).toBeNull();
     expect(zoneRequirements(s, 'abyss').find(r => r.label.startsWith('A building'))).toMatchObject({ label: 'A building at level 13 · best Lv 8', met: false });
     // A building still under construction does not count yet.
-    s.town.plots.filter(p => p.building === 'homes').slice(0, 5).forEach(p => { p.job = { kind: 'build', startedAt: 0, endsAt: 1 }; });
+    s.town.buildings.filter(b => b.kind === 'homes').slice(0, 5).forEach(p => { p.job = { kind: 'build', startedAt: 0, endsAt: 1 }; });
     expect(zoneRequirements(s, 'twilight').find(r => r.label.includes('buildings'))?.met).toBe(false);
   });
   it('unlocks a zone through the engine: checks, charges, records, saves, and adds +5% guests', () => {
@@ -98,9 +100,9 @@ describe('plots in locked zones', () => {
 
 describe('5×5 save migration', () => {
   function legacyTown() {
-    const plots: Plot[] = [];
+    const plots: LegacyPlot[] = [];
     for (let z = 0; z < LEGACY_TOWN_SIZE; z++) for (let x = 0; x < LEGACY_TOWN_SIZE; x++) plots.push({ x, z, owned: false, building: null, level: 0, job: null });
-    const set = (x: number, z: number, patch: Partial<Plot>) => Object.assign(plots.find(p => p.x === x && p.z === z)!, { owned: true, ...patch });
+    const set = (x: number, z: number, patch: Partial<LegacyPlot>) => Object.assign(plots.find(p => p.x === x && p.z === z)!, { owned: true, ...patch });
     set(2, 2, { building: 'restaurant', level: 7, job: { kind: 'upgrade', startedAt: 1_800_000_000_000, endsAt: 1_800_000_060_000 } });
     set(3, 2, { building: 'kelpFarm', level: 4 }); set(0, 0, { building: 'workshop', level: 12 });
     set(4, 4, { building: 'garden', level: 1, job: { kind: 'build', startedAt: 1_800_000_000_000, endsAt: 1_800_000_030_000 } });
@@ -108,10 +110,11 @@ describe('5×5 save migration', () => {
     return { plots, builders: 2, pearls: 42, charms: { current: 3, tide: 1 }, lastGiftDay: '2027-01-15' };
   }
   it('moves every plot, building, level and job to the centred position', () => {
-    const old = legacyTown(), migrated = migrateTown(old) as Town;
+    const old = legacyTown(), migrated = migrateTown(old) as Town & { plots: LegacyPlot[] };
     expect(migrated.plots).toHaveLength(81);
     for (const plot of old.plots) expect(plotAt(migrated, plot.x + 2, plot.z + 2)).toEqual({ ...plot, x: plot.x + 2, z: plot.z + 2 });
-    expect(migrated.plots.filter(p => plotZone(p) !== 'shallows').every(p => !p.owned && !p.building && !p.job)).toBe(true);
+    expect((migrated.plots as LegacyPlot[]).filter(p => plotZone(p) !== 'shallows').every(p => !p.owned && !p.building && !p.job)).toBe(true);
+    expect(migrated.buildings.map(b => [b.kind, b.x / 4, b.z / 4, b.level])).toEqual([['workshop', 2, 2, 12], ['restaurant', C, C, 7], ['kelpFarm', C + 1, C, 4], ['garden', C + 2, C + 2, 1]]);
     expect(migrateTown(migrated)).toBe(migrated);
   });
   it('loads a 25-plot save through the engine, keeps everything and finishes its jobs on time', () => {
@@ -120,15 +123,15 @@ describe('5×5 save migration', () => {
     expect(e.loadWarning).toBe('');
     const town = e.state.town;
     expect(town).toMatchObject({ builders: 2, pearls: 42, charms: { current: 3, tide: 1 }, lastGiftDay: '2027-01-15', zones: ['shallows'] });
-    expect(plotAt(town, C, C)).toMatchObject({ building: 'restaurant', level: 7, job: { kind: 'upgrade', endsAt: 1_800_000_060_000 } });
-    expect(plotAt(town, C + 1, C)).toMatchObject({ building: 'kelpFarm', level: 4, job: null });
-    expect(plotAt(town, C - 2, C - 2)).toMatchObject({ building: 'workshop', level: 12 });
-    expect(plotAt(town, C - 1, C + 1)).toMatchObject({ owned: true, building: null });
+    expect(on(town, C, C)).toMatchObject({ kind: 'restaurant', level: 7, job: { kind: 'upgrade', endsAt: 1_800_000_060_000 } });
+    expect(on(town, C + 1, C)).toMatchObject({ kind: 'kelpFarm', level: 4, job: null });
+    expect(on(town, C - 2, C - 2)).toMatchObject({ kind: 'workshop', level: 12 });
+    expect(plotAt(town, C - 1, C + 1)).toEqual({ x: C - 1, z: C + 1, owned: true }); expect(on(town, C - 1, C + 1)).toBeUndefined();
     expect(ownedCount(town)).toBe(5);
-    // Neighbour bonuses survive the move: the kelp farm still touches the restaurant.
+    // Nearness bonuses survive the move: the kelp farm is still across a street from the restaurant.
     expect(e.townEffects().kelpCost).toBeCloseTo(1 - 4 * .06 * 1.5);
-    h.advance(30); e.update(.1); expect(plotAt(town, C + 2, C + 2)!.job).toBeNull();
-    h.advance(30); e.update(.1); expect(plotAt(town, C, C)).toMatchObject({ level: 8, job: null });
+    h.advance(30); e.update(.1); expect(on(town, C + 2, C + 2)!.job).toBeNull();
+    h.advance(30); e.update(.1); expect(on(town, C, C)).toMatchObject({ level: 8, job: null });
     e.save(); expect(h.read().town.plots).toHaveLength(81); expect(restaurantSchema.safeParse(h.read()).success).toBe(true);
   });
   it('still refuses a town of the wrong size without overwriting the save', () => {

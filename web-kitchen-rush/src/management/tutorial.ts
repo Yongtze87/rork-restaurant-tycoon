@@ -22,7 +22,7 @@ export function migrateTutorial(raw: unknown): unknown {
 /** Furniture ids below this belong to the starter layout; anything placed by the owner gets a higher id. */
 const FIRST_OWNER_ID = 20;
 const hasOpened = (s: RestaurantState): boolean => s.phase !== 'planning' || s.lifetimeServed > 0 || s.history.length > 0;
-const townBuildings = (town: Town) => town.plots.filter(p => p.building && p.building !== 'restaurant');
+const townBuildings = (town: Town) => town.buildings.filter(b => b.kind !== 'restaurant');
 
 /** Whether the simulation already shows this step as done. UI-only steps (welcome, wrap) never finish on their own. */
 export function stepDone(step: TutorialStep, s: RestaurantState): boolean {
@@ -32,7 +32,7 @@ export function stepDone(step: TutorialStep, s: RestaurantState): boolean {
     case 'open': return s.lifetimeServed >= 1;
     case 'plot': return s.town.plots.filter(p => p.owned).length > 1;
     case 'build': return townBuildings(s.town).length > 0;
-    case 'charm': return townBuildings(s.town).some(p => p.job?.kind !== 'build');
+    case 'charm': return townBuildings(s.town).some(b => b.job?.kind !== 'build');
     default: return false;
   }
 }

@@ -8,7 +8,7 @@
 import { GOALS, OFFLINE_SERVICE_DAYS, OFFLINE_SERVICE_HOURS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
 import { CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
-import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, activeLevel, branchIn, busyBuilders, neighbours, plotLockReason, plotsIn, type BuildingKind, type Plot } from '../town';
+import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, activeLevel, branchIn, buildingPlot, busyBuilders, connected, nearSpot, neighbours, plotLockReason, plotsIn, restaurantOf, siteIn, type Building, type BuildingKind, type Plot, type Spot } from '../town';
 import { claimGate, claimableRegions, regionById, type BoostKind, type Region } from '../ocean';
 import { inHome, regionCenter } from '../world';
 import { ZONE_IDS, ZONES, hasZone, zoneError, zoneRequirements, type ZoneId } from '../zones';
@@ -192,8 +192,23 @@ export class Simulation {
   private reserve(): number { return this.engine.operatingCost() * this.p.reserveDays + 30; }
   private budget(): number { return this.s.cash - this.reserve(); }
   /** Finished buildings in the home town (what depth zones count). */
-  private builtCount(): number { return this.homePlots().filter(p => p.building && p.building !== 'restaurant' && p.job?.kind !== 'build').length; }
+  private builtCount(): number { return this.homeBuildings().filter(b => b.kind !== 'restaurant' && b.job?.kind !== 'build').length; }
   private homePlots(): Plot[] { return this.s.town.plots.filter(inHome); }
+  private homeBuildings(): Building[] { return this.s.town.buildings.filter(b => inHome(buildingPlot(b))); }
+  /** A building of this kind has its corner on the plot. */
+  private plotHas(plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind): boolean { return this.s.town.buildings.some(b => b.kind === kind && buildingPlot(b).x === plot.x && buildingPlot(b).z === plot.z); }
+  /** A spot in an owned plot that a road already joins to the restaurant or a branch. */
+  private site(kind: BuildingKind, plot: Pick<Plot, 'x' | 'z'>): Spot | null {
+    const spot = siteIn(this.s.town, kind, plot.x, plot.z); if (!spot) return null;
+    return connected(this.s.town, { ...spot, id: -1, level: 1, job: null }) ? spot : null;
+  }
+  /** Unlock a plot and lay its streets, the way most owners grow a town. */
+  private unlockWithStreets(plot: Pick<Plot, 'x' | 'z'>): boolean {
+    const e = this.engine, cost = e.plotPrice(plot.x, plot.z); if (e.unlockPlot(plot.x, plot.z) !== null) return false;
+    this.spend('plots', cost);
+    const streets = e.streetsFor(plot.x, plot.z).price; if (e.layStreets(plot.x, plot.z) === null) this.spend('roads', streets);
+    return true;
+  }
   private nextZone(): ZoneId | null { return ZONE_IDS.find(id => !hasZone(this.s.town, id)) ?? null; }
 
   /** The owner's routine: claim, unlock zones, run the town, then (in planning) the dining room. */
@@ -245,7 +260,7 @@ export class Simulation {
     if (trainee && struggling && !room) list.push({ cost: 180 * trainee.level, tag: 'training', grow: true, run: () => e.train(trainee.id) });
     // Furniture upgrades: cheapest first, tables and stations ahead of decor.
     // Furniture is kept within three levels of the restaurant building, as its looks suggest.
-    const hall = s.town.plots.find(p => p.building === 'restaurant')!.level;
+    const hall = restaurantOf(s.town).level;
     const upgradable = s.furniture.filter(f => f.level < Math.min(FURNITURE_MAX_LEVEL, hall + 3) && s.day > 3).sort((a, b) => this.upgradeRank(a) - this.upgradeRank(b))[0];
     if (upgradable) {
       const cost = furnitureUpgradeCost(upgradable.kind, upgradable.level + 1);
@@ -274,7 +289,7 @@ export class Simulation {
   /** Cash set aside for the next zone once only its price (and reputation) is missing. */
   private savingFor(): number {
     const zone = this.nextZone(); if (!zone) return 0;
-    const info = ZONES[zone], best = Math.max(...this.homePlots().filter(p => p.building && p.job?.kind !== 'build').map(p => p.level));
+    const info = ZONES[zone], best = Math.max(...this.homeBuildings().filter(b => b.job?.kind !== 'build').map(b => b.level));
     const ready = this.builtCount() >= info.buildings && best >= info.topLevel;
     return ready ? this.engine.zonePrice(zone) : 0;
   }
@@ -307,7 +322,7 @@ export class Simulation {
     const budget = this.budget() - saving - this.claimSaving();
     // Cautious owners hold town spending until the dining room is in shape.
     if (this.p.restaurantFirst && this.planningWishes().some(w => w.tag !== 'furnitureUpgrades' && w.tag !== 'training' && w.cost > 0) && s.day > 2) return false;
-    const built = this.builtCount() + town.plots.filter(p => p.job?.kind === 'build').length;
+    const built = this.builtCount() + town.buildings.filter(b => b.job?.kind === 'build').length;
     const wantBuildings = info ? Math.max(info.buildings, built) : built;
     const cap = (info ? info.buildings : 99) + this.p.extraBuildings;
     if (info && built < Math.min(cap, wantBuildings + this.p.extraBuildings) && (built < info.buildings || this.p.townFirst || budget > 3000)) {
@@ -315,60 +330,61 @@ export class Simulation {
       return this.buildKind(kind, budget);
     }
     // Upgrade towards the zone's level requirement, then anything with spare cash.
-    const plots = town.plots.filter(p => p.building && !p.job && p.level < MAX_LEVEL);
+    const plots = town.buildings.filter(b => !b.job && b.level < MAX_LEVEL && connected(town, b));
     if (!plots.length) return false;
-    const best = Math.max(...this.homePlots().filter(p => p.building).map(p => p.level));
-    let target: Plot | undefined;
+    const best = Math.max(...this.homeBuildings().map(b => b.level));
+    let target: Building | undefined;
     if (info && best < info.topLevel) {
-      const home = plots.filter(inHome), leaders = this.p.restaurantFirst ? home.filter(p => p.building === 'restaurant') : home.filter(p => p.level === best || p.level === best - 1);
+      const home = plots.filter(b => inHome(buildingPlot(b))), leaders = this.p.restaurantFirst ? home.filter(p => p.kind === 'restaurant') : home.filter(p => p.level === best || p.level === best - 1);
       target = (leaders.length ? leaders : home.length ? home : plots).sort((a, b) => this.price(a) - this.price(b))[0];
       // A branch below the wave level and three levels behind the leader is next (the owner saves for it); so is a cheap one while the leader is out of reach.
-      const branch = plots.filter(p => p.building === 'branch').sort((a, b) => this.price(a) - this.price(b))[0];
+      const branch = plots.filter(p => p.kind === 'branch').sort((a, b) => this.price(a) - this.price(b))[0];
       if (target && branch && (branch.level < this.p.wave && branch.level + 2 < best || this.price(target) > budget && this.price(branch) <= budget)) target = branch;
     } else {
       // More guests only help while the dining room keeps up: hold arrival upgrades after a rough day.
       const last = s.history[s.history.length - 1], overrun = last && last.missed > (last.served + last.missed) * .12;
-      target = plots.filter(p => !(overrun && (p.building === 'garden' || p.building === 'restaurant'))).sort((a, b) => this.upgradeValue(a) - this.upgradeValue(b))[0];
+      target = plots.filter(p => !(overrun && (p.kind === 'garden' || p.kind === 'restaurant'))).sort((a, b) => this.upgradeValue(a) - this.upgradeValue(b))[0];
       if (!target || this.price(target) > budget * (zone ? .5 : 1)) return false;
     }
     const cost = this.price(target);
     if (cost > budget) return false;
-    if (e.upgrade(target.x, target.z) !== null) return false;
+    if (e.upgrade(target.id) !== null) return false;
     this.spend('upgrades', cost); return true;
   }
-  /** The next upgrade's price on a plot (its region applied). */
-  private price(p: Plot): number { return this.engine.upgradePrice(p.building!, p.level + 1, p.x, p.z); }
+  /** The next upgrade's price for a building (its region applied). */
+  private price(b: Building): number { const p = buildingPlot(b); return this.engine.upgradePrice(b.kind, b.level + 1, p.x, p.z); }
   /** Lower is better: price, with workshops and spare homes ranked behind earning buildings; branches by price per extra dollar a day. */
-  private upgradeValue(p: Plot): number {
-    if (p.building === 'branch') { const gain = this.engine.branchIncomeAt(p.x, p.z, p.level + 1) - this.engine.branchIncomeAt(p.x, p.z, p.level); return this.price(p) * Math.min(3, 25 / Math.max(1, gain)); }
-    const weight = p.building === 'garden' || p.building === 'restaurant' ? 1 : p.building === 'workshop' ? 2 : p.building === 'homes' ? 3 : 1.5;
-    return this.price(p) * weight * (this.p.restaurantFirst && p.building === 'restaurant' ? .5 : 1);
+  private upgradeValue(p: Building): number {
+    if (p.kind === 'branch') { const gain = this.engine.branchIncomeAt(p, p.level + 1) - this.engine.branchIncomeAt(p, p.level); return this.price(p) * Math.min(3, 25 / Math.max(1, gain)); }
+    const weight = p.kind === 'garden' || p.kind === 'restaurant' ? 1 : p.kind === 'workshop' ? 2 : p.kind === 'homes' ? 3 : 1.5;
+    return this.price(p) * weight * (this.p.restaurantFirst && p.kind === 'restaurant' ? .5 : 1);
   }
   private buildKind(kind: BuildingKind, budget: number): boolean {
     const e = this.engine, town = this.s.town, home = this.homePlots();
-    const owned = home.filter(p => p.owned && !p.building).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
+    const sites = home.filter(p => p.owned).map(p => ({ plot: p, spot: this.site(kind, p) })).filter((x): x is { plot: Plot; spot: Spot } => x.spot !== null);
+    const owned = sites.sort((a, b) => this.plotScore(b.plot, kind, b.spot) - this.plotScore(a.plot, kind, a.spot))[0];
     const fresh = home.filter(p => plotLockReason(town, p) === null).sort((a, b) => this.plotScore(b, kind) - this.plotScore(a, kind))[0];
-    let plot = owned;
+    let spot = owned?.spot;
     const price = e.buildPrice(kind);
-    if (!plot || (fresh && this.plotScore(fresh, kind) > this.plotScore(plot, kind) + 5 && budget >= e.plotPrice() + price * 2)) {
+    if (!owned || (fresh && this.plotScore(fresh, kind) > this.plotScore(owned.plot, kind, owned.spot) + 5 && budget >= e.plotPrice() + price * 2)) {
       if (!fresh) return false;
-      const cost = e.plotPrice(); if (cost + price > budget) return false;
-      if (e.unlockPlot(fresh.x, fresh.z) !== null) return false;
-      this.spend('plots', cost); plot = fresh;
-      if (price > this.budget() - this.savingFor()) return true;
+      const cost = e.plotPrice(); if (cost + price + 100 > budget) return false;
+      if (!this.unlockWithStreets(fresh)) return false;
+      spot = this.site(kind, fresh) ?? undefined;
+      if (!spot || price > this.budget() - this.savingFor()) return true;
     } else if (price > budget) return false;
-    if (e.build(plot.x, plot.z, kind) !== null) return false;
+    if (e.build(kind, spot!.x, spot!.z, spot!.turned) !== null) return false;
     this.spend('buildings', price); return true;
   }
-  private plotScore(plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind): number {
-    const town = this.s.town, near = (k: BuildingKind) => neighbours(town, plot).some(p => p.building === k);
+  private plotScore(plot: Pick<Plot, 'x' | 'z'>, kind: BuildingKind, spot?: Spot): number {
+    const town = this.s.town, near = (k: BuildingKind) => spot ? nearSpot(town, spot, k) : neighbours(town, plot).some(p => this.plotHas(p, k)) || this.plotHas(plot, k);
     const ring = Math.max(Math.abs(plot.x - C), Math.abs(plot.z - C));
     if (!this.p.smartAdjacency) return -ring - (plot.z * TOWN_SIZE + plot.x) / 100;
     let score = -ring;
     if ((kind === 'kelpFarm' || kind === 'fishery' || kind === 'garden') && near('restaurant')) score += 10;
     if (kind === 'garden' && near('homes')) score += 4;
     if (kind === 'homes' && near('garden')) score += 6;
-    // Keep restaurant-adjacent plots for buildings that profit from them.
+    // Keep spots near the restaurant for buildings that profit from them.
     if ((kind === 'homes' || kind === 'workshop') && near('restaurant')) score -= 8;
     return score;
   }
@@ -385,17 +401,19 @@ export class Simulation {
     for (const id of s.ocean.regions) {
       if (busyBuilders(town) >= town.builders) return;
       const region = regionById(id)!, centre = regionCenter(region.x, region.y), branch = branchIn(town, id), room = this.budget() - this.savingFor();
-      if (!branch) { const price = e.buildPrice('branch', centre.x, centre.z); if (price <= room && e.build(centre.x, centre.z, 'branch') === null) this.spend('branches', price); continue; }
+      if (!branch) { const price = e.buildPrice('branch', centre.x, centre.z), spot = siteIn(town, 'branch', centre.x, centre.z); if (spot && price <= room && e.build('branch', spot.x, spot.z, spot.turned) === null) this.spend('branches', price); continue; }
       const kind = (Object.keys(region.modifiers.boost)[0] as BoostKind | undefined) ?? (region.biome === 'lagoon' ? 'garden' : null);
       if (!kind || activeLevel(branch) < 2) continue;
-      const plots = plotsIn(town, id), have = plots.filter(p => p.building === kind).length;
+      const plots = plotsIn(town, id), have = town.buildings.filter(b => b.kind === kind && plots.some(p => p.x === buildingPlot(b).x && p.z === buildingPlot(b).z)).length;
       if (have >= this.p.special) continue;
-      const spot = plots.filter(p => !p.building && (p.owned || plotLockReason(town, p) === null) && neighbours(town, p).some(n => n.building === 'branch' || n.building === kind)).sort((a, b) => Number(b.owned) - Number(a.owned))[0];
-      if (!spot) continue;
-      const plotCost = spot.owned ? 0 : e.plotPrice(spot.x, spot.z), price = e.buildPrice(kind, spot.x, spot.z);
-      if (plotCost + price * 2 > room) continue;
-      if (!spot.owned) { if (e.unlockPlot(spot.x, spot.z) !== null) continue; this.spend('plots', plotCost); }
-      if (e.build(spot.x, spot.z, kind) === null) this.spend('buildings', price);
+      const near = (p: Plot) => [p, ...neighbours(town, p)].some(n => this.plotHas(n, 'branch') || this.plotHas(n, kind));
+      const plot = plots.filter(p => (p.owned ? this.site(kind, p) : plotLockReason(town, p) === null) && near(p)).sort((a, b) => Number(b.owned) - Number(a.owned))[0];
+      if (!plot) continue;
+      const plotCost = plot.owned ? 0 : e.plotPrice(plot.x, plot.z), price = e.buildPrice(kind, plot.x, plot.z);
+      if (plotCost + price * 2 + 100 > room) continue;
+      if (!plot.owned && !this.unlockWithStreets(plot)) continue;
+      const spot = this.site(kind, plot);
+      if (spot && e.build(kind, spot.x, spot.z, spot.turned) === null) this.spend('buildings', price);
     }
   }
   /** The owner's region choice among regions whose depth gate is open. */
@@ -416,10 +434,10 @@ export class Simulation {
     this.trackRewards();
     if (this.options.charms === false) return;
     const e = this.engine, town = this.s.town;
-    for (const plot of town.plots.filter(p => p.job)) for (const charm of ['tide', 'current'] as const) {
+    for (const b of town.buildings.filter(p => p.job)) for (const charm of ['tide', 'current'] as const) {
       // Spend a charm once at least half of it would be used.
-      while (plot.job && town.charms[charm] > 0 && plot.job.endsAt - this.now >= CHARMS[charm].seconds * 500) {
-        if (e.useCharm(plot.x, plot.z, charm) !== null) break;
+      while (b.job && town.charms[charm] > 0 && b.job.endsAt - this.now >= CHARMS[charm].seconds * 500) {
+        if (e.useCharm(b.id, charm) !== null) break;
         this.result.charmsUsed[charm]++;
       }
     }
@@ -429,7 +447,7 @@ export class Simulation {
   private finish(): SimResult {
     const s = this.s, r = this.result;
     r.finalCash = Math.round(s.cash); r.activeHours = +(this.activeSeconds / 3600).toFixed(2);
-    r.buildings = s.town.plots.filter(p => p.building).map(p => ({ kind: p.building!, level: p.level }));
+    r.buildings = s.town.buildings.map(b => ({ kind: b.kind, level: b.level }));
     r.furniture = s.furniture.map(f => ({ kind: f.kind, level: f.level }));
     r.staff = s.staff.length; r.trainedLevels = s.staff.reduce((sum, m) => sum + m.level - 1, 0);
     this.trackClaims(); r.fame = s.ocean.fame;
@@ -470,17 +488,21 @@ export function buyFurniture(e: RestaurantEngine, kind: FurnitureKind): string |
   const spot = findSpot(e.state, kind); if (!spot) return 'No room';
   return e.place({ id: -1, kind, x: spot.x, z: spot.z, rotation: spot.rotation });
 }
-/** Unlock (if needed) a free plot, touching the restaurant when asked, and build there. */
-export function buildNear(e: RestaurantEngine, kind: BuildingKind, nextToRestaurant: boolean): string | null {
-  const town = e.state.town, touches = (p: Plot) => neighbours(town, p).some(n => n.building === 'restaurant');
-  const fits = (p: Plot) => !p.building && touches(p) === nextToRestaurant;
-  let plot = town.plots.find(p => p.owned && fits(p));
-  if (!plot) { plot = town.plots.find(p => fits(p) && plotLockReason(town, p) === null); if (!plot) return 'No plot'; const error = e.unlockPlot(plot.x, plot.z); if (error) return error; }
-  return e.build(plot.x, plot.z, kind);
+/** Unlock (if needed, with its streets) a plot near the restaurant or away from it, and build there on a spot a road reaches. */
+export function buildNear(e: RestaurantEngine, kind: BuildingKind, nearRestaurant: boolean): string | null {
+  const town = e.state.town, joined = (spot: Spot) => connected(town, { ...spot, id: -1, level: 1, job: null });
+  const spotIn = (p: Plot) => { const spot = siteIn(town, kind, p.x, p.z); return spot && joined(spot) && nearSpot(town, spot, 'restaurant') === nearRestaurant ? spot : null; };
+  let plot = town.plots.find(p => p.owned && spotIn(p));
+  if (!plot) {
+    const hall = buildingPlot(restaurantOf(town)), ring = (p: Plot) => Math.max(Math.abs(p.x - hall.x), Math.abs(p.z - hall.z));
+    plot = town.plots.filter(p => plotLockReason(town, p) === null).sort((a, b) => nearRestaurant ? ring(a) - ring(b) : ring(b) - ring(a))[0]; if (!plot) return 'No plot';
+    const error = e.unlockPlot(plot.x, plot.z) ?? e.layStreets(plot.x, plot.z); if (error) return error;
+  }
+  const spot = spotIn(plot); return spot ? e.build(kind, spot.x, spot.z, spot.turned) : 'No spot';
 }
 export function upgradeBuilding(e: RestaurantEngine, kind: BuildingKind): string | null {
-  const plot = e.state.town.plots.filter(p => p.building === kind && !p.job).sort((a, b) => a.level - b.level)[0];
-  return plot ? e.upgrade(plot.x, plot.z) : `No ${kind}`;
+  const b = e.state.town.buildings.filter(p => p.kind === kind && !p.job).sort((a, c) => a.level - c.level)[0];
+  return b ? e.upgrade(b.id) : `No ${kind}`;
 }
 
 /**
@@ -496,10 +518,10 @@ export function referenceSnapshot(stage: 'early' | 'mid'): { state: RestaurantSt
     : [['garden', true, 2], ['fishery', true, 2], ['kelpFarm', true, 2], ['homes', false, 1]];
   for (const [kind, near, level] of plan) {
     if (buildNear(e, kind, near) !== null) throw new Error(`reference: ${kind}`); finishJobs();
-    const plot = s.town.plots.filter(p => p.building === kind && p.level === 1 && !p.job).pop()!;
-    while (plot.level < level) { if (e.upgrade(plot.x, plot.z) !== null) throw new Error('reference upgrade'); finishJobs(); }
+    const b = s.town.buildings.filter(p => p.kind === kind && p.level === 1 && !p.job).pop()!;
+    while (b.level < level) { if (e.upgrade(b.id) !== null) throw new Error('reference upgrade'); finishJobs(); }
   }
-  for (let i = 0; i < (mid ? 4 : 1); i++) { const hall = s.town.plots.find(p => p.building === 'restaurant')!; e.upgrade(hall.x, hall.z); finishJobs(); }
+  for (let i = 0; i < (mid ? 4 : 1); i++) { e.upgrade(restaurantOf(s.town).id); finishJobs(); }
   for (const zone of mid ? ['reef', 'twilight'] as ZoneId[] : ['reef'] as ZoneId[]) s.town.zones.push(zone);
   for (const dish of DISH_IDS) if (hasZone(s.town, DISHES[dish].zone)) e.setDish(dish, true, DISHES[dish].fair);
   if (mid) e.expand();

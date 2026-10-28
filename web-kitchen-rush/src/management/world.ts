@@ -5,6 +5,8 @@
  * Pure numbers only (no imports), so town, zones, ocean and the renderer can all share it.
  */
 export const HOME_SIZE = 9;
+/** Tiles per side of one plot: buildings and roads sit on tiles. */
+export const PARCEL = 4;
 /** Plots between the corners of two neighbouring cells. */
 export const REGION_PITCH = 9;
 /** Plots per side of a non-home region: 49 plots, room for a branch and a specialised cluster. */

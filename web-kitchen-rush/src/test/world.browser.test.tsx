@@ -3,7 +3,8 @@ import { page } from 'vitest/browser';
 import { vi } from 'vitest';
 import { restaurant } from '@/management/engine';
 import ManagementGame from '@/management/ManagementGame';
-import { plotAt, plotsIn } from '@/management/town';
+import { branchIn, plotsIn } from '@/management/town';
+import { put } from './town-helpers';
 import { regionCenter } from '@/management/world';
 import '@/index.css';
 import { dateOfDay, localDateKey } from '@/management/calendar';
@@ -42,9 +43,9 @@ it.each([320, 1280])('claims a region from the town panel and starts its branch 
   const empty = screen.getByRole('region', { name: 'Empty plot' });
   await expect.element(empty).toHaveTextContent('Glasswater Lagoon · Calm lagoon');
   await expect.element(empty.getByRole('heading', { name: 'Branch restaurant', exact: true })).toBeVisible();
-  await empty.getByRole('button', { name: /Build ·/ }).first().click();
-  const c = regionCenter(0, 1);
-  expect(plotAt(restaurant.state.town, c.x, c.z)).toMatchObject({ building: 'branch', job: { kind: 'build' } });
+  await empty.getByRole('button', { name: 'Place' }).first().click();
+  await screen.getByRole('region', { name: 'Place branch restaurant' }).getByRole('button', { name: /Build ·/ }).click();
+  expect(branchIn(restaurant.state.town, '0,1')).toMatchObject({ kind: 'branch', job: { kind: 'build' } });
   await expect.element(screen.getByTestId('branch-income')).toHaveTextContent('Opens when built: $');
   inside(screen.getByRole('region', { name: 'Branch restaurant' }).element(), width);
   // Back on the list, the plots are grouped by region.
@@ -71,7 +72,7 @@ it('shows why a region cannot be claimed yet and keeps the old ocean map and com
 
 it('pays a finished branch at closing and shows it as branch income on the receipt and in the Ledger', async () => {
   const s = restaurant.state; s.town.zones.push('reef'); s.cash = 30_000; restaurant.claimRegion('1,-1');
-  const c = regionCenter(1, -1); Object.assign(plotAt(s.town, c.x, c.z)!, { building: 'branch', level: 5, job: null }); s.cash = 3000;
+  const c = regionCenter(1, -1); put(s.town, 'branch', c.x, c.z, 5); s.cash = 3000;
   const income = restaurant.branchTotal(); expect(income).toBeGreaterThan(100);
   restaurant.open(); for (let i = 0; i < 3000 && !s.history.length; i++) restaurant.update(.25);
   restaurant.pause(true);

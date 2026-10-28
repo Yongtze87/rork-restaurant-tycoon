@@ -9,7 +9,7 @@ import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
 import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
 import { HOME_ID, claimGate, claimPrice, fameBonuses, isClaimable as regionClaimable, isClaimed, masteryFame, masteryKey, regionAt, regionById, regionPlotCost, type FameBonuses, type MasteryKind, type Region, type RegionModifiers } from './ocean';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, activeLevel, branchIn, branchIncome, busyBuilders, completeJobs, ensureRegionPlots, finishCost, jobSeconds, lookFor, ownedCount, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, regionPlots, townEffects, unlockCost, upgradeCost, type BuildingKind, type CharmKind, type TownEffects } from './town';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_BALANCE, activeLevel, addRegion, addRoads, branchIn, branchIncome, buildingById, buildingPlot, buildingRegion, busyBuilders, completeJobs, ensureRegionPlots, finishCost, isRoad, jobSeconds, lookFor, ownedCount, parcelOf, placementError as sitingError, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, roadError, streetTiles, tileKey, townEffects, unlockCost, upgradeCost, type Building, type BuildingKind, type CharmKind, type TownEffects } from './town';
 import { inHome, regionCenter } from './world';
 
 export const GOALS = [
@@ -76,7 +76,7 @@ export class RestaurantEngine {
   lastCompletion: { id: number; text: string } | null = null;
   private completionSequence = 0;
   private effects: TownEffects | null = null;
-  private effectsKey = '';
+  private effectsKey = ''; private effectsRoads: string[] | null = null;
   private fame: FameBonuses | null = null;
   private fameKey = -1;
   private revision = 0;
@@ -517,8 +517,8 @@ export class RestaurantEngine {
   }
   /** Town effects, cached until a building changes. */
   townEffects(): TownEffects {
-    let key = this.state.town.zones.join(); for (const p of this.state.town.plots) if (p.building) key += `|${p.x},${p.z},${p.building},${p.level},${p.job?.kind ?? ''}`;
-    if (!this.effects || key !== this.effectsKey) { this.effects = townEffects(this.state.town); this.effectsKey = key; }
+    const town = this.state.town; let key = town.zones.join(); for (const b of town.buildings) key += `|${b.x},${b.z},${b.turned ? 1 : 0},${b.kind},${b.level},${b.job?.kind ?? ''}`;
+    if (!this.effects || key !== this.effectsKey || town.roads !== this.effectsRoads) { this.effects = townEffects(town); this.effectsKey = key; this.effectsRoads = town.roads; }
     return this.effects;
   }
   crewLimit(): number { return 6 + this.townEffects().extraCrew; }
@@ -543,13 +543,20 @@ export class RestaurantEngine {
   zonePrice(id: ZoneId): number { return this.scaled(ZONES[id].price); }
   /** Real seconds for a job on a plot: workshops and the region's build time applied. */
   jobSeconds(kind: BuildingKind, nextLevel: number, x = HOME_PLOT.x, z = HOME_PLOT.z): number { return jobSeconds(this.state.town, kind, nextLevel, this.regionModifiers(x, z).buildTime); }
-  /** What the branch on (x, z) earns per service day at a level (its current, finished level by default). */
-  branchIncomeAt(x: number, z: number, level?: number): number {
-    const plot = this.plot(x, z), at = level ?? (plot?.building === 'branch' ? activeLevel(plot) : 0);
-    return branchIncome(at, this.regionModifiers(x, z).branchIncome, this.fameBonuses().branch);
+  /** What a branch earns per service day at a level (its current, finished level by default). */
+  branchIncomeAt(branch: Pick<Building, 'x' | 'z' | 'level' | 'job'>, level?: number): number {
+    const p = buildingPlot(branch);
+    return branchIncome(level ?? activeLevel(branch), this.regionModifiers(p.x, p.z).branchIncome, this.fameBonuses().branch);
   }
   /** Every finished branch's earnings for one service day. */
-  branchTotal(): number { return this.state.town.plots.reduce((sum, p) => p.building === 'branch' ? sum + this.branchIncomeAt(p.x, p.z) : sum, 0); }
+  branchTotal(): number { return this.state.town.buildings.reduce((sum, b) => b.kind === 'branch' ? sum + this.branchIncomeAt(b) : sum, 0); }
+  /** One road tile's price on the plot holding (x, z). */
+  roadPrice(x: number, z: number): number { const p = parcelOf(x, z); return this.scaled(TOWN_BALANCE.road, p.x, p.z); }
+  /** The street tiles a plot still needs (its last row and column, where nothing stands), and their price. */
+  streetsFor(px: number, pz: number): { tiles: string[]; price: number } {
+    const town = this.state.town, tiles = streetTiles(px, pz).filter(k => { const [x, z] = k.split(',').map(Number); return roadError(town, x, z) === null; });
+    return { tiles, price: tiles.length * this.scaled(TOWN_BALANCE.road, px, pz) };
+  }
   /** A region's claim price now: grows with distance, difficulty and the regions already claimed; fame discount applied. */
   claimPrice(id: string): number { const region = regionById(id); return region ? this.scaled(claimPrice(region, this.state.ocean.regions.length)) : 0; }
   /** Why a region can't be claimed now, or null. */
@@ -565,7 +572,7 @@ export class RestaurantEngine {
   claimRegion(id: string): string | null {
     const error = this.claimError(id); if (error) return error;
     const region = regionById(id)!, price = this.claimPrice(id);
-    this.state.cash -= price; this.state.ocean.regions.push(id); this.state.town.plots.push(...regionPlots(id));
+    this.state.cash -= price; this.state.ocean.regions.push(id); addRegion(this.state.town, id);
     const fame = this.checkMastery();
     this.changed(`${region.name} is yours${fame ? ` (+${fame} fame)` : ''}. Unlock plots and build a branch restaurant there.`); return null;
   }
@@ -606,7 +613,7 @@ export class RestaurantEngine {
   private tickTown(at: number): void {
     this.rollCalendar(at);
     const done = completeJobs(this.state.town, at); if (!done.length) return;
-    const last = done[done.length - 1], fame = this.checkMastery(), text = `${BUILDINGS[last.building!].name} ${last.level === 1 ? 'is built' : `reached level ${last.level}`}.${fame ? ` +${fame} fame.` : ''}`;
+    const last = done[done.length - 1], fame = this.checkMastery(), text = `${BUILDINGS[last.kind].name} ${last.level === 1 ? 'is built' : `reached level ${last.level}`}.${fame ? ` +${fame} fame.` : ''}`;
     this.lastCompletion = { id: ++this.completionSequence, text }; this.changed(text);
   }
   /** One Current charm per calendar day (UTC), granted on the first visit of the day. */
@@ -625,7 +632,7 @@ export class RestaurantEngine {
     const cost = this.plotPrice(x, z); if (this.state.cash < cost) return `Unlocking costs ${usd(cost)}.`;
     const reserve = this.reserveError(cost); if (reserve) return reserve;
     this.state.cash -= cost; plot.owned = true; const fame = this.checkMastery();
-    this.changed(`New plot unlocked. Choose what to build.${fame ? ` Every plot here is yours: +${fame} fame.` : ''}`); return null;
+    this.changed(`New plot unlocked. Lay roads, then build.${fame ? ` Every plot here is yours: +${fame} fame.` : ''}`); return null;
   }
   /** Reach a deeper zone: opens its ring of plots and its dishes once every requirement is met. */
   unlockZone(id: ZoneId): string | null {
@@ -635,42 +642,72 @@ export class RestaurantEngine {
     const fame = this.checkMastery(), more = { shallows: '', reef: ', new plots for your town, and the first ring of ocean regions to claim', twilight: ', new plots for your town, and a second ring of regions to claim', abyss: `${fame ? `, +${fame} fame` : ''}, and the open ocean beyond your regions to claim` }[id];
     this.changed(`You reached ${info.place}. New dishes are ready for the menu${more}.`); return null;
   }
-  build(x: number, z: number, kind: BuildingKind): string | null {
-    const town = this.state.town, plot = this.plot(x, z);
-    if (!plot?.owned) return 'Unlock this plot first.';
-    if (plot.building) return 'This plot already has a building.';
-    if (kind === 'restaurant') return 'You already have a restaurant.';
-    if (kind === 'branch' && inHome(plot)) return 'Branches open in other regions. Claim a region first.';
-    if (kind === 'branch' && branchIn(town, plotRegion(plot))) return 'This region already has a branch.';
+  /** Why a building can't go on a spot, or null. `id` is a building being moved. */
+  placeError(kind: BuildingKind, x: number, z: number, turned = false, id?: number): string | null {
+    const town = this.state.town, moving = id === undefined ? undefined : buildingById(town, id), region = plotRegion(parcelOf(x, z));
+    if (kind === 'restaurant' && !moving) return 'You already have a restaurant.';
+    if (kind === 'restaurant' && region !== HOME_ID) return 'Your restaurant stays in the Home Reef.';
+    if (kind === 'branch' && region === HOME_ID) return 'Branches open in other regions. Claim a region first.';
+    if (moving && kind === 'branch' && region !== buildingRegion(moving)) return 'A branch stays in its own region.';
+    if (kind === 'branch' && !moving && branchIn(town, region)) return 'This region already has a branch.';
+    return sitingError(town, { kind, x, z, turned }, id);
+  }
+  /** Start a building with its corner on tile (x, z); `turned` swaps width and depth. */
+  build(kind: BuildingKind, x: number, z: number, turned = false): string | null {
+    const town = this.state.town, plot = parcelOf(x, z), place = this.placeError(kind, x, z, turned); if (place) return place;
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
-    const info = BUILDINGS[kind], price = this.buildPrice(kind, x, z); if (this.state.cash < price) return `${info.name} costs $${price}.`;
+    const info = BUILDINGS[kind], price = this.buildPrice(kind, plot.x, plot.z); if (this.state.cash < price) return `${info.name} costs $${price}.`;
     const reserve = this.reserveError(price); if (reserve) return reserve;
-    const now = this.now(), seconds = this.jobSeconds(kind, 1, x, z);
-    this.state.cash -= price; Object.assign(plot, { building: kind, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
+    const now = this.now(), seconds = this.jobSeconds(kind, 1, plot.x, plot.z);
+    this.state.cash -= price; town.buildings.push({ id: town.nextBuildingId++, kind, x, z, turned, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
     this.changed(`Building a ${info.name.toLowerCase()}.`); return null;
   }
-  upgrade(x: number, z: number): string | null {
-    const town = this.state.town, plot = this.plot(x, z);
-    if (!plot?.building) return 'Build something here first.';
-    if (plot.job) return 'This building is already under construction.';
-    if (plot.level >= MAX_LEVEL) return 'Already at the highest level.';
+  /** Move or turn a building: free and instant, levels and timers stay. */
+  moveBuilding(id: number, x: number, z: number, turned: boolean): string | null {
+    const b = buildingById(this.state.town, id); if (!b) return 'Choose a building first.';
+    const error = this.placeError(b.kind, x, z, turned, id); if (error) return error;
+    Object.assign(b, { x, z, turned }); this.changed(`${BUILDINGS[b.kind].name} moved.`); return null;
+  }
+  /** Lay one road tile: instant, no builder needed. */
+  placeRoad(x: number, z: number): string | null {
+    const town = this.state.town, error = roadError(town, x, z); if (error) return error;
+    const price = this.roadPrice(x, z); if (this.state.cash < price) return `A road costs ${usd(price)}.`;
+    this.state.cash -= price; addRoads(town, [tileKey(x, z)]); this.changed(); return null;
+  }
+  /** Lift a road tile (free). Buildings that relied on it stop working until a road reaches them again. */
+  removeRoad(x: number, z: number): string | null {
+    const town = this.state.town; if (!isRoad(town, x, z)) return 'There is no road here.';
+    const key = tileKey(x, z); town.roads = town.roads.filter(k => k !== key); this.changed(); return null;
+  }
+  /** Lay a plot's streets (its last row and column) in one go. */
+  layStreets(px: number, pz: number): string | null {
+    if (!plotAt(this.state.town, px, pz)?.owned) return 'Unlock this plot first.';
+    const { tiles, price } = this.streetsFor(px, pz); if (!tiles.length) return 'This plot already has its streets.';
+    if (this.state.cash < price) return `These streets cost ${usd(price)}.`;
+    this.state.cash -= price; addRoads(this.state.town, tiles); this.changed(`${tiles.length} road tiles laid.`); return null;
+  }
+  upgrade(id: number): string | null {
+    const town = this.state.town, b = buildingById(town, id);
+    if (!b) return 'Build something here first.';
+    if (b.job) return 'This building is already under construction.';
+    if (b.level >= MAX_LEVEL) return 'Already at the highest level.';
     if (busyBuilders(town) >= town.builders) return 'Your builder is busy. Wait, use a charm, or hire a second builder.';
-    const cost = this.upgradePrice(plot.building, plot.level + 1, x, z); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
+    const p = buildingPlot(b), cost = this.upgradePrice(b.kind, b.level + 1, p.x, p.z); if (this.state.cash < cost) return `This upgrade costs $${cost}.`;
     const reserve = this.reserveError(cost); if (reserve) return reserve;
     const now = this.now(); this.state.cash -= cost;
-    plot.job = { kind: 'upgrade', startedAt: now, endsAt: now + this.jobSeconds(plot.building, plot.level + 1, x, z) * 1000 };
-    this.changed(`Upgrading ${BUILDINGS[plot.building].name.toLowerCase()} to level ${plot.level + 1}.`); return null;
+    b.job = { kind: 'upgrade', startedAt: now, endsAt: now + this.jobSeconds(b.kind, b.level + 1, p.x, p.z) * 1000 };
+    this.changed(`Upgrading ${BUILDINGS[b.kind].name.toLowerCase()} to level ${b.level + 1}.`); return null;
   }
-  useCharm(x: number, z: number, charm: CharmKind): string | null {
-    const town = this.state.town, plot = this.plot(x, z); if (!plot?.job) return 'Nothing is being built here.';
+  useCharm(id: number, charm: CharmKind): string | null {
+    const town = this.state.town, b = buildingById(town, id); if (!b?.job) return 'Nothing is being built here.';
     if (town.charms[charm] < 1) return `You have no ${CHARMS[charm].name}s.`;
-    town.charms[charm]--; plot.job.endsAt -= CHARMS[charm].seconds * 1000;
+    town.charms[charm]--; b.job.endsAt -= CHARMS[charm].seconds * 1000;
     this.event = `${CHARMS[charm].name} used.`; this.tickTown(this.now()); this.changed(); return null;
   }
-  finishNow(x: number, z: number): string | null {
-    const town = this.state.town, plot = this.plot(x, z); if (!plot?.job) return 'Nothing is being built here.';
-    const now = this.now(), cost = finishCost(plot.job, now); if (town.pearls < cost) return `Finishing now needs ${cost} pearls.`;
-    town.pearls -= cost; plot.job.endsAt = now; this.tickTown(now); return null;
+  finishNow(id: number): string | null {
+    const town = this.state.town, b = buildingById(town, id); if (!b?.job) return 'Nothing is being built here.';
+    const now = this.now(), cost = finishCost(b.job, now); if (town.pearls < cost) return `Finishing now needs ${cost} pearls.`;
+    town.pearls -= cost; b.job.endsAt = now; this.tickTown(now); return null;
   }
   buy(item: keyof typeof SHOP): string | null {
     const town = this.state.town, offer = SHOP[item];

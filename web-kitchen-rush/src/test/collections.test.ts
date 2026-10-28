@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { ACHIEVEMENTS, FAMILY_IDS, FIVE_STAR_RATING, PERFECT_DAY_MIN_SERVED, achievement, claimableAchievements, isClaimable, recordDay, visibleSteps } from '@/management/collections';
 import { BUILDABLE, TOWN_SIZE } from '@/management/town';
+import { buildOn } from './town-helpers';
 import { TIDE_KINDS, TIDES } from '@/management/tides';
 import { DISH_IDS, SAVE_KEY, createRestaurant, freshCollections, restaurantSchema, type Report, INGREDIENT_IDS } from '@/management/types';
 
@@ -66,7 +67,7 @@ describe('counters', () => {
   });
   it('counts a building only once its construction is finished', () => {
     let now = 1_800_000_000_000; const e = new RestaurantEngine(undefined, () => now); e.state.cash = 100_000;
-    e.unlockPlot(C + 1, C); e.build(C + 1, C, 'garden');
+    e.unlockPlot(C + 1, C); buildOn(e, 'garden', C + 1, C);
     expect(isClaimable(e.state, achievement('own-garden')!)).toBe(false);
     now += 3_600_000; e.update(.1); expect(isClaimable(e.state, achievement('own-garden')!)).toBe(true);
   });

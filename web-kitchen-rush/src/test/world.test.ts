@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
 import { BIOMES, CLAIM, FAME_BONUS, FIRST_RING, MASTERY, OCEAN_BALANCE, VISITABLE_BIOMES, claimGate, claimPrice, claimableRegions, createOcean, describeModifiers, fameBonuses, isClaimable, masteryFame, migrateOcean, modifiersFor, neighbourIds, oceanSchema, regionAt, regionById, regionStatus, ring, worldBounds } from '@/management/ocean';
 import { HOME_ID, REGION_PITCH, REGION_SIZE, cellOf, inHome, regionBlock, regionCenter, regionOfPlot } from '@/management/world';
-import { BUILDINGS, TOWN_BALANCE, TOWN_SIZE, branchIncome, buildableAt, createTown, jobSeconds, plotAt, plotsIn, townEffects, unlockCost, upgradeCost, type BuildingKind } from '@/management/town';
+import { BUILDINGS, PARCEL, TOWN_BALANCE, TOWN_SIZE, branchIn, branchIncome, buildableAt, createTown, jobSeconds, plotsIn, streetTiles, townEffects, unlockCost, upgradeCost, type BuildingKind } from '@/management/town';
+import { buildOn, put } from './town-helpers';
 import { achievement, isClaimable as achievementReady } from '@/management/collections';
 import { ZONES, type ZoneId } from '@/management/zones';
 import { createRestaurant, restaurantSchema } from '@/management/types';
@@ -24,9 +25,7 @@ const zones = (e: RestaurantEngine, ...ids: ZoneId[]) => { e.state.town.zones.pu
 /** A rich owner who reached the given zones, with an engine on a fake wall clock and storage. */
 function rich(reached: ZoneId[] = ['reef'], h = harness()) { const e = new RestaurantEngine(h.storage, h.now); e.state.cash = 1_000_000; zones(e, ...reached); return { e, h }; }
 /** Build and finish a building at once (construction is tested elsewhere). */
-function place(e: RestaurantEngine, x: number, z: number, kind: BuildingKind, level = 1) {
-  const plot = plotAt(e.state.town, x, z)!; Object.assign(plot, { owned: true, building: kind, level, job: null }); return plot;
-}
+const place = (e: RestaurantEngine, x: number, z: number, kind: BuildingKind, level = 1) => put(e.state.town, kind, x, z, level);
 
 describe('world geometry', () => {
   it('puts the 9×9 home town in region (0, 0) and a 7×7 block with a one-plot path in every other cell', () => {
@@ -129,7 +128,8 @@ describe('claiming regions', () => {
     const before = structuredClone(e.state.town.plots);
     expect(e.claimRegion('1,0')).toBeNull();
     const plots = plotsIn(e.state.town, '1,0'), centre = regionCenter(1, 0);
-    expect(plots).toHaveLength(REGION_SIZE * REGION_SIZE); expect(plots.filter(p => p.owned)).toEqual([{ x: centre.x, z: centre.z, owned: true, building: null, level: 0, job: null }]);
+    expect(plots).toHaveLength(REGION_SIZE * REGION_SIZE); expect(plots.filter(p => p.owned)).toEqual([{ x: centre.x, z: centre.z, owned: true }]);
+    expect(e.state.town.roads).toEqual(expect.arrayContaining(streetTiles(centre.x, centre.z)));
     expect(e.state.town.plots.slice(0, before.length)).toEqual(before);
     expect(e.event).toBe(`Ember Vents is yours (+${masteryFame(regionAt(1, 0), 'claim')} fame). Unlock plots and build a branch restaurant there.`);
     const reloaded = new RestaurantEngine(h.storage, h.now);
@@ -153,7 +153,8 @@ describe('specialisation applies only in its own region', () => {
   it('makes a kelp farm in a kelp forest stronger, but not one at home or in another biome', () => {
     const { e } = rich(['reef', 'twilight']); e.claimRegion('0,-1'); e.claimRegion('1,0');
     const kelp = regionCenter(0, -1), vents = regionCenter(1, 0);
-    const kelpFarm = (x: number, z: number) => { const t = createTown(); t.plots.push(...structuredClone(e.state.town.plots.slice(TOWN_SIZE * TOWN_SIZE))); Object.assign(plotAt(t, x, z)!, { owned: true, building: 'kelpFarm', level: 5 }); return 1 - townEffects(t).kelpCost; };
+    // A region's buildings reach its branch by road: one stands in the far corner, out of reach of the hub bonus.
+    const kelpFarm = (x: number, z: number) => { const t = createTown(); t.plots.push(...structuredClone(e.state.town.plots.slice(TOWN_SIZE * TOWN_SIZE))); if (x !== 0) put(t, 'branch', x + 3, z + 3); put(t, 'kelpFarm', x, z, 5); return 1 - townEffects(t).kelpCost; };
     const atHome = kelpFarm(0, 0), inForest = kelpFarm(kelp.x, kelp.z), inVents = kelpFarm(vents.x, vents.z);
     expect(atHome).toBeCloseTo(5 * TOWN_BALANCE.producerPerLevel); expect(inVents).toBeCloseTo(atHome);
     expect(inForest).toBeCloseTo(atHome * regionAt(0, -1).modifiers.boost.kelpFarm!);
@@ -161,7 +162,7 @@ describe('specialisation applies only in its own region', () => {
   it('keeps town-wide caps', () => {
     const { e } = rich(); e.claimRegion('0,-1');
     const c = regionCenter(0, -1);
-    for (let i = -3; i <= 3; i++) place(e, c.x + i, c.z + 2, 'kelpFarm', 15);
+    place(e, c.x, c.z, 'branch'); for (let i = -3; i <= 3; i++) place(e, c.x + i, c.z + 2, 'kelpFarm', 15);
     expect(e.townEffects().kelpCost).toBeCloseTo(1 - TOWN_BALANCE.producerCap);
   });
   it('charges region prices and build times only for plots in that region', () => {
@@ -173,14 +174,14 @@ describe('specialisation applies only in its own region', () => {
     expect(e.upgradePrice('garden', 4, trench.x, trench.z)).toBe(Math.round(upgradeCost('garden', 4) * m.buildCost / 10) * 10);
     expect(e.jobSeconds('garden', 1, trench.x, trench.z)).toBe(Math.round(BUILDINGS.garden.buildSeconds * m.buildTime));
     expect(e.jobSeconds('garden', 1, lagoon.x, lagoon.z)).toBeLessThan(BUILDINGS.garden.buildSeconds);
-    const cash = e.state.cash; expect(e.build(trench.x, trench.z, 'garden')).toBeNull();
+    const cash = e.state.cash; expect(buildOn(e, 'garden', trench.x, trench.z)).toBeNull();
     expect(e.state.cash).toBe(cash - e.buildPrice('garden', trench.x, trench.z));
-    expect(plotAt(e.state.town, trench.x, trench.z)!.job!.endsAt - plotAt(e.state.town, trench.x, trench.z)!.job!.startedAt).toBe(e.jobSeconds('garden', 1, trench.x, trench.z) * 1000);
+    const job = e.state.town.buildings.find(b => b.kind === 'garden')!.job!; expect(job.endsAt - job.startedAt).toBe(e.jobSeconds('garden', 1, trench.x, trench.z) * 1000);
   });
   it('makes workshops in a sunken city speed up every job more', () => {
     const { e } = rich(); e.claimRegion('1,1');
-    const home = createTown(); Object.assign(plotAt(home, 0, 0)!, { owned: true, building: 'workshop', level: 5 });
-    const c = regionCenter(1, 1); place(e, c.x, c.z, 'workshop', 5);
+    const home = createTown(); put(home, 'workshop', 0, 0, 5);
+    const c = regionCenter(1, 1); place(e, c.x + 3, c.z + 3, 'branch'); place(e, c.x, c.z, 'workshop', 5);
     expect(jobSeconds(e.state.town, 'garden', 6)).toBeLessThan(jobSeconds(home, 'garden', 6));
   });
 });
@@ -192,24 +193,24 @@ describe('branch restaurants', () => {
     expect(buildableAt(e.state.town, { x: C + 1, z: C })).not.toContain('branch');
     expect(buildableAt(e.state.town, c)[0]).toBe('branch');
     e.state.town.plots.find(p => p.x === C + 1 && p.z === C)!.owned = true;
-    expect(e.build(C + 1, C, 'branch')).toBe('Branches open in other regions. Claim a region first.');
-    expect(e.build(c.x, c.z, 'branch')).toBeNull(); expect(e.event).toBe('Building a branch restaurant.');
+    expect(e.build('branch', (C + 1) * PARCEL, C * PARCEL)).toBe('Branches open in other regions. Claim a region first.');
+    expect(buildOn(e, 'branch', c.x, c.z)).toBeNull(); expect(e.event).toBe('Building a branch restaurant.');
     e.state.town.builders = 2; e.unlockPlot(c.x + 1, c.z);
     expect(buildableAt(e.state.town, { x: c.x + 1, z: c.z })).not.toContain('branch');
-    expect(e.build(c.x + 1, c.z, 'branch')).toBe('This region already has a branch.');
+    expect(e.build('branch', (c.x + 1) * PARCEL, c.z * PARCEL)).toBe('This region already has a branch.');
   });
   it('earn from level, region and fame, and only once finished', () => {
     expect(branchIncome(1, 1)).toBe(TOWN_BALANCE.branchBase); expect(branchIncome(0, 1.5)).toBe(0);
     expect(branchIncome(6, 1.2, .1)).toBe(Math.round(TOWN_BALANCE.branchBase * 6 ** TOWN_BALANCE.branchExponent * 1.2 * 1.1));
     const { e, h } = rich(); e.claimRegion('1,-1'); e.claimRegion('0,1');
     const ice = regionCenter(1, -1), lagoon = regionCenter(0, 1);
-    e.build(ice.x, ice.z, 'branch'); expect(e.branchIncomeAt(ice.x, ice.z)).toBe(0); expect(e.branchTotal()).toBe(0);
+    buildOn(e, 'branch', ice.x, ice.z); const iceBranch = () => branchIn(e.state.town, '1,-1')!; expect(e.branchIncomeAt(iceBranch())).toBe(0); expect(e.branchTotal()).toBe(0);
     h.advance(BUILDINGS.branch.buildSeconds * 2); e.update(.1);
     const fame = e.fameBonuses().branch;
-    expect(e.branchIncomeAt(ice.x, ice.z)).toBe(branchIncome(1, regionAt(1, -1).modifiers.branchIncome, fame));
-    place(e, lagoon.x, lagoon.z, 'branch', 1);
-    expect(e.branchIncomeAt(ice.x, ice.z)).toBeGreaterThan(e.branchIncomeAt(lagoon.x, lagoon.z)); // ice shelf tips, lagoon earns less
-    expect(e.branchTotal()).toBe(e.branchIncomeAt(ice.x, ice.z) + e.branchIncomeAt(lagoon.x, lagoon.z));
+    expect(e.branchIncomeAt(iceBranch())).toBe(branchIncome(1, regionAt(1, -1).modifiers.branchIncome, fame));
+    const lagoonBranch = place(e, lagoon.x, lagoon.z, 'branch', 1);
+    expect(e.branchIncomeAt(iceBranch())).toBeGreaterThan(e.branchIncomeAt(lagoonBranch)); // ice shelf tips, lagoon earns less
+    expect(e.branchTotal()).toBe(e.branchIncomeAt(iceBranch()) + e.branchIncomeAt(lagoonBranch));
   });
   it('pay at every closing, on the receipt as branch income, counted in profit', () => {
     const e = new RestaurantEngine(); zones(e, 'reef'); e.state.cash = 50_000; e.claimRegion('1,-1');
@@ -225,7 +226,7 @@ describe('branch restaurants', () => {
     const h = harness(), setup = new RestaurantEngine(h.storage, h.now);
     zones(setup, 'reef', 'twilight'); setup.state.cash = 60_000; setup.claimRegion('1,-1'); setup.claimRegion('-1,0');
     place(setup, regionCenter(1, -1).x, regionCenter(1, -1).z, 'branch', 4);
-    const t = regionCenter(-1, 0); setup.build(t.x, t.z, 'branch'); setup.state.cash = 3000; setup.save();
+    const t = regionCenter(-1, 0); buildOn(setup, 'branch', t.x, t.z); setup.state.cash = 3000; setup.save();
     // The live engine's wall clock moves with each step, as the replay's does (construction finishes on wall time).
     let wall = h.now();
     const offline = new RestaurantEngine(h.storage, h.now), online = new RestaurantEngine(undefined, () => wall);
@@ -245,22 +246,22 @@ describe('fame from mastering regions', () => {
     const { e, h } = rich(), region = regionAt(1, 1);
     expect(e.claimRegion('1,1')).toBeNull();
     const claim = masteryFame(region, 'claim'); expect(e.state.ocean.fame).toBe(claim); expect(e.state.ocean.mastery).toEqual(['1,1:claim']);
-    const c = regionCenter(1, 1); e.build(c.x, c.z, 'branch'); h.advance(3600); e.update(.1);
-    const branch = plotAt(e.state.town, c.x, c.z)!; branch.level = 5; e.upgrade(c.x, c.z); h.advance(3600); e.update(.1);
+    const c = regionCenter(1, 1); buildOn(e, 'branch', c.x, c.z); h.advance(3600); e.update(.1);
+    const branch = branchIn(e.state.town, '1,1')!; branch.level = 5; e.upgrade(branch.id); h.advance(3600); e.update(.1);
     expect(branch.level).toBe(6); expect(e.state.ocean.fame).toBe(claim + masteryFame(region, 'branch6')); expect(e.lastCompletion?.text).toBe(`Branch restaurant reached level 6. +${masteryFame(region, 'branch6')} fame.`);
-    branch.level = 10; e.upgrade(c.x, c.z); h.advance(3 * 3600); e.update(.1);
+    branch.level = 10; e.upgrade(branch.id); h.advance(3 * 3600); e.update(.1);
     expect(e.state.ocean.mastery).toEqual(['1,1:claim', '1,1:branch6', '1,1:branch11']);
     for (const p of plotsIn(e.state.town, '1,1')) if (!p.owned && p !== plotsIn(e.state.town, '1,1').find(q => !q.owned && q.x === c.x + 3 && q.z === c.z + 3)) p.owned = true;
     const fameBefore = e.state.ocean.fame; expect(e.unlockPlot(c.x + 3, c.z + 3)).toBeNull();
     expect(e.state.ocean.fame).toBe(fameBefore + masteryFame(region, 'full')); expect(e.event).toContain(`+${masteryFame(region, 'full')} fame`);
     expect(e.state.ocean.fame).toBe(['claim', 'branch6', 'branch11', 'full'].reduce((s, k) => s + masteryFame(region, k as 'claim'), 0));
     // Nothing is paid twice, and fame never goes down.
-    const total = e.state.ocean.fame; branch.level = 10; e.upgrade(c.x, c.z); h.advance(4 * 3600); e.update(.1); expect(e.state.ocean.fame).toBe(total);
+    const total = e.state.ocean.fame; branch.level = 10; e.upgrade(branch.id); h.advance(4 * 3600); e.update(.1); expect(e.state.ocean.fame).toBe(total);
   });
   it('pays the Home Reef’s fame once for reaching the Abyss', () => {
     const e = new RestaurantEngine(), s = e.state;
     s.town.zones.push('reef', 'twilight'); s.reputation = 5; s.cash = 1e6;
-    s.town.plots.slice(0, 12).forEach(p => Object.assign(p, { owned: true, building: 'garden', level: 13, job: null }));
+    s.town.plots.slice(0, 12).forEach(p => put(s.town, 'garden', p.x, p.z, 13));
     expect(e.unlockZone('abyss')).toBeNull(); expect(s.ocean.fame).toBe(MASTERY.homeAbyss); expect(e.event).toContain(`+${MASTERY.homeAbyss} fame`);
     s.town.zones.pop(); expect(e.unlockZone('abyss')).toBeNull(); expect(s.ocean.fame).toBe(MASTERY.homeAbyss);
   });
@@ -339,9 +340,9 @@ describe('saves', () => {
   });
   it('rejects plots outside any region and towns missing home plots', () => {
     const s = createRestaurant();
-    expect(restaurantSchema.safeParse({ ...s, town: { ...s.town, plots: [...s.town.plots, { x: 9, z: 4, owned: true, building: null, level: 0, job: null }] } }).success).toBe(false);
-    expect(restaurantSchema.safeParse({ ...s, town: { ...s.town, plots: [...s.town.plots.slice(1), { x: 10, z: 1, owned: false, building: null, level: 0, job: null }] } }).success).toBe(false);
-    expect(restaurantSchema.safeParse({ ...s, town: { ...s.town, plots: [...s.town.plots, { x: 10, z: 1, owned: false, building: 'branch', level: 1, job: null }] } }).success).toBe(true);
+    expect(restaurantSchema.safeParse({ ...s, town: { ...s.town, plots: [...s.town.plots, { x: 9, z: 4, owned: true }] } }).success).toBe(false);
+    expect(restaurantSchema.safeParse({ ...s, town: { ...s.town, plots: [...s.town.plots.slice(1), { x: 10, z: 1, owned: false }] } }).success).toBe(false);
+    expect(restaurantSchema.safeParse({ ...s, town: { ...s.town, plots: [...s.town.plots, { x: 10, z: 1, owned: false }] } }).success).toBe(true);
   });
 });
 
