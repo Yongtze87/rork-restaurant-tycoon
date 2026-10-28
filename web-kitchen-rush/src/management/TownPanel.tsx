@@ -129,10 +129,11 @@ function PlotChip({ plot, now, onSelect }: { plot: Plot; now: number; onSelect: 
 /** Builders, charms and pearls in one line. */
 function Supplies({ onShop }: { onShop: () => void }) {
   const town = restaurant.state.town;
-  return <div className="flex items-center gap-3 text-[11px] font-bold text-ink/70">
+  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-ink/70">
     <span className="flex items-center gap-1" title="Builders working / builders"><Hammer size={13} className="text-teal" aria-hidden="true" />Builders {busyBuilders(town)}/{town.builders}</span>
     <span className="flex items-center gap-1" title="Current charms skip 15 minutes, Tide charms skip an hour"><Waves size={13} className="text-teal" aria-hidden="true" />{town.charms.current} × 15m · {town.charms.tide} × 1h</span>
-    <button type="button" onClick={onShop} className="ml-auto flex min-h-9 items-center gap-1 rounded-lg bg-violet/15 px-2 hover:bg-violet/25"><Gem size={13} className="text-violet" aria-hidden="true" />{town.pearls} pearls</button>
+    <span data-testid="town-safe" className={cn('ml-auto', restaurant.safeToSpend() > 0 ? 'text-teal' : 'text-danger')} title="Cash you can spend and still cover the next payroll">Safe {money(restaurant.safeToSpend())}</span>
+    <button type="button" onClick={onShop} className="flex min-h-9 items-center gap-1 rounded-lg bg-violet/15 px-2 hover:bg-violet/25"><Gem size={13} className="text-violet" aria-hidden="true" />{town.pearls} pearls</button>
   </div>;
 }
 
@@ -155,6 +156,8 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
   const now = useNow(), state = restaurant.state, town = state.town, plot = selected && plotAt(town, selected.x, selected.z), fame = restaurant.fameBonuses();
   const busy = busyBuilders(town) >= town.builders;
   const summary = <Supplies onShop={onShop} />;
+  /** What a price leaves in the register; red when it dips into the next payroll. */
+  const leaves = (cost: number) => state.cash >= cost && <span className={cn('text-[10px] font-bold', restaurant.spendCheck(cost).after < restaurant.spendCheck(cost).reserve ? 'text-danger' : 'text-ink/50')}>Leaves {money(state.cash - cost)}</span>;
   const back = <button type="button" aria-label="Back to town" onClick={() => { onSelect(null); onRegion?.(null); }} className="-ml-1 grid size-10 shrink-0 place-items-center rounded-full text-teal hover:bg-ink/5"><ArrowLeft size={17} /></button>;
   const select = (next: PlotRef) => { onRegion?.(null); onSelect(next); };
   if (!plot && region && regionById(region)) return <RegionDetails id={region} back={back} onSelect={select} action={action} summary={summary} />;
@@ -170,6 +173,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
   if (!plot.owned) {
     const cost = restaurant.plotPrice(plot.x, plot.z), open = canUnlock(town, plot), reason = plotLockReason(town, plot);
     return <section aria-label="Locked plot">{head('Wild seabed')}
+      {open && <p className="mt-1">{leaves(cost)}</p>}
       {open ? <SmallButton tutorial="unlock-plot" className="mt-2 w-full bg-teal text-paper" disabled={state.cash < cost} onClick={() => guardSpend('Unlocking this plot', cost, () => action(restaurant.unlockPlot(plot.x, plot.z)))}><LockKeyhole size={15} />{state.cash < cost ? `Need ${money(cost - state.cash)} more` : `Unlock · ${money(cost)}`}</SmallButton>
         : <Notice>{reason}{!inHome(plot) || hasZone(town, plotZone(plot)) ? ' Plots grow outward from the ones you own.' : ' See Depth zones under All plots & zones.'}</Notice>}
     </section>;
@@ -182,6 +186,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
         <div className="flex items-baseline justify-between gap-1"><h4 className="truncate font-display text-sm leading-tight">{info.name}</h4><span className="shrink-0 text-[11px] font-extrabold tabular-nums text-teal">{money(price)}</span></div>
         <p className="mt-0.5 line-clamp-2 min-h-[26px] text-[10px] font-bold leading-[13px] text-teal">{effectText(town, plot, kind, 1, fame.branch)}</p>
         {(special || bonus) && <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-bold text-gold"><Sparkles size={11} aria-hidden="true" />{special ?? 'Neighbour bonus'}</p>}
+        <p className="mt-0.5">{leaves(price)}</p>
         <SmallButton tutorial="build-building" className="mt-1.5 w-full px-1 text-[11px]" disabled={!affordable || busy} onClick={() => guardSpend(`Building a ${info.name.toLowerCase()}`, price, () => action(restaurant.build(plot.x, plot.z, kind)))}><Hammer size={13} />{!affordable ? `Need ${money(price - state.cash)}` : `Build · ${formatDuration(restaurant.jobSeconds(kind, 1, plot.x, plot.z) * 1000)}`}</SmallButton>
       </div>;
     })}</div></section>;
@@ -197,7 +202,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, onEnterRestaur
     </div>
     : plot.level >= MAX_LEVEL ? <Notice>Fully upgraded. A true reef landmark.</Notice>
     : <div className="mt-2 flex items-center gap-2 rounded-xl border border-ink/10 bg-ink/[.06] p-2">
-      <div className="min-w-0 flex-1"><h4 className="text-xs font-extrabold">Level {next} · <span className="tabular-nums text-teal">{money(cost)}</span></h4><p className="line-clamp-2 text-[10px] font-bold text-teal">{effectText(town, plot, kind, next, fame.branch)}{lookFor(next) !== lookFor(plot.level) ? <span className="text-gold"> · New look: {info.looks[lookFor(next) - 1]}</span> : ''}</p></div>
+      <div className="min-w-0 flex-1"><h4 className="text-xs font-extrabold">Level {next} · <span className="tabular-nums text-teal">{money(cost)}</span> {leaves(cost)}</h4><p className="line-clamp-2 text-[10px] font-bold text-teal">{effectText(town, plot, kind, next, fame.branch)}{lookFor(next) !== lookFor(plot.level) ? <span className="text-gold"> · New look: {info.looks[lookFor(next) - 1]}</span> : ''}</p></div>
       <SmallButton className="shrink-0" disabled={state.cash < cost || busy}  onClick={() => guardSpend(`Upgrading this ${info.name.toLowerCase()}`, cost, () => action(restaurant.upgrade(plot.x, plot.z)))}><Clock size={14} />{state.cash < cost ? `Need ${money(cost - state.cash)}` : busy ? 'Builders busy' : `Upgrade · ${formatDuration(restaurant.jobSeconds(kind, next, plot.x, plot.z) * 1000)}`}</SmallButton>
     </div>}
   </section>;

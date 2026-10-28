@@ -80,7 +80,7 @@ Built with **React 19**, **TypeScript**, **Vite** and a 2D canvas isometric rend
 | Place or move furniture | Tap a grid cell | Arrow keys |
 | Rotate placement | Rotate button | `R` |
 | Cancel / close a menu | ✕ button | `Esc` |
-| Look around | Drag the reef; zoom and reset buttons | — |
+| Look around | Drag the reef; pinch or the zoom buttons (up to 4×) | Mouse wheel zooms |
 
 ---
 

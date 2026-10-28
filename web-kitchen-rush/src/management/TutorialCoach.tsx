@@ -78,7 +78,7 @@ export function TutorialCoach(ui: TutorialView) {
     if (ui.panel === 'menu') sawMenu.current = true; else if (sawMenu.current) next('menu')();
   }, [step, ui.panel]);
   if (index === null || !step || !info) return null;
-  return <section aria-label="Tutorial" data-testid={ui.docked ? "tutorial-docked" : "tutorial"} data-step={step} className={ui.docked ? 'rounded-xl border border-teal/35 bg-teal/5 p-2.5' : 'paper pointer-events-auto absolute left-2 right-[56px] top-2 z-[35] p-2.5 sm:left-3 sm:right-auto sm:w-[280px] sm:p-3'}>
+  return <section aria-label="Tutorial" data-testid={ui.docked ? "tutorial-docked" : "tutorial"} data-step={step} className={ui.docked ? 'rounded-xl border border-teal/35 bg-teal/5 p-2.5' : 'paper pointer-events-auto absolute left-2 right-[56px] top-2 z-[35] p-2.5 sm:left-3 sm:right-auto sm:w-[280px] sm:p-3 short:top-14'}>
     <div className="flex items-center justify-between gap-2">
       <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-teal"><Shell size={13} aria-hidden="true" />Getting started</span>
       <button type="button" onClick={() => restaurant.welcome()} className="-mr-1 min-h-11 px-1 text-xs font-bold text-ink/65 underline-offset-2 hover:text-ink hover:underline">Skip tutorial</button>

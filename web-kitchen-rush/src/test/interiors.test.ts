@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
 import { capacity, comfort, CATALOG, restaurantSchema, type FurnitureKind } from '@/management/types';
-import { accessPoints, findPath, placementError } from '@/management/layout';
+import { accessPoints, findPath, placementError, seatPoint } from '@/management/layout';
 import { entrance } from '@/management/types';
 
 function memoryStorage() {
@@ -41,7 +41,7 @@ describe('interior investments', () => {
     expect(e.state.totals.served).toBeGreaterThan(0);
   });
 
-  it('keeps failed or mid-service purchases atomic and preserves the saved balance', () => {
+  it('keeps failed purchases atomic, and lets occupied tables move with their guests or be sold', () => {
     const storage = memoryStorage(), e = new RestaurantEngine(storage); e.welcome();
     const saved = storage.getItem(), before = JSON.stringify(e.state);
     const invalid = { id: -1, kind: 'table' as const, x: 9, z: 9, rotation: 0 };
@@ -51,9 +51,15 @@ describe('interior investments', () => {
     expect(e.place({ ...invalid, x: 0, z: 7 })).toContain('Not enough'); expect(e.state.cash).toBe(179);
     e.state.cash = 1250; e.open();
     for (let i = 0; i < 400 && !e.state.guests.some(g => g.stage === 'waiting' || g.stage === 'cooking'); i++) e.update(.1);
-    const busy = e.state.guests.find(g => g.stage === 'waiting' || g.stage === 'cooking')!, table = e.state.furniture.find(f => f.id === busy.tableId)!, service = JSON.stringify(e.state);
-    expect(e.sell(table.id)).toContain('Guests are at this table'); expect(e.place({ ...table, x: table.x, z: table.z, rotation: (table.rotation + 1) % 4 })).toContain('Guests are at this table');
-    expect(JSON.stringify(e.state)).toBe(service);
+    const busy = e.state.guests.find(g => g.stage === 'waiting' || g.stage === 'cooking')!, table = e.state.furniture.find(f => f.id === busy.tableId)!;
+    // Moving an occupied table takes its guests along; selling it sends unpaid guests away (missed).
+    const free = [{ x: 0, z: 7 }, { x: 8, z: 7 }, { x: 4, z: 7 }].find(p => !placementError(e.state, { ...table, ...p }))!;
+    expect(e.place({ ...table, ...free })).toBeNull();
+    const moved = e.state.furniture.find(f => f.id === table.id)!, seat = seatPoint(moved, busy.seat);
+    expect(busy.stage).not.toBe('leaving'); expect(busy.x).toBeCloseTo(seat.x); expect(busy.z).toBeCloseTo(seat.z);
+    const missed = e.state.totals.missed, cash = e.state.cash;
+    expect(e.sell(table.id)).toBeNull(); expect(e.state.cash).toBe(cash + Math.floor(CATALOG.table.price * .7));
+    expect(busy.stage).toBe('leaving'); expect(e.state.totals.missed).toBeGreaterThan(missed); expect(e.event).toContain('left');
   });
   it('builds and moves while open: guests and crew re-route and service carries on', () => {
     const e = new RestaurantEngine(); e.open();

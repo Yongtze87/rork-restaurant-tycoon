@@ -23,8 +23,8 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
   const [category, setCategory] = useState<Category>('All');
   const [view, setView] = useState<'shop' | 'room'>('shop');
   const owned = state.furniture.filter(item => matchesCategory(item.kind, category));
-  const card = 'flex w-[112px] shrink-0 flex-col gap-1 rounded-xl border border-ink/10 bg-ink/[.06] p-1.5 text-left transition hover:border-teal/50 disabled:opacity-45';
-  return <section aria-label="Interior store" className="paper mx-2 mb-1 mt-1 shrink-0 p-1.5">
+  const card = 'flex w-[112px] shrink-0 flex-col short:w-[calc(50%-3px)] gap-1 rounded-xl border border-ink/10 bg-ink/[.06] p-1.5 text-left transition hover:border-teal/50 disabled:opacity-45';
+  return <section aria-label="Interior store" className="paper mx-2 mb-1 mt-1 shrink-0 p-1.5 short:mb-2 short:ml-0 short:mt-14 short:max-h-[calc(100%-64px)] short:w-[320px] short:self-start short:overflow-y-auto">
     <div className="flex items-center gap-1">
       <div role="group" aria-label="Interior store views" className="flex shrink-0 rounded-lg bg-ink/5 p-0.5">
         <button type="button" aria-pressed={view === 'shop'} onClick={() => setView('shop')} className={cn('flex min-h-10 items-center gap-1 rounded-md px-2.5 text-[11px] font-extrabold', view === 'shop' ? 'bg-paper text-teal shadow-sm' : 'text-ink/60')}><ShoppingBag size={14} aria-hidden="true" />Shop</button>
@@ -34,7 +34,7 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
       <span className="hidden shrink-0 items-center gap-2 px-1 text-[10px] font-bold text-ink/60 sm:flex"><Armchair size={13} aria-hidden="true" />{capacity(state)}<Leaf size={13} aria-hidden="true" />{comfort(state)}%</span>
       <button type="button" aria-label="Close build menu" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-ink/5"><X size={17} /></button>
     </div>
-    <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5">
+    <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5 short:flex-wrap short:overflow-visible">
       {view === 'shop' ? <>
         {catalogOrder.filter(kind => matchesCategory(kind, category)).map(kind => {
           const item = CATALOG[kind], count = state.furniture.filter(f => f.kind === kind).length, affordable = state.cash >= item.price;

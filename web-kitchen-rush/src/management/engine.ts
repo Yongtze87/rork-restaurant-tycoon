@@ -194,12 +194,41 @@ export class RestaurantEngine {
       agent.route = path ? [...path, ...tail] : [];
     }
   }
-  /** What blocks changing a piece while guests are in: a seated table or a station that is cooking. */
-  private inUse(id: number): string | null {
-    const s = this.state, item = s.furniture.find(f => f.id === id); if (!item || s.phase !== 'service') return null;
-    if (item.kind === 'table' && (s.guests.some(g => g.tableId === id && g.stage !== 'leaving') || s.dirty.some(key => key.startsWith(`${id}:`)))) return 'Guests are at this table. Try again when it is free.';
-    if ((item.kind === 'prep' || item.kind === 'grill') && (s.staff.some(m => m.stationId === id && m.task !== 'idle') || s.guests.some(g => g.stationId === id && g.stage !== 'leaving' && g.stage !== 'eating'))) return 'A dish is being made here. Try again in a moment.';
-    return null;
+  /** Guests seated at a table (not yet leaving), so the UI can say what moving or selling it does. */
+  seatedAt(id: number): number { return this.state.guests.filter(g => g.tableId === id && g.stage !== 'leaving' && g.stage !== 'arriving').length; }
+  /** After moving a piece while open: guests at a table sit at its new seats, and whoever works there follows it. */
+  private followMove(item: Furniture): void {
+    const s = this.state, yaw = Math.PI - item.rotation * Math.PI / 2;
+    if (item.kind === 'table') for (const g of s.guests) {
+      if (g.tableId !== item.id || g.stage === 'leaving') continue;
+      const seat = seatPoint(item, g.seat);
+      if (g.stage === 'arriving') { const path = this.route(g, accessPoints(item)[g.seat]); g.route = [...(path ?? []), seat]; }
+      else Object.assign(g, { x: seat.x, z: seat.z, route: [], yaw });
+    }
+    for (const m of s.staff) {
+      const g = s.guests.find(x => x.id === m.guestId);
+      if (item.kind === 'table') {
+        if (m.task === 'deliver' && g?.tableId === item.id) m.route = this.route(m, accessPoints(item)[g.seat]) ?? [];
+        else if (m.task === 'clean' && m.stationId === item.id) m.route = this.route(m, accessPoints(item)[m.guestId ?? 0]) ?? [];
+      } else if (m.stationId === item.id) {
+        const access = accessPoints(item)[0];
+        if (m.task === 'cooking') Object.assign(m, { x: access.x, z: access.z, route: [], yaw });
+        else if (m.task === 'toKitchen' || m.task === 'collect') m.route = this.route(m, access) ?? [];
+      }
+    }
+  }
+  /** Before selling a piece while open: its seated guests leave (unpaid ones count as missed), and dishes it was making start over. Returns guests sent away. */
+  private clearFor(item: Furniture): number {
+    const s = this.state; let sent = 0;
+    if (item.kind === 'table') {
+      for (const g of s.guests) if (g.tableId === item.id && g.stage !== 'leaving') { const paid = g.paid || g.stage === 'eating'; this.leave(g, paid); if (!paid) sent++; }
+      s.dirty = s.dirty.filter(key => !key.startsWith(`${item.id}:`));
+      s.staff.filter(m => m.task === 'clean' && m.stationId === item.id).forEach(resetStaff);
+    } else {
+      for (const g of s.guests) if (g.stationId === item.id && (g.stage === 'cooking' || g.stage === 'ready')) { g.stage = 'waiting'; g.stationId = null; }
+      s.staff.filter(m => m.stationId === item.id && m.task !== 'deliver').forEach(resetStaff);
+    }
+    return sent;
   }
   private layoutChanged(): void { if (this.state.phase === 'service') this.reroute(); else this.relocateStaff(); }
   private relocateStaff(): void {
@@ -212,21 +241,21 @@ export class RestaurantEngine {
   }
   place(item: Placement): string | null {
     const existing = this.state.furniture.find(f => f.id === item.id);
-    if (existing) { const busy = this.inUse(existing.id); if (busy) return busy; }
     if (existing && existing.kind !== item.kind) return 'Move the selected furniture without changing its type.';
     if (!existing && this.state.cash < CATALOG[item.kind].price) return 'Not enough cash. Earn a little more or sell something you no longer need.';
     const error = placementError(this.state, item); if (error) return error;
     if (existing) Object.assign(existing, item, { level: existing.level });
     else { this.state.cash -= CATALOG[item.kind].price; this.state.furniture.push({ ...item, id: this.state.nextId++, level: 1 }); }
-    this.layoutChanged(); this.changed(`${CATALOG[item.kind].name} ${existing ? 'moved' : 'built'}. A little more you.`); return null;
+    this.layoutChanged(); if (existing && this.state.phase === 'service') this.followMove(existing);
+    this.changed(`${CATALOG[item.kind].name} ${existing ? 'moved' : 'built'}. A little more you.`); return null;
   }
   sell(id: number): string | null {
     const item = this.state.furniture.find(f => f.id === id); if (!item) return 'Select a piece of furniture first.';
-    const busy = this.inUse(id); if (busy) return busy;
     if (this.state.furniture.length === 1) return 'Keep at least one piece of furniture.';
+    const sent = this.state.phase === 'service' ? this.clearFor(item) : 0;
     this.state.furniture = this.state.furniture.filter(f => f.id !== id); this.state.cash += Math.floor(CATALOG[item.kind].price * .7);
     this.recordIncome(Math.floor(CATALOG[item.kind].price * .7), 'sale');
-    this.layoutChanged(); this.changed('Sold for 70% of the original price.'); return null;
+    this.layoutChanged(); this.changed(`Sold for 70% of the original price.${sent ? ` ${sent} seated ${sent === 1 ? 'guest' : 'guests'} left.` : ''}`); return null;
   }
   /** Instant upgrade of one placed piece, also while open. Selling still refunds 70% of the base price. */
   upgradeFurniture(id: number): string | null {

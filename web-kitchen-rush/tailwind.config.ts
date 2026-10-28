@@ -14,6 +14,8 @@ export default {
       },
     },
     extend: {
+      // Phones held sideways: little height, so menus move to the sides (see ManagementGame).
+      screens: { short: { raw: '(orientation: landscape) and (max-height: 520px)' } },
       fontFamily: { display: ['"Baloo 2"', 'Trebuchet MS', 'sans-serif'], body: ['Quicksand', 'Segoe UI', 'sans-serif'] },
       colors: {
         // Bioluminescent night: paper = panel surface, ink = text, teal = glow accent, tomato = main action.
