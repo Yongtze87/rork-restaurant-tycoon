@@ -23,7 +23,8 @@ export function positionLabels(labels: Map<string, HTMLDivElement>, anchors: Map
   const positions: LabelPoint[] = [];
   for (const [id, element] of labels) {
     const anchor = anchors.get(id);
-    if (!anchor) { element.style.visibility = 'hidden'; continue; }
+    // No anchor, or nothing to show (a guest without a bubble): stay hidden and out of the way of other labels.
+    if (!anchor || !element.offsetHeight) { element.style.visibility = 'hidden'; continue; }
     const height = element.offsetHeight, baseHeight = element.querySelector<HTMLElement>('[role="meter"]')?.offsetHeight ?? height;
     positions.push({ id, x: anchor.x, y: anchor.y - (height - baseHeight) / 2, width: element.offsetWidth, height });
   }

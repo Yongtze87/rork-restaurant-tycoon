@@ -3,6 +3,7 @@ import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { GuestSatisfactionBar } from '@/management/GuestSatisfactionBar';
 import { RestaurantLabels } from '@/management/RestaurantLabels';
+import { setAllGuestBubbles } from '@/management/guest-bubbles';
 import { RestaurantEngine } from '@/management/engine';
 import '@/index.css';
 
@@ -41,7 +42,11 @@ it('registers every real guest, updates mutable simulation data, and cleans up o
   for (let i = 0; i < 430; i++) engine.update(.1);
   const labels = { current: new Map<string, HTMLDivElement>() };
   const screen = await render(<RestaurantLabels state={engine.state} labels={labels} />);
-  expect(screen.container.querySelectorAll('[role="meter"]').length).toBe(engine.state.guests.length);
+  // Every guest gets a label slot; only guests who need attention show a mood bubble (all of them with the setting on).
+  expect([...labels.current.keys()].filter(k => k.startsWith('customer-'))).toHaveLength(engine.state.guests.length);
+  expect(screen.container.querySelectorAll('[role="meter"]').length).toBeLessThan(engine.state.guests.length);
+  setAllGuestBubbles(true); await screen.rerender(<RestaurantLabels state={engine.state} labels={labels} />);
+  expect(screen.container.querySelectorAll('[role="meter"]').length).toBe(engine.state.guests.length); setAllGuestBubbles(false);
   const guest = engine.state.guests.find(g => g.stage === 'cooking')!;
   const original = labels.current.get(`customer-${guest.id}`)!;
   guest.waiting = 54; engine.notify();
