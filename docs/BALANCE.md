@@ -358,3 +358,17 @@ place each building on a spot a road already joins to the restaurant. 56-day run
 "Near" (touching or one tile apart) reaches up to 8 plots around the restaurant instead of 4, so the hub bonus is easier to
 get; producer and garden caps still hold. The cautious owner's slower Abyss comes from its plain (non-adjacency) building
 order on smaller footprints; worth a look if it matters.
+
+## Guests follow the seats the crew can serve
+
+Demand now scales with servable seats (seats, capped at about 4.5 per server and per chef at a station), so a growing
+dining room earns more. 56-day runs, real day reached (tiled town → now):
+
+| Owner | Coral Reef | Twilight | Abyss | Profit/day after service day 160 |
+|---|---|---|---|---|
+| balanced | 2 → 2 | 13 → 13 | 25 → 20 | $4,431 → $8,898 |
+| builder | 2 → 2 | 16 → 14 | 28 → 22 | $4,323 → $8,665 |
+| cautious | 4 → 5 | 18 → 20 | 46 → 36 | $3,489 → $6,160 |
+
+The first two zones keep their pace; the Abyss comes 5–10 days sooner, and late-game cash piles up (final cash
+$110k–$480k), which points at a need for late-game things to spend on rather than at a demand problem.
