@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Armchair, ArrowUpRight, ChefHat, Check, Coins, Flame, Flower2, Lamp, Leaf, LockKeyhole, Minus, Plus, Sofa, Sprout, Star, Trash2, TrendingUp, UserPlus, UtensilsCrossed } from 'lucide-react';
+import { Armchair, ArrowUpRight, ChefHat, Check, Coins, Flame, Flower2, Gem, Lamp, Leaf, LockKeyhole, Minus, Plus, Sofa, Sprout, Star, Trash2, TrendingUp, UserPlus, UtensilsCrossed } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { GOALS, PRICE_CHANGES_PER_DAY, restaurant } from './engine';
+import { DEBT_PER_PEARL, GOALS, PRICE_CHANGES_PER_DAY, restaurant } from './engine';
 import { DISHES, DISH_IDS, INGREDIENTS, MAX_PRICE, MIN_PRICE, staffWage, type DishId, type FurnitureKind, type RestaurantState } from './types';
 import { ZONES, hasZone } from './zones';
 import { DailyChallenges } from './DailyChallenges';
@@ -112,6 +112,11 @@ export function LedgerPanel({ state, action, onReport, tab }: { state: Restauran
       <Stat label="Safe to spend" testId="safe-to-spend" value={money(safe)} tone={safe > 0 ? undefined : 'danger'} />
       <Stat label={state.debt ? 'Loan left' : 'Branches per shift'} value={state.debt ? money(state.debt) : money(restaurant.branchTotal())} tone={state.debt ? 'gold' : undefined} />
     </section>
+    {state.debt > 0 && (() => { const pay = restaurant.debtPearls(); return <div data-testid="debt-card" className="mt-2 rounded-xl border border-gold/50 p-2.5">
+      <div className="flex items-center gap-2"><p className="min-w-0 flex-1 text-xs"><strong>Debt {money(state.debt)}</strong> · repaid {money(Math.min(30, state.debt))} a shift</p>
+        <SmallButton className="border-violet/40 bg-violet/15" disabled={pay.pearls < 1} label={pay.pearls ? `Pay ${money(pay.amount)} of debt with ${pay.pearls} pearls` : undefined} onClick={() => action(restaurant.payDebtWithPearls())}><Gem size={13} className="text-violet" />{pay.pearls ? `Clear ${money(pay.amount)} · ${pay.pearls}` : `$${DEBT_PER_PEARL} per pearl`}</SmallButton></div>
+      <p className="mt-1 text-[10px] text-ink/60">Short of cash? Demolish a town building for half of what it cost: tap it in Town.</p>
+    </div>; })()}
     {state.cash < 200 && !state.debt && <div className="mt-2 flex items-center gap-2 rounded-xl border border-gold/50 p-2.5"><p className="min-w-0 flex-1 text-xs"><strong>Recovery loan</strong> · $600, repaid $30 a shift</p><SmallButton onClick={() => action(restaurant.loan())}>Take loan</SmallButton></div>}
     <div className="mt-3"><DailyChallenges challenges={state.dailyChallenges} day={state.calendar.index} title="Today’s challenges" beforeOpening={state.phase === 'planning'} /></div>
     <h3 className="mb-2 flex items-center justify-between font-display text-base">Today so far<Info>Your crew works in short shifts of about 2½ minutes. Wages, rent and any loan repayment are paid at the end of each shift; a day’s receipt is the sum of its shifts. A new day starts at midnight.</Info></h3>

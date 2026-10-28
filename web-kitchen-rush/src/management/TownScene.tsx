@@ -45,8 +45,8 @@ export default function TownScene(props: TownSceneProps) {
     const label = labels.current.find(l => p.x >= l.left && p.x <= l.right && p.y >= l.top && p.y <= l.bottom);
     if (label) { latest.current.onRegion?.(label.id); return; }
     const { draft, roadMode } = latest.current, g = toGrid(v, p.x, p.y), tx = Math.floor((g.x + .5) * PARCEL), tz = Math.floor((g.z + .5) * PARCEL);
-    // A tap on a building's roof picks the building, unless a building or road is being placed.
-    const hit = draft || roadMode ? undefined : boxes.current.filter(b => p.x >= b.left && p.x <= b.right && p.y >= b.top && p.y <= b.bottom).sort((a, b) => b.depth - a.depth)[0];
+    // A tap on a building's art picks it (the one drawn nearest the finger when pictures overlap), unless a building or road is being placed.
+    const hit = draft || roadMode ? undefined : boxes.current.filter(b => p.x >= b.left && p.x <= b.right && p.y >= b.top && p.y <= b.bottom).sort((a, b) => Math.hypot(p.x - a.cx, p.y - a.cy) - Math.hypot(p.x - b.cx, p.y - b.cy) || b.depth - a.depth)[0];
     const building = hit && restaurant.state.town.buildings.find(b => b.id === hit.id);
     if (building) { latest.current.onTile({ x: building.x, z: building.z }, building.id); return; }
     if (plotOfTile(restaurant.state.town, tx, tz)) { latest.current.onTile({ x: tx, z: tz }); return; }

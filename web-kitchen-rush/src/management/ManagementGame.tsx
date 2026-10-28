@@ -34,6 +34,7 @@ import { TUTORIAL_STEPS, currentStep } from './tutorial';
 import { guardSpend } from './spend-guard';
 import { SpendGuardDialog } from './SpendGuardDialog';
 import { ZoomContext } from './iso/zoom-context';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 const RestaurantScene = lazy(() => import('./RestaurantScene'));
 const TownScene = lazy(() => import('./TownScene'));
 const nameSchema = z.object({ name: z.string().trim().min(1, 'Give your restaurant a name.').max(28, 'Keep it under 29 characters.') });
@@ -152,6 +153,8 @@ export default function ManagementGame() {
       <div className="hidden min-w-0 flex-1 items-center gap-2 sm:flex"><div className="grid size-8 shrink-0 place-items-center rounded-lg bg-teal text-paper"><Waves size={18} /></div><h1 className="truncate font-display text-lg leading-tight">{state.name}</h1></div>
       <CashRegister />
       <div className="flex items-center gap-1" aria-label={`Reputation ${state.reputation.toFixed(1)} of 5`}><Star size={14} className="shrink-0 fill-gold text-gold" aria-hidden="true" /><span className="font-display text-sm" aria-hidden="true">{state.reputation.toFixed(1)}</span></div>
+      <Popover><PopoverTrigger data-testid="atmosphere" aria-label={`Atmosphere ${comfort(state)}%, ${capacity(state)} seats`} className="flex h-11 items-center gap-1 rounded-xl px-1.5 font-display text-sm hover:bg-teal/10"><Leaf size={14} className="text-teal" aria-hidden="true" /><span className="tabular-nums">{comfort(state)}%</span></PopoverTrigger>
+        <PopoverContent className="z-[60] w-64 rounded-xl border-teal/30 bg-paper p-3 text-xs leading-relaxed text-ink/80"><p className="font-display text-sm text-ink">Atmosphere {comfort(state)}% · {capacity(state)} seats</p><p>Decor (anemones, kelp screens, lanterns) and furniture upgrades raise it, up to 100%. A cozy room makes guests wait longer and tip more.</p></PopoverContent></Popover>
       <div className="ml-auto flex items-center sm:ml-0"><button className="flex h-11 items-center gap-1 rounded-xl px-2 font-display text-sm hover:bg-teal/10" data-tutorial="pearl-shop" aria-label={`Pearl shop: ${state.town.pearls} pearls`} onClick={() => setShop(true)}><Gem size={15} className="text-violet" aria-hidden="true" /><span className="tabular-nums">{state.town.pearls}</span></button><button className="hidden size-11 place-items-center rounded-xl hover:bg-teal/10 sm:grid" aria-label="How to play" onClick={() => pauseForDialog('help')}><CircleHelp size={17} /></button><button className="grid size-11 place-items-center rounded-xl hover:bg-teal/10" aria-label="Restaurant settings" onClick={() => pauseForDialog('settings')}><Settings2 size={17} /></button></div>
     </div>{capitalWarning && <CapitalWarningBanner warning={capitalWarning} onLedger={() => { setDraft(null); setSelected(null); setLedgerTab('today'); setPanel('ledger'); }} />}</header>
     <div data-testid="management-workspace" className="relative flex min-h-0 flex-1 flex-col short:flex-row">

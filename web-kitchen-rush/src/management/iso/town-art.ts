@@ -126,3 +126,23 @@ export function drawGrottoAnnex(ctx: Ctx, t: number): void {
   for (const [x, y, h] of [[-18, -2, 14], [16, -6, 18], [22, 0, 10]] as const) { ctx.fillStyle = 'rgba(120,240,255,.9)'; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x, y - h); ctx.lineTo(x + 3, y); ctx.closePath(); ctx.fill(); }
   ctx.restore();
 }
+
+/** A bubble-cart seen from above at an angle: shell body, glass dome, and headlights after dark. `sx, sy` is its heading on screen. */
+export function drawCart(ctx: Ctx, color: string, sx: number, sy: number, night: number): void {
+  const angle = Math.atan2(sy, sx || 1e-6);
+  ctx.fillStyle = 'rgba(18,15,46,.28)'; ctx.beginPath(); ctx.ellipse(0, 1.5, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.scale(1, .55); ctx.rotate(angle);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-5.5, -3.2, 11, 6.4, 3.2); ctx.fill();
+  ctx.fillStyle = 'rgba(214,246,255,.85)'; ctx.beginPath(); ctx.ellipse(-.5, 0, 2.6, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+  if (night > .2) glow(ctx, 6, 0, 7, 'rgba(255,242,190,A)', .7 * night);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(-1.2, -3.2, .9, 0, Math.PI * 2); ctx.fill();
+}
+/** A Mareen walking: a little body, a round head with fin ears, a gentle bob. */
+export function drawWalker(ctx: Ctx, color: string, t: number, seed: number): void {
+  const bob = Math.abs(Math.sin(t * 6 + seed)) * .8;
+  ctx.fillStyle = 'rgba(18,15,46,.25)'; ctx.beginPath(); ctx.ellipse(0, 0, 2.4, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-1.6, -6 - bob, 3.2, 5, 1.4); ctx.fill();
+  ctx.fillStyle = '#F6E7D6'; ctx.beginPath(); ctx.arc(0, -7.6 - bob, 1.9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#4DF0FF'; ctx.beginPath(); ctx.moveTo(-1.8, -8 - bob); ctx.lineTo(-3.2, -9.6 - bob); ctx.lineTo(-1.4, -7 - bob); ctx.fill(); ctx.beginPath(); ctx.moveTo(1.8, -8 - bob); ctx.lineTo(3.2, -9.6 - bob); ctx.lineTo(1.4, -7 - bob); ctx.fill();
+}

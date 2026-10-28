@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { OFFLINE_SERVICE_HOURS, RestaurantEngine, OFFLINE_SERVICE_DAYS } from '@/management/engine';
+import { OFFLINE_SERVICE_HOURS, RestaurantEngine, OFFLINE_SERVICE_DAYS, WARM_UP_SECONDS } from '@/management/engine';
 import { SAVE_KEY, createRestaurant, restaurantSchema } from '@/management/types';
 
 // These tests compare long offline replays with live play, so the crew may work more than one day while away.
@@ -89,6 +89,8 @@ describe('continuous local restaurant', () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(3 * 3600); await e.resume();
     expect(e.state.day).toBe(1 + OFFLINE_SERVICE_DAYS); expect(e.state.history).toHaveLength(OFFLINE_SERVICE_DAYS); expect(e.awaySummary?.capped).toBe(true);
     expect(e.state.lastActiveAt).toBe(h.now()); const clock = e.state.clock; await e.resume(); expect(e.state.clock).toBe(clock);
+    // The next shift is already under way on return: guests are in, not just starting to arrive.
+    expect(e.state.elapsed).toBeCloseTo(WARM_UP_SECONDS, 0); expect(e.state.guests.length).toBeGreaterThan(0);
   });
   it('replays at most the offline cap of an eight-hour absence, with bounded history and valid checkpoints', async () => {
     const h = harness(), e = new RestaurantEngine(h.storage, h.now); e.open(); e.suspend(); h.advance(8 * 3600); await e.resume();

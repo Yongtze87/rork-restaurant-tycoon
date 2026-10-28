@@ -8,7 +8,7 @@ const titles: Record<CapitalWarning['kind'], string> = { low: 'Cash running low'
 /** Persistent one-line warning with a quiet live announcement: changing balances are not announced every tick. */
 export const CapitalWarningBanner = memo(function CapitalWarningBanner({ warning, onLedger }: { warning: CapitalWarning; onLedger: () => void }) {
   const { kind, cash, bills } = warning, title = titles[kind];
-  const advice = 'The restaurant stays open. If the register is short at the end of a shift, the bank covers the payroll and you repay $30 a shift.';
+  const advice = 'The restaurant stays open. If the register is short at the end of a shift, the bank covers the payroll and you repay $30 a shift. Pearls can clear debt, and town buildings can be demolished for half of what they cost.';
   return <section aria-label="Cash safety warning" data-testid="capital-warning" title={advice} className="pointer-events-auto mx-auto mt-1.5 flex max-w-[1600px] items-center gap-2 rounded-xl bg-danger py-0.5 pl-2.5 pr-0.5">
     <CircleAlert size={18} className="shrink-0 text-abyss" aria-hidden="true" />
     <div className="min-w-0 flex-1 leading-tight">

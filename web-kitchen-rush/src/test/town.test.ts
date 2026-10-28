@@ -249,3 +249,22 @@ describe('the east grotto takes room in town', () => {
     const e = new RestaurantEngine(h.storage, h.now); expect(e.loadWarning).toBe(''); expect(hall(e.state.town).wide).toBe(true);
   });
 });
+
+describe('ways out of debt', () => {
+  it('clears debt with pearls, $25 each, using only the pearls needed', () => {
+    const e = new RestaurantEngine(); e.state.debt = 110; e.state.town.pearls = 10;
+    expect(e.debtPearls()).toEqual({ pearls: 5, amount: 110 }); expect(e.payDebtWithPearls()).toBeNull();
+    expect(e.state.debt).toBe(0); expect(e.state.town.pearls).toBe(5); expect(e.payDebtWithPearls()).toBe('You have no debt.');
+    e.state.debt = 400; e.state.town.pearls = 3; expect(e.payDebtWithPearls()).toBeNull(); expect(e.state.debt).toBe(325); expect(e.state.town.pearls).toBe(0);
+    expect(e.payDebtWithPearls()).toMatch(/no pearls/);
+  });
+  it('demolishes a town building for half of what was spent on it, but never the restaurant', () => {
+    const { e } = rich(), town = e.state.town; e.unlockPlot(C + 1, C);
+    e.build('kelpFarm', T + 4, T); const farm = town.buildings[1]; farm.job = null; farm.level = 3;
+    const spent = BUILDINGS.kelpFarm.buildCost + upgradeCost('kelpFarm', 2) + upgradeCost('kelpFarm', 3);
+    expect(e.demolishRefund(farm.id)).toBe(Math.round(spent / 2));
+    const cash = e.state.cash; expect(e.demolish(farm.id)).toBeNull(); expect(e.state.cash).toBe(cash + Math.round(spent / 2));
+    expect(town.buildings).toHaveLength(1); expect(buildingAt(town, T + 4, T)).toBeUndefined();
+    expect(e.demolish(hall(town).id)).toBe('Your restaurant stays.'); expect(e.demolishRefund(hall(town).id)).toBe(0);
+  });
+});

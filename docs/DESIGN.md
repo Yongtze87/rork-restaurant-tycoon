@@ -55,6 +55,23 @@ There is **no separate map screen and no restart**. The Town view *is* the world
 - **Old saves.** Each plot's building moves to its plot's corner tile, and every owned plot gets its streets, so old towns keep working.
 - **Where it lives:** `town.ts` (tiles, footprints, `placementError`, `roadError`, `siteIn`, the road `network`, `connected`, `townEffects`, the save migration), `town-draft.ts` (placing from the card), engine methods `build(kind, x, z, turned)`, `moveBuilding`, `placeRoad`, `removeRoad`, `layStreets`, `streetsFor`, `placeError`, and `upgrade`, `useCharm` and `finishNow` by building id. The renderer draws in plot units; tile `t` spans `t / 4 − 0.5` to `(t + 1) / 4 − 0.5`.
 
+## Town life, totals and short cards
+
+- **Town life.** Bubble-carts drive on the roads and Mareen folk walk along their edges (`iso/traffic.ts`). More roads and homes bring more of them. Purely visual: nothing is saved, and reduced motion keeps them still.
+- **Town bonuses.** The Town card shows what all buildings add up to (guests, kelp, fish, crew, crew speed, build speed), each against its cap, with a breakdown on tap (`TownBonuses.tsx`, `townBreakdown`). A building's card shows its own share and the town total for its kind.
+- **Short cards.** Building choices are a picture, a name, a price and a size; the description and exact effect sit behind ⓘ. Effects on cards use `shortEffect` ("+5% guests", "Kelp −6%").
+- **Taps on overlapping art** pick the building whose picture is nearest the finger.
+
+## Debt and ways out
+
+- The restaurant never closes for good. A short register at closing becomes debt, repaid $30 a shift; the $600 recovery loan is offered below $200 with no debt.
+- **Pearls clear debt**, $25 per pearl (`DEBT_PER_PEARL`), from the Ledger's debt card.
+- **Town buildings can be demolished** for half of what was spent on them, build and upgrades (`DEMOLISH_REFUND`); the restaurant stays.
+
+## Coming back after time away
+
+The crew works at most one shift while the owner is away. The replay then also plays the first `WARM_UP_SECONDS` (150 s) of the next shift, so the owner returns to a dining room in full swing rather than an empty one filling up.
+
 ## Screens and time
 
 - **Always open.** After the first opening the restaurant never closes and there is no pause or speed control. Every change (furniture, crew, menu, town) works while guests are in; nothing is locked: moving a table takes its seated guests along and moving a station takes its cook (`followMove`); selling a table sends its unpaid guests away (counted as missed) and selling a station restarts the dishes it was making (`clearFor`). Everyone re-routes after a layout change (`reroute`). Only a busy crew member can't be dismissed. Work runs in shifts (`state.day` counts them, `DAY_LENGTH` each): wages, rent, loan repayment and branch income are settled per shift. Offline, the crew works at most `OFFLINE_SERVICE_DAYS` shifts.

@@ -6,7 +6,8 @@ import { REGION_PITCH, regionBlock, regionId, type Block } from '../world';
 import { depthOf, toGrid, toScreen, type View } from './projection';
 import { at, drawDecor, drawNight, drawParticles, drawWater, floorPolygon, type Decor, type Glow } from './render';
 import { drawSprite } from './sprites';
-import { drawBuilding, drawGrottoAnnex, drawScaffold } from './town-art';
+import { drawBuilding, drawCart, drawGrottoAnnex, drawScaffold, drawWalker } from './town-art';
+import { CART_COLORS, WALKER_COLORS, placeAgent, stepTraffic } from './traffic';
 
 export interface TownFrame {
   town: Town; ocean: Pick<Ocean, 'regions'>; cash: number; view: View; width: number; height: number; windowTop: number; windowHeight: number;
@@ -31,7 +32,7 @@ export interface TownFrame {
 /** A floating region label on screen, for taps. */
 export interface RegionLabel { id: string; left: number; top: number; right: number; bottom: number; }
 /** A building's art on screen, for taps on its roof. */
-export interface BuildingBox { id: number; left: number; top: number; right: number; bottom: number; depth: number; }
+export interface BuildingBox { id: number; left: number; top: number; right: number; bottom: number; depth: number; /** The middle of its art on screen. */ cx: number; cy: number; }
 /** Tile coordinates to the plot grid the view uses: tile t spans [edge(t), edge(t + 1)]. */
 export const tileEdge = (t: number): number => t / PARCEL - .5;
 export const rectCentre = (r: Rect): { x: number; z: number } => ({ x: (tileEdge(r.x0) + tileEdge(r.x1 + 1)) / 2, z: (tileEdge(r.z0) + tileEdge(r.z1 + 1)) / 2 });
@@ -196,7 +197,16 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
     const r = rectOf(b), centre = rectCentre(r), { w, d } = footprint(b.kind, b.turned, b.wide), k = artScale(w, d), depth = depthOf(centre.x, centre.z);
     items.push({ depth, draw: () => drawPiece(b.kind, b.level, b.job, r, 1, b.wide, b.turned) });
     const p = toScreen(view, centre.x, centre.z);
-    boxes.push({ id: b.id, left: p.x - 30 * k * s, right: p.x + 30 * k * s, top: p.y - 60 * k * s, bottom: p.y + 10 * k * s, depth });
+    boxes.push({ id: b.id, left: p.x - 30 * k * s, right: p.x + 30 * k * s, top: p.y - 52 * k * s, bottom: p.y + 12 * k * s, depth, cx: p.x, cy: p.y - 16 * k * s });
+  }
+  // Town life on the roads: carts and walkers, drawn among the buildings so they pass behind them.
+  if (s >= .5) {
+    const night = f.night ?? 0;
+    for (const a of stepTraffic(town, time, reduced)) {
+      if (!regions.has(buildingRegion(a))) continue;
+      const p = placeAgent(a);
+      items.push({ depth: depthOf(p.x, p.z), draw: () => at(ctx, view, p.x, p.z, 0, () => a.kind === 'cart' ? drawCart(ctx, CART_COLORS[a.color], (p.dx - p.dz) * 32, (p.dx + p.dz) * 16, night) : drawWalker(ctx, WALKER_COLORS[a.color], t, a.seed)) });
+    }
   }
   const draft = f.draft;
   if (draft) {

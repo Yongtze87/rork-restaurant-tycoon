@@ -305,17 +305,45 @@ export const busyBuilders = (town: Town): number => town.buildings.filter(b => b
 
 /** Combined effects of working buildings and reached zones on the restaurant. Neutral for a brand-new town. */
 export interface TownEffects { kelpCost: number; fishCost: number; extraCrew: number; arrivalBonus: number; crewSpeed: number; }
-export function townEffects(town: Town): TownEffects {
-  // Hub bonus × the region's specialisation; town-wide caps still apply to the sum.
+/** Every town bonus before and after its cap, so the player can see where they stand. */
+export interface TownBreakdown {
+  /** Raw sums (before caps) and the caps they run up against. */
+  gardens: number; gardenCap: number; kelp: number; fish: number; producerCap: number; homes: number; crewCap: number;
+  restaurant: number; zones: number; crewSpeed: number; crewSpeedCap: number; workshop: number; workshopCap: number;
+  /** Buildings that stand idle because no road reaches them. */ idle: number;
+}
+export function townBreakdown(town: Town): TownBreakdown {
+  // Hub bonus × the region's specialisation; town-wide caps apply to the sums.
   const boost = (b: Building) => (hub(town, b) ? 1.5 : 1) * boostOf(buildingPlot(b), b.kind);
-  const producer = (kind: BuildingKind) => 1 - Math.min(TOWN_BALANCE.producerCap, working(town, kind).reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.producerPerLevel * boost(b), 0));
+  const producer = (kind: BuildingKind) => working(town, kind).reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.producerPerLevel * boost(b), 0);
   const gardens = working(town, 'garden');
   return {
-    kelpCost: producer('kelpFarm'), fishCost: producer('fishery'),
-    extraCrew: Math.min(6, working(town, 'homes').reduce((sum, b) => sum + 1 + Math.floor(activeLevel(b) / LEVELS_PER_LOOK), 0)),
-    arrivalBonus: (activeLevel(restaurantOf(town)) - 1) * .03 + Math.min(TOWN_BALANCE.gardenCap, gardens.reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.gardenPerLevel * boost(b), 0)) + zoneArrivalBonus(town),
-    crewSpeed: 1 + Math.min(.15, gardens.filter(b => nearKind(town, rectOf(b), 'homes', true)).reduce((sum, b) => sum + activeLevel(b) * .01, 0)),
+    gardens: gardens.reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.gardenPerLevel * boost(b), 0), gardenCap: TOWN_BALANCE.gardenCap,
+    kelp: producer('kelpFarm'), fish: producer('fishery'), producerCap: TOWN_BALANCE.producerCap,
+    homes: working(town, 'homes').reduce((sum, b) => sum + 1 + Math.floor(activeLevel(b) / LEVELS_PER_LOOK), 0), crewCap: 6,
+    restaurant: (activeLevel(restaurantOf(town)) - 1) * .03, zones: zoneArrivalBonus(town),
+    crewSpeed: gardens.filter(b => nearKind(town, rectOf(b), 'homes', true)).reduce((sum, b) => sum + activeLevel(b) * .01, 0), crewSpeedCap: .15,
+    workshop: working(town, 'workshop').reduce((sum, b) => sum + activeLevel(b) * TOWN_BALANCE.workshopPerLevel * boostOf(buildingPlot(b), 'workshop'), 0), workshopCap: TOWN_BALANCE.workshopCap,
+    idle: town.buildings.filter(b => activeLevel(b) > 0 && !connected(town, b)).length,
   };
+}
+export function townEffects(town: Town): TownEffects {
+  const t = townBreakdown(town);
+  return {
+    kelpCost: 1 - Math.min(t.producerCap, t.kelp), fishCost: 1 - Math.min(t.producerCap, t.fish), extraCrew: Math.min(t.crewCap, t.homes),
+    arrivalBonus: t.restaurant + Math.min(t.gardenCap, t.gardens) + t.zones, crewSpeed: 1 + Math.min(t.crewSpeedCap, t.crewSpeed),
+  };
+}
+/** The few words a card shows for a building's effect at a level ("+5% guests"); the full sentence is `effectText`. */
+export function shortEffect(town: Town, spot: Spot, level: number, fameBranch = 0): string {
+  const kind = spot.kind, plot = parcelOf(spot.x, spot.z), boost = (nearHub(town, spot) ? 1.5 : 1) * boostOf(plot, kind), pct = (n: number) => `${Math.round(n * 100)}%`;
+  if (kind === 'branch') return `$${branchIncome(level, plotModifiers(plot).branchIncome, fameBranch).toLocaleString('en-US')}/shift`;
+  if (kind === 'restaurant') return `+${pct((level - 1) * .03)} guests`;
+  if (kind === 'kelpFarm') return `Kelp −${pct(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))}`;
+  if (kind === 'fishery') return `Fish −${pct(Math.min(TOWN_BALANCE.producerCap, level * TOWN_BALANCE.producerPerLevel * boost))}`;
+  if (kind === 'homes') return `+${1 + Math.floor(level / 5)} crew`;
+  if (kind === 'garden') return `+${pct(level * TOWN_BALANCE.gardenPerLevel * boost)} guests`;
+  return `Builds ${pct(Math.min(TOWN_BALANCE.workshopCap, level * TOWN_BALANCE.workshopPerLevel * boost))} faster`;
 }
 
 const percent = (n: number) => `${Math.round(n * 100)}%`;

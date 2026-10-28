@@ -24,8 +24,14 @@ export interface AwaySummary { seconds: number; days: number; served: number; ca
 export const OFFLINE_SERVICE_HOURS = 4;
 /** While away the crew works at most this many service days; the rest of the time passes without service (keeps real-day pacing, see docs/BALANCE.md). */
 export const OFFLINE_SERVICE_DAYS = 1;
+/** After the shift worked while away, this much of the next one plays too, so the room is busy on return. */
+export const WARM_UP_SECONDS = 150;
 /** A dish's price may change on this many shifts a day; each change beyond upsets regulars (−0.05 reputation). */
 export const PRICE_CHANGES_PER_DAY = 2;
+/** Debt each pearl clears. */
+export const DEBT_PER_PEARL = 25;
+/** Share of what was spent on a town building that demolishing it returns (furniture returns 70%). */
+export const DEMOLISH_REFUND = .5;
 /** Bargains earn bigger tips, steep prices smaller ones. */
 const REACTION_TIP = { bargain: 1.25, fair: 1, pricey: .75 } as const;
 /** Small integer hash for season rolls, separate from the guest random stream. */
@@ -156,6 +162,13 @@ export class RestaurantEngine {
       this.catchUpProgress = done / steps;
       this.save(); this.notify();
       if (done < steps && s.phase === 'service' && !this.paused && s.day - before.day < RestaurantEngine.offlineDays) await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
+    // The crew works at most one full shift while away, so the replay stops as a fresh shift opens. Play its first
+    // minutes too, so the owner comes back to a dining room in full swing rather than an empty one filling up.
+    if (this.state === s && s.day - before.day >= RestaurantEngine.offlineDays && s.phase === 'service' && !this.paused) {
+      const warm = Math.min(Math.max(0, steps - done), WARM_UP_SECONDS * 10);
+      for (let i = 0; i < warm && s.phase === 'service'; i++, done++) { this.tickTown(start + done * 100); this.step(.1); }
+      s.lastActiveAt = start + done * 100;
     }
     if (this.state !== s) return;
     this.tickTown(target);
@@ -356,6 +369,33 @@ export class RestaurantEngine {
   loan(): string | null {
     if (this.state.cash >= 200 || this.state.debt > 0) return 'A $600 recovery loan is available below $200, with no existing loan.';
     this.state.cash += 600; this.state.debt = 600; this.recordIncome(600, 'loan'); this.changed('Recovery loan received. $30 is repaid after each day, with no interest.'); return null;
+  }
+  /** Pearls that clear the whole debt (or all the player's pearls, if fewer), and the dollars they clear. */
+  debtPearls(): { pearls: number; amount: number } {
+    const debt = this.state.debt, pearls = Math.min(this.state.town.pearls, Math.ceil(debt / DEBT_PER_PEARL));
+    return { pearls, amount: Math.min(debt, pearls * DEBT_PER_PEARL) };
+  }
+  /** Pay debt with pearls: each pearl clears $25. */
+  payDebtWithPearls(): string | null {
+    if (this.state.debt <= 0) return 'You have no debt.';
+    const { pearls, amount } = this.debtPearls(); if (pearls < 1) return `Each pearl clears $${DEBT_PER_PEARL} of debt. You have no pearls.`;
+    this.state.town.pearls -= pearls; this.state.debt = Math.round((this.state.debt - amount) * 100) / 100;
+    this.changed(`${pearls} ${pearls === 1 ? 'pearl' : 'pearls'} cleared ${usd(amount)} of debt.${this.state.debt > 0 ? ` ${usd(this.state.debt)} left.` : ' You are debt free.'}`); return null;
+  }
+  /** What demolishing a town building returns: half of what was spent on it (its build and upgrades, in its region's prices). */
+  demolishRefund(id: number): number {
+    const b = buildingById(this.state.town, id); if (!b || b.kind === 'restaurant') return 0;
+    const p = buildingPlot(b), paidTo = b.level + (b.job?.kind === 'upgrade' ? 1 : 0);
+    let spent = this.buildPrice(b.kind, p.x, p.z); for (let level = 2; level <= paidTo; level++) spent += this.upgradePrice(b.kind, level, p.x, p.z);
+    return Math.round(spent * DEMOLISH_REFUND);
+  }
+  /** Demolish a town building for half of what was spent on it. The restaurant stays. */
+  demolish(id: number): string | null {
+    const town = this.state.town, b = buildingById(town, id); if (!b) return 'Choose a building first.';
+    if (b.kind === 'restaurant') return 'Your restaurant stays.';
+    const refund = this.demolishRefund(id); town.buildings = town.buildings.filter(x => x.id !== id);
+    this.state.cash += refund; this.recordIncome(refund, 'sale');
+    this.changed(`${BUILDINGS[b.kind].name} demolished. ${usd(refund)} back.`); return null;
   }
   rename(name: string): void { this.state.name = name.trim().slice(0, 28) || 'Little Reef'; this.changed(); }
   setMusic(value: boolean): void { this.state.music = value; this.changed(); }

@@ -21,7 +21,7 @@ it('unlocks a plot, builds with a timer, and skips it with a charm', async () =>
   const place = screen.getByRole('region', { name: 'Empty plot' }).getByRole('button', { name: 'Place' });
   await place.nth(3).click(); // kelp farm, fishery, homes, garden
   const draft = screen.getByRole('region', { name: 'Place glow garden' });
-  await expect.element(draft.getByTestId('draft-status')).toHaveTextContent('Fits here.');
+  await expect.element(draft.getByTestId('draft-status')).toHaveTextContent('Fits here');
   await draft.getByRole('button', { name: /Build ·/ }).click();
   const owned = restaurant.state.town.buildings.find(b => b.kind === 'garden')!;
   expect(owned.job?.kind).toBe('build'); expect(restaurant.state.cash).toBe(1250 - price - BUILDINGS.garden.buildCost);
@@ -69,7 +69,7 @@ it('lays streets and single roads, warns about a building no road reaches, and m
   await expect.element(draft.getByTestId('draft-status')).toHaveTextContent('Buildings need a road along one side.');
   await draft.getByRole('button', { name: /Lay this plot’s streets · 7 tiles · \$70/ }).click();
   expect(isRoad(s.town, (C - 2) * PARCEL + 3, C * PARCEL)).toBe(true); expect(s.cash).toBe(5000 - 70);
-  await expect.element(draft.getByTestId('draft-status')).toHaveTextContent('Fits here.');
+  await expect.element(draft.getByTestId('draft-status')).toHaveTextContent('Fits here');
   await draft.getByRole('button', { name: /Build ·/ }).click();
   // Its street does not reach the restaurant yet: the card says so.
   const homes = s.town.buildings.find(b => b.kind === 'homes')!; expect(connected(s.town, homes)).toBe(false);
@@ -80,7 +80,7 @@ it('lays streets and single roads, warns about a building no road reaches, and m
   const cash = s.cash;
   await screen.getByRole('button', { name: 'Move mareen homes' }).click();
   const move = screen.getByRole('region', { name: 'Move mareen homes' });
-  await expect.element(move.getByTestId('draft-status')).toHaveTextContent('Fits here.');
+  await expect.element(move.getByTestId('draft-status')).toHaveTextContent('Fits here');
   await move.getByRole('button', { name: 'Turn' }).click(); await move.getByRole('button', { name: 'Move here' }).click();
   expect(s.cash).toBe(cash);
   // The road tool.
@@ -89,4 +89,24 @@ it('lays streets and single roads, warns about a building no road reaches, and m
   await expect.element(screen.getByRole('region', { name: 'Road tool' })).toBeVisible();
   await screen.getByRole('button', { name: 'Done' }).click();
   await expect.element(screen.getByRole('region', { name: 'Town plots' })).toBeVisible();
+});
+
+it('shows atmosphere on a phone, pays debt with pearls and demolishes a town building for half its cost', async () => {
+  await page.viewport(390, 844);
+  const s = restaurant.state; s.debt = 100; s.town.pearls = 3; s.cash = 5000; restaurant.unlockPlot(C + 1, C);
+  expect(restaurant.build('garden', (C + 1) * PARCEL, C * PARCEL)).toBeNull(); const garden = s.town.buildings[1]; garden.job = null; restaurant.notify();
+  const screen = await render(<ManagementGame />);
+  await expect.element(screen.getByTestId('atmosphere')).toHaveTextContent(/\d+%/);
+  await screen.getByRole('button', { name: 'Ledger' }).click();
+  const debt = screen.getByTestId('debt-card'); await expect.element(debt).toHaveTextContent('Debt $100');
+  await debt.getByRole('button', { name: /Pay \$75 of debt with 3 pearls/ }).click();
+  expect(s.debt).toBe(25); expect(s.town.pearls).toBe(0);
+  await userEvent.keyboard('{Escape}');
+  await screen.getByRole('button', { name: 'Town', exact: true }).click();
+  await screen.getByRole('button', { name: /All plots/ }).click();
+  await screen.getByRole('button', { name: 'Glow garden · Lv 1' }).click();
+  const cash = s.cash, refund = restaurant.demolishRefund(garden.id); expect(refund).toBe(BUILDINGS.garden.buildCost / 2);
+  await screen.getByRole('button', { name: /Demolish · \+\$125/ }).click();
+  await screen.getByRole('button', { name: /Tap again: demolish for \$125/ }).click();
+  expect(s.town.buildings).toHaveLength(1); expect(s.cash).toBe(cash + refund);
 });

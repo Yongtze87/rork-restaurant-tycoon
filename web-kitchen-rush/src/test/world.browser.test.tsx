@@ -42,7 +42,7 @@ it.each([320, 1280])('claims a region from the town panel and starts its branch 
   await details.getByRole('button', { name: 'Build a branch restaurant' }).click();
   const empty = screen.getByRole('region', { name: 'Empty plot' });
   await expect.element(empty).toHaveTextContent('Glasswater Lagoon · Calm lagoon');
-  await expect.element(empty.getByRole('heading', { name: 'Branch restaurant', exact: true })).toBeVisible();
+  await expect.element(empty.getByRole('button', { name: /^Place branch restaurant/ })).toBeVisible();
   await empty.getByRole('button', { name: 'Place' }).first().click();
   await screen.getByRole('region', { name: 'Place branch restaurant' }).getByRole('button', { name: /Build ·/ }).click();
   expect(branchIn(restaurant.state.town, '0,1')).toMatchObject({ kind: 'branch', job: { kind: 'build' } });

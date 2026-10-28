@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeft, Check, Clock, Gem, Hammer, List, LockKeyhole, MapPin, MapPinned, Move, RotateCw, Route, Sparkles, Star, Store, Waves, X, Zap } from 'lucide-react';
+import { ArrowLeft, Check, Clock, Gem, Trash2, Hammer, List, LockKeyhole, MapPin, MapPinned, Move, RotateCw, Route, Sparkles, Star, Store, Waves, X, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { restaurant } from './engine';
-import { BUILDINGS, CHARMS, MAX_LEVEL, PARCEL, branchIn, buildableAt, buildingAt, buildingPlot, buildingsIn, busyBuilders, canUnlock, connected, effectText, finishCost, footprint, isRoad, lookFor, nearHub, network, ownedCount, parcelOf, plotAt, plotLockReason, plotModifiers, plotOfTile, plotRegion, plotZone, plotsIn, roadError, tileKey, type Building, type BuildingKind, type Plot, type Spot, type Town } from './town';
+import { BUILDINGS, CHARMS, MAX_LEVEL, PARCEL, branchIn, buildableAt, buildingAt, buildingPlot, buildingsIn, busyBuilders, canUnlock, connected, effectText, finishCost, shortEffect, footprint, isRoad, lookFor, nearHub, network, ownedCount, parcelOf, plotAt, plotLockReason, plotModifiers, plotOfTile, plotRegion, plotZone, plotsIn, roadError, tileKey, type Building, type BuildingKind, type Plot, type Spot, type Town } from './town';
 import { BIOMES, HOME_ID, claimableRegions, describeModifiers, fameText, masteryKey, masterySteps, regionById, regionStatus, type BoostKind } from './ocean';
 import { ZONES, ZONE_IDS, ZONE_ARRIVAL_BONUS, hasZone, previousZone, zoneRequirements } from './zones';
 import { DISHES, DISH_IDS } from './types';
@@ -12,6 +12,8 @@ import { money } from './format';
 import { guardSpend } from './spend-guard';
 import { Notice, SmallButton, type Action } from './Panels';
 import { Info } from './GameWindow';
+import { BuildingThumb } from './BuildingThumb';
+import { TownBonuses } from './TownBonuses';
 import { draftAt, hasBuilding, onNetwork, plotTile, type TileRef, type TownDraft } from './town-draft';
 
 export type { TileRef, TownDraft };
@@ -163,7 +165,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
   draft: TownDraft | null; onDraft: (draft: TownDraft | null) => void; roadMode: boolean; onRoadMode: (on: boolean) => void;
   onEnterRestaurant: () => void; onShop: () => void; onOverview: () => void; action: Action;
 }) {
-  const now = useNow(), state = restaurant.state, town = state.town, fame = restaurant.fameBonuses();
+  const now = useNow(), state = restaurant.state, town = state.town, fame = restaurant.fameBonuses(), [demolishing, setDemolishing] = useState<number | null>(null);
   const busy = busyBuilders(town) >= town.builders;
   const summary = <Supplies onShop={onShop} />;
   const act = (error: string | null, then?: () => void) => { action(error); if (!error) then?.(); };
@@ -180,7 +182,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
     return <section aria-label={moving ? `Move ${info.name.toLowerCase()}` : `Place ${info.name.toLowerCase()}`}>
       <div className="flex items-center gap-2">{back}<div className="min-w-0 flex-1"><h3 className="truncate font-display text-base leading-tight">{moving ? 'Move' : 'Place'} {info.name.toLowerCase()}</h3><p className="truncate text-[11px] text-ink/60">{w}×{d} tiles · tap the map to move it</p></div>
         <SmallButton label="Turn" className="shrink-0 px-2.5" onClick={() => onDraft({ ...draft, turned: !draft.turned })}><RotateCw size={15} /></SmallButton></div>
-      <p data-testid="draft-status" className={cn('mt-1.5 text-[11px] font-bold', error ? 'text-danger' : 'text-teal')}>{error ?? (draft.kind === 'restaurant' ? 'Fits here.' : `Fits here. ${effectText(town, draft, moving ? buildingAt(town, draft.x, draft.z)?.level ?? 1 : 1, fame.branch)}`)}{!error && nearHub(town, draft) && ['kelpFarm', 'fishery', 'garden'].includes(draft.kind) && <span className="text-gold"> · Hub bonus</span>}</p>
+      <p data-testid="draft-status" className={cn('mt-1.5 text-[11px] font-bold', error ? 'text-danger' : 'text-teal')}>{error ?? (draft.kind === 'restaurant' ? 'Fits here.' : `Fits here · ${shortEffect(town, draft, moving ? buildingAt(town, draft.x, draft.z)?.level ?? 1 : 1, fame.branch)}`)}{!error && nearHub(town, draft) && ['kelpFarm', 'fishery', 'garden'].includes(draft.kind) && <span className="text-gold"> · Hub bonus</span>}</p>
       {needsRoad && <div className="mt-1.5">{streets(plot.x, plot.z, 'w-full', () => onDraft({ ...draftAt(restaurant.state.town, draft.kind, draft), id: draft.id })) || <p className="text-[11px] text-ink/65">Use the road tool to join this spot to a road.</p>}</div>}
       <div className="mt-2 flex gap-1.5">
         <SmallButton className="flex-1" onClick={() => onDraft(null)}><X size={14} />Cancel</SmallButton>
@@ -200,6 +202,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
   if (!plot && region && regionById(region)) return <RegionDetails id={region} back={back} onSelect={select} action={action} summary={summary} />;
   if (!selected || !plot) return <section aria-label="Town plots">
     <div className="flex items-center gap-2">{summary}</div>
+    <div className="mt-1"><TownBonuses /></div>
     <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
       <button type="button" onClick={onOverview} className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-teal px-3 text-[11px] font-extrabold text-paper"><List size={14} aria-hidden="true" />All plots & zones</button>
       <button type="button" onClick={() => onRoadMode(true)} className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-teal/40 bg-teal/10 px-3 text-[11px] font-extrabold"><Route size={14} className="text-teal" aria-hidden="true" />Roads</button>
@@ -207,7 +210,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
     </div>
   </section>;
   const where = inHome(plot) ? (plot.owned ? null : ZONES[plotZone(plot)].name) : `${regionName(plot)} · ${BIOMES[regionById(plotRegion(plot))!.biome].name}`;
-  const head = (title: string, sub?: ReactNode, extra?: ReactNode) => <div className="flex items-center gap-2">{back}<div className="min-w-0 flex-1"><h3 className="truncate font-display text-base leading-tight">{title}</h3>{(sub || where) && <p className="truncate text-[11px] text-ink/60">{sub}{sub && where ? ' · ' : ''}{where}{!inHome(plot) && onRegion && <button type="button" className="ml-1.5 font-bold text-teal underline" onClick={() => { onSelect(null); onRegion(plotRegion(plot)); }}>Region</button>}</p>}</div>{extra}</div>;
+  const head = (title: string, sub?: ReactNode, extra?: ReactNode, art?: ReactNode) => <div className="flex items-center gap-2">{back}{art}<div className="min-w-0 flex-1"><h3 className="truncate font-display text-base leading-tight">{title}</h3>{(sub || where) && <p className="truncate text-[11px] text-ink/60">{sub}{sub && where ? ' · ' : ''}{where}{!inHome(plot) && onRegion && <button type="button" className="ml-1.5 font-bold text-teal underline" onClick={() => { onSelect(null); onRegion(plotRegion(plot)); }}>Region</button>}</p>}</div>{extra}</div>;
   if (!plot.owned) {
     const cost = restaurant.plotPrice(plot.x, plot.z), open = canUnlock(town, plot), reason = plotLockReason(town, plot);
     return <section aria-label="Locked plot">{head('Wild seabed', `${PARCEL}×${PARCEL} tiles`)}
@@ -225,12 +228,14 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
       {busy && <p className="mt-1 text-[11px] text-ink/65">All builders are busy. Use a charm, or <button type="button" className="font-extrabold text-teal underline" onClick={onShop}>get another builder</button>.</p>}
       <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">{buildableAt(town, plot).map(kind => {
         const info = BUILDINGS[kind], price = restaurant.buildPrice(kind, plot.x, plot.z), affordable = state.cash >= price, spot = draftAt(town, kind, selected), bonus = (kind === 'kelpFarm' || kind === 'fishery' || kind === 'garden') && nearHub(town, spot), special = boostNote(plot, kind);
-        return <div key={kind} title={`${info.description}${info.adjacency ? ` ${info.adjacency}` : ''}`} className={cn('flex w-[150px] shrink-0 flex-col rounded-xl border p-2', kind === 'branch' ? 'border-gold/50 bg-gold/10' : 'border-ink/10 bg-ink/[.06]')}>
-          <div className="flex items-baseline justify-between gap-1"><h4 className="truncate font-display text-sm leading-tight">{info.name}</h4><span className="shrink-0 text-[11px] font-extrabold tabular-nums text-teal">{money(price)}</span></div>
-          <p className="text-[10px] font-bold text-ink/55">{info.size[0]}×{info.size[1]} tiles</p>
-          <p className="mt-0.5 line-clamp-2 min-h-[26px] text-[10px] font-bold leading-[13px] text-teal">{effectText(town, spot, 1, fame.branch)}</p>
-          {(special || bonus) && <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-bold text-gold"><Sparkles size={11} aria-hidden="true" />{special ?? 'Hub bonus'}</p>}
-          <SmallButton tutorial="build-building" className="mt-1.5 w-full px-1 text-[11px]" disabled={!affordable || busy} onClick={() => onDraft(spot)}><Hammer size={13} />{!affordable ? `Need ${money(price - state.cash)}` : 'Place'}</SmallButton>
+        return <div key={kind} className={cn('relative w-[100px] shrink-0 rounded-xl border', kind === 'branch' ? 'border-gold/50 bg-gold/10' : 'border-ink/10 bg-ink/[.06]')}>
+          <button type="button" data-tutorial="build-building" aria-label={`Place ${info.name.toLowerCase()} · ${money(price)}`} disabled={!affordable || busy} onClick={() => onDraft(spot)} className="flex w-full flex-col items-center px-1 pb-1.5 pt-1 text-center disabled:opacity-45">
+            <BuildingThumb kind={kind} size={46} />
+            <span className="w-full truncate text-[11px] font-extrabold leading-tight">{info.name}</span>
+            <span className={cn('text-[10px] font-extrabold tabular-nums', affordable ? 'text-teal' : 'text-danger')}>{money(price)} · {info.size[0]}×{info.size[1]}</span>
+          </button>
+          {(special || bonus) && <Sparkles size={13} className="absolute left-1.5 top-1.5 text-gold" aria-label={special ?? 'Hub bonus here'} />}
+          <div className="absolute right-1 top-1"><Info label={`About the ${info.name.toLowerCase()}`}><p className="font-extrabold text-ink">{info.name} · {info.size[0]}×{info.size[1]} tiles</p><p>{info.description}</p><p className="mt-1 font-bold text-teal">Here at level 1: {effectText(town, spot, 1, fame.branch)}</p>{(special || bonus) && <p className="font-bold text-gold">{special ?? 'Near the restaurant: 50% stronger'}</p>}{info.adjacency && <p className="mt-1">{info.adjacency} “Near” means touching or one tile away, for example across a road.</p>}</Info></div>
         </div>;
       })}</div>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -242,9 +247,12 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
   const kind = building.kind, info = BUILDINGS[kind], job = building.job, next = building.level + 1, home = buildingPlot(building), cost = restaurant.upgradePrice(kind, next, home.x, home.z), special = boostNote(home, kind), works = connected(town, building), spot: Spot = building;
   return <section aria-label={info.name}>{head(info.name, `Lv ${building.level}/${MAX_LEVEL} · ${info.looks[lookFor(building.level) - 1]}`, <>
     <SmallButton label={`Move ${info.name.toLowerCase()}`} className="shrink-0 px-2.5" onClick={() => onDraft({ kind, x: building.x, z: building.z, turned: building.turned, wide: building.wide, id: building.id })}><Move size={14} /></SmallButton>
-    {kind === 'restaurant' ? <SmallButton className="shrink-0" onClick={onEnterRestaurant}><Store size={14} />Enter</SmallButton> : <Info>{info.description}{info.adjacency ? ` ${info.adjacency}` : ''} “Near” means touching it or one tile away, for example across a road.{kind === 'branch' ? ' Branch income is paid at every closing, also while you are away.' : ''}</Info>}</>)}
+    {kind === 'restaurant' && <SmallButton className="shrink-0" onClick={onEnterRestaurant}><Store size={14} />Enter</SmallButton>}
+    <Info label={`About this ${info.name.toLowerCase()}`}><p className="font-extrabold text-ink">{info.name} · {info.looks[lookFor(building.level) - 1]}</p><p>{info.description}</p><p className="mt-1 font-bold text-teal">Now: {effectText(town, spot, building.level, fame.branch)}</p>{special && <p className="font-bold text-gold">{special}</p>}{info.adjacency && <p className="mt-1">{info.adjacency} “Near” means touching it or one tile away, for example across a road.</p>}{kind === 'branch' && <p className="mt-1">Branch income is paid at every closing, also while you are away.</p>}</Info></>, <BuildingThumb kind={kind} level={building.level} size={40} />)}
     {!works && <div data-testid="no-road" className="mt-1.5 rounded-xl border border-danger/40 bg-danger/10 p-2 text-[11px] font-bold text-danger">No road joins this building to your {inHome(home) ? 'restaurant' : 'branch'}, so it does nothing yet.{' '}<button type="button" className="font-extrabold underline" onClick={() => onRoadMode(true)}>Lay a road</button></div>}
-    <p className="mt-1 text-[11px] font-bold text-teal">{kind === 'branch' && <span data-testid="branch-income" className="mr-1 text-gold">{job?.kind === 'build' ? `Opens when built: ${money(restaurant.branchIncomeAt(building, 1))} per shift.` : `Earns ${money(restaurant.branchIncomeAt(building))} per shift.`}</span>}{job?.kind === 'build' ? 'Ready when built: ' : 'Now: '}{effectText(town, spot, building.level, fame.branch)}{special && <span className="text-gold"> · {special}</span>}</p>
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">{kind === 'branch' ? <span data-testid="branch-income" className="rounded-full bg-gold/15 px-2 py-1 text-[11px] font-extrabold text-gold">{job?.kind === 'build' ? `Opens when built: ${money(restaurant.branchIncomeAt(building, 1))} per shift` : `Earns ${money(restaurant.branchIncomeAt(building))} per shift`}</span>
+      : <span className="rounded-full bg-teal/10 px-2 py-1 text-[11px] font-extrabold text-teal">{job?.kind === 'build' ? 'When built: ' : 'This one: '}{shortEffect(town, spot, building.level, fame.branch)}</span>}
+      {kind !== 'branch' && <><span className="text-[10px] font-bold text-ink/50">Town:</span><TownBonuses only={kind} /></>}</div>
     {job ? <div className="mt-2 rounded-xl border border-gold/40 bg-gold/10 p-2" data-testid="construction">
       <div className="flex items-center justify-between text-xs font-extrabold"><span>{job.kind === 'build' ? 'Building' : `Upgrading to level ${next}`}</span><span className="tabular-nums">{formatDuration(job.endsAt - now)}</span></div>
       <progress className="mt-1.5" aria-label="Construction progress" value={Math.min(1, (now - job.startedAt) / Math.max(1, job.endsAt - job.startedAt))} max={1} />
@@ -254,8 +262,9 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
     </div>
     : building.level >= MAX_LEVEL ? <Notice>Fully upgraded. A true reef landmark.</Notice>
     : <div className="mt-2 flex items-center gap-2 rounded-xl border border-ink/10 bg-ink/[.06] p-2">
-      <div className="min-w-0 flex-1"><h4 className="text-xs font-extrabold">Level {next} · <span className="tabular-nums text-teal">{money(cost)}</span> {leaves(cost)}</h4><p className="line-clamp-2 text-[10px] font-bold text-teal">{effectText(town, spot, next, fame.branch)}{lookFor(next) !== lookFor(building.level) ? <span className="text-gold"> · New look: {info.looks[lookFor(next) - 1]}</span> : ''}</p></div>
+      <div className="min-w-0 flex-1"><h4 className="text-xs font-extrabold">Lv {next} · <span className="tabular-nums text-teal">{money(cost)}</span></h4><p className="truncate text-[10px] font-bold text-teal">{shortEffect(town, spot, next, fame.branch)}{lookFor(next) !== lookFor(building.level) ? <span className="text-gold"> · new look</span> : ''}</p>{leaves(cost)}</div>
       <SmallButton className="shrink-0" disabled={state.cash < cost || busy} onClick={() => guardSpend(`Upgrading this ${info.name.toLowerCase()}`, cost, () => action(restaurant.upgrade(building.id)))}><Clock size={14} />{state.cash < cost ? `Need ${money(cost - state.cash)}` : busy ? 'Builders busy' : `Upgrade · ${formatDuration(restaurant.jobSeconds(kind, next, home.x, home.z) * 1000)}`}</SmallButton>
     </div>}
+    {kind !== 'restaurant' && <div className="mt-2 flex justify-end"><button type="button" onClick={() => demolishing === building.id ? act(restaurant.demolish(building.id), () => { setDemolishing(null); onSelect(null); }) : setDemolishing(building.id)} className={cn('flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-extrabold', demolishing === building.id ? 'bg-danger text-paper' : 'text-ink/55 hover:bg-danger/10 hover:text-danger')}><Trash2 size={13} aria-hidden="true" />{demolishing === building.id ? `Tap again: demolish for ${money(restaurant.demolishRefund(building.id))}` : `Demolish · +${money(restaurant.demolishRefund(building.id))}`}</button></div>}
   </section>;
 }

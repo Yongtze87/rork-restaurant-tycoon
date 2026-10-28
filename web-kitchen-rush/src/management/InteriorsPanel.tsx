@@ -32,7 +32,7 @@ export function InteriorsPanel({ state, choose, inspect, action, onClose }: {
         <button type="button" aria-pressed={view === 'room'} onClick={() => setView('room')} className={cn('flex min-h-10 items-center gap-1 rounded-md px-2.5 text-[11px] font-extrabold', view === 'room' ? 'bg-paper text-teal shadow-sm' : 'text-ink/60')}>Room <span className="rounded-full bg-teal/10 px-1 tabular-nums">{state.furniture.length}</span></button>
       </div>
       <div role="group" aria-label="Furniture categories" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">{categories.map(cat => <button type="button" key={cat} aria-pressed={category === cat} onClick={() => setCategory(cat)} className={cn('min-h-10 shrink-0 rounded-full px-2.5 text-[11px] font-extrabold', category === cat ? 'bg-teal text-paper' : 'text-ink/65 hover:bg-ink/5')}>{cat}</button>)}</div>
-      <span className="hidden shrink-0 items-center gap-2 px-1 text-[10px] font-bold text-ink/60 sm:flex"><Armchair size={13} aria-hidden="true" />{capacity(state)}<Leaf size={13} aria-hidden="true" />{comfort(state)}%</span>
+      <span className="flex shrink-0 items-center gap-1.5 px-1 text-[10px] font-bold text-ink/60"><Armchair size={13} aria-hidden="true" />{capacity(state)}<Leaf size={13} aria-hidden="true" />{comfort(state)}%</span>
       <button type="button" aria-label="Close build menu" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-ink/5"><X size={17} /></button>
     </div>
     <div className="mt-1 flex gap-1.5 overflow-x-auto pb-0.5 short:flex-wrap short:overflow-visible">
