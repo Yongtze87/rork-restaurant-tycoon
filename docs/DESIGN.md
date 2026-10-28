@@ -71,6 +71,10 @@ There is **no separate map screen and no restart**. The Town view *is* the world
 - **Appeal** (reputation, town buildings, the tide, fame) pushes demand past the room. Guests who then find every seat taken are turned away: counted as missed and as `full`, but they don't lower the rating.
 - **What the player sees:** Team shows "Crew can serve N of M seats" and what to add next; the atmosphere popover repeats it; receipts show "(N full)" beside missed guests.
 
+## Last shift at a glance
+
+Each day-and-night cycle is one shift (`DAY_LENGTH`, about 2½ minutes). A chip at the top-left of both scenes (`ShiftChip.tsx`) shows the last shift's takings (sales + tips + branches) and its profit, with a bar for how far the current shift has run and a sun or moon for the time of day; tapping it shows that shift's receipt.
+
 ## Efficiency readout
 
 The engine samples the last minute of service every half second (session only, not saved): how busy chefs and servers are, how full the seats are, orders waiting for a chef, plates waiting for a server, dirty seats, and guests turned away or leaving upset (`efficiency.ts`, `engine.efficiency()`). `advise` turns that into one next step: hire a server, hire a chef, add a kitchen station, add tables, build homes (crew full), bring in more guests, or "running smoothly". A chip over the dining room shows three bars and the advice; tapping it, or the Team window, shows the details.
