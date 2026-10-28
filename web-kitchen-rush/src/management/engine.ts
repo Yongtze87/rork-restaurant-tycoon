@@ -36,6 +36,8 @@ export const GUEST_STAY = 38;
 export const SEAT_FILL = .9;
 /** Seats one server, or one chef at a station, looks after: more seats than the crew can reach draw no extra guests. */
 export const SEATS_PER_CREW = 4.5;
+/** Crew any restaurant may employ, whatever its size. */
+export const BASE_CREW = 6;
 /** Guests in the restaurant at once, at most. */
 const MAX_GUESTS = 80;
 /** Share of what was spent on a town building that demolishing it returns (furniture returns 70%). */
@@ -289,7 +291,7 @@ export class RestaurantEngine {
     this.changed(`${CATALOG[item.kind].name} is now level ${item.level}.${lookFor(item.level) > lookFor(item.level - 1) ? ' A whole new look!' : ''}`); return null;
   }
   hire(role: Role): string | null {
-    if (this.state.staff.length >= this.crewLimit()) return `Your crew is limited to ${this.crewLimit()} Mareen. Build Mareen homes for more.`;
+    const crew = this.crewLimits(); if (this.state.staff.length >= crew.limit) return crew.by === 'room' ? `Your dining room can use ${crew.limit} crew. Add tables first.` : `Your crew is limited to ${crew.limit} Mareen. Build Mareen homes for more.`;
     if (this.state.cash < 150) return 'Recruitment costs $150.';
     const names = role === 'chef' ? ['Marlo', 'Nerin', 'Coralie', 'Kai', 'Delphine', 'Ondine'] : ['Pearl', 'Tidus', 'Maris', 'Shelly', 'Reef', 'Calyx'];
     const name = names.find(n => !this.state.staff.some(s => s.name === n)) ?? names[0];
@@ -532,7 +534,7 @@ export class RestaurantEngine {
   efficiency(): Efficiency & { advice: Advice } {
     const s = this.state, e = summarize(this.samples, this.lost.filter(l => l.full).length, this.lost.filter(l => !l.full).length);
     const stations = s.furniture.filter(f => f.kind === 'prep' || f.kind === 'grill').length, chefs = s.staff.filter(m => m.role === 'chef').length;
-    return { ...e, advice: advise(e, { crewFull: s.staff.length >= this.crewLimit(), stationsShort: chefs >= stations, limitBy: this.seatLimit().by }) };
+    return { ...e, advice: advise(e, { crewFull: s.staff.length >= this.crewLimit(), crewBy: this.crewLimits().by, stationsShort: chefs >= stations, limitBy: this.seatLimit().by }) };
   }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
@@ -617,7 +619,13 @@ export class RestaurantEngine {
     if (!this.effects || key !== this.effectsKey || town.roads !== this.effectsRoads) { this.effects = townEffects(town); this.effectsKey = key; this.effectsRoads = town.roads; }
     return this.effects;
   }
-  crewLimit(): number { return 6 + this.townEffects().extraCrew; }
+  /** Crew the restaurant may employ: what Mareen homes allow, and what the dining room can use (two crew, a server and a
+   *  chef, for every 4½ seats; never fewer than the starting six). The lower one is the limit. */
+  crewLimits(): { homes: number; room: number; limit: number; by: 'homes' | 'room' } {
+    const homes = BASE_CREW + this.townEffects().extraCrew, room = Math.max(BASE_CREW, 2 * Math.ceil(capacity(this.state) / SEATS_PER_CREW));
+    return { homes, room, limit: Math.min(homes, room), by: room < homes ? 'room' : 'homes' };
+  }
+  crewLimit(): number { return this.crewLimits().limit; }
   /** Exact ingredient cost per dish, to the cent; charges carry the fraction so every discount counts. */
   dishCost(dish: Dish): number { const kelp = DISHES[dish].ingredient === 'kelp', town = this.townEffects(), tide = this.tideEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (kelp ? town.kelpCost * tide.kelpCost : town.fishCost * tide.fishCost) * 100) / 100); }
   /** Permanent fame bonuses (capped), cached until fame changes. */

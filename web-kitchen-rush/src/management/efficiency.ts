@@ -20,9 +20,11 @@ export function summarize(samples: EfficiencySample[], turnedAway: number, upset
   return { kitchen: avg('chefs'), service: avg('servers'), seats: avg('seats'), waiting: avg('waiting'), ready: avg('ready'), dirty: avg('dirty'), turnedAway, upset, samples: n };
 }
 /** The single most useful next step. `crewFull`: no room to hire; `stationsShort`: every station already has a chef. */
-export function advise(e: Efficiency, { crewFull, stationsShort, limitBy }: { crewFull: boolean; stationsShort: boolean; limitBy: 'seats' | 'servers' | 'chefs' | 'stations' }): Advice {
+export function advise(e: Efficiency, { crewFull, crewBy = 'homes', stationsShort, limitBy }: { crewFull: boolean; crewBy?: 'homes' | 'room'; stationsShort: boolean; limitBy: 'seats' | 'servers' | 'chefs' | 'stations' }): Advice {
   if (e.samples < 20) return { kind: 'none', title: 'Watching service', text: 'Give it a minute of service to see how the crew keeps up.' };
-  const hire = (role: 'server' | 'chef'): Advice => crewFull
+  const hire = (role: 'server' | 'chef'): Advice => crewFull && crewBy === 'room'
+    ? { kind: 'tables', title: 'Add tables first', text: `Your ${role}s are stretched, but the crew is as big as this dining room can use. More tables make room for more crew.` }
+    : crewFull
     ? { kind: 'homes', title: 'Room for more crew', text: `Your ${role}s are stretched and the crew is full. Build Mareen homes in town for more crew slots, or train the crew you have.` }
     : { kind: role, title: `Hire a ${role}`, text: role === 'server' ? 'Plates and dirty tables are waiting for a server.' : 'Orders are waiting for a chef.' };
   const servingLags = e.ready + e.dirty * .5, cookingLags = e.waiting;

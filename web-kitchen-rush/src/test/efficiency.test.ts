@@ -12,6 +12,7 @@ describe('efficiency advice', () => {
     expect(advise(summarize(minute({ chefs: .95, waiting: 3 }), 0, 1), base).kind).toBe('chef');
     expect(advise(summarize(minute({ chefs: .95, waiting: 3 }), 0, 1), { ...base, stationsShort: true }).kind).toBe('station');
     expect(advise(summarize(minute({ servers: .95, ready: 2 }), 0, 2), { ...base, crewFull: true }).kind).toBe('homes');
+    expect(advise(summarize(minute({ servers: .95, ready: 2 }), 0, 2), { ...base, crewFull: true, crewBy: 'room' })).toMatchObject({ kind: 'tables', title: 'Add tables first' });
   });
   it('asks for tables when a full room turns guests away, or for the crew that limits it', () => {
     expect(advise(summarize(minute({ seats: .95 }), 4, 0), base).kind).toBe('tables');

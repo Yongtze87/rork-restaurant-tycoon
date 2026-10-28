@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
 import { BUILDINGS, MAX_LEVEL, PARCEL, TOWN_BALANCE, baseSeconds, buildingAt, connected, createTown, finishCost, jobSeconds, lookFor, migrateTown, network, plotAt, restaurantOf, streetTiles, townEffects, townSchema, unlockCost, upgradeCost, type Town } from '@/management/town';
 import { C, joinRoads, on, put } from './town-helpers';
+import { buyFurniture } from '@/management/sim/simulator';
 import { createRestaurant, restaurantSchema } from '@/management/types';
 
 function harness() {
@@ -103,7 +104,7 @@ describe('construction time', () => {
     const { e, h } = rich(); e.unlockPlot(C, C + 1); e.build('homes', T, T + 4); e.suspend();
     h.advance(3600);
     const back = new RestaurantEngine(h.storage, h.now); await back.resume();
-    expect(on(back.state.town, C, C + 1)!.job).toBeNull(); expect(back.crewLimit()).toBe(7);
+    expect(on(back.state.town, C, C + 1)!.job).toBeNull(); expect(back.crewLimits().homes).toBe(7);
   });
   it('allows one job per builder, and a second builder bought with pearls', () => {
     const { e } = rich(); e.unlockPlot(C + 1, C); e.unlockPlot(C, C + 1);
@@ -172,7 +173,7 @@ describe('town effects on the restaurant', () => {
     const perMeal = (e: RestaurantEngine) => (e.state.history.reduce((s, r) => s + r.ingredients, 0) + e.state.totals.ingredients) / Math.max(1, e.state.lifetimeServed);
     expect(perMeal(farmed)).toBeLessThan(perMeal(plain));
     put(farmed.state.town, 'homes', C, C + 1, 1);
-    expect(farmed.crewLimit()).toBe(7);
+    expect(farmed.crewLimits().homes).toBe(7);
   });
 });
 
@@ -274,8 +275,23 @@ describe('Mareen homes', () => {
     const town = createTown(), homes = put(town, 'homes', C, C + 1, 1);
     for (let level = 1; level <= 5; level++) { homes.level = level; expect(townEffects(town).extraCrew).toBe(level); }
     const { e } = rich(); const h = put(e.state.town, 'homes', C, C + 1, 5); expect(e.upgrade(h.id)).toBe('Already at the highest level.');
-    expect(e.crewLimit()).toBe(11);
+    expect(e.crewLimits().homes).toBe(11);
     for (const [x, z] of [[C + 1, C], [C - 1, C], [C, C - 1]]) put(e.state.town, 'homes', x, z, 5, { z: z * PARCEL + 1 }); // beside each plot's street
     expect(e.townEffects().extraCrew).toBe(12);
+  });
+});
+
+describe('crew limit follows the dining room', () => {
+  it('is the lower of what homes allow and what the seats can use, and says which to grow', () => {
+    const { e } = rich(), s = e.state; const home = put(s.town, 'homes', C, C + 1, 5);
+    expect(e.crewLimits()).toEqual({ homes: 11, room: 6, limit: 6, by: 'room' });
+    while (s.staff.length < 6) e.hire('server');
+    expect(e.hire('chef')).toBe('Your dining room can use 6 crew. Add tables first.');
+    for (let i = 0; i < 6; i++) buyFurniture(e, 'table'); // 18 seats: two crew per 4.5 seats
+    expect(e.crewLimits()).toMatchObject({ room: 8, limit: 8, by: 'room' }); expect(e.hire('chef')).toBeNull();
+    buyFurniture(e, 'table'); home.level = 3; // a full main room (20 seats) can use 10; homes now allow 9
+    expect(e.crewLimits()).toMatchObject({ homes: 9, room: 10, limit: 9, by: 'homes' });
+    while (s.staff.length < 9) e.hire('server');
+    expect(e.hire('chef')).toBe('Your crew is limited to 9 Mareen. Build Mareen homes for more.');
   });
 });
