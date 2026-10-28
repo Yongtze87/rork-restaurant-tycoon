@@ -286,12 +286,21 @@ describe('crew limit follows the dining room', () => {
     const { e } = rich(), s = e.state; const home = put(s.town, 'homes', C, C + 1, 5);
     expect(e.crewLimits()).toEqual({ homes: 11, room: 6, limit: 6, by: 'room' });
     while (s.staff.length < 6) e.hire('server');
-    expect(e.hire('chef')).toBe('Your dining room can use 6 crew. Add tables first.');
+    expect(e.hire('chef')).toBe('Your crew is full at 6. Add tables: every 4½ seats make room for 2 more crew.');
     for (let i = 0; i < 6; i++) buyFurniture(e, 'table'); // 18 seats: two crew per 4.5 seats
     expect(e.crewLimits()).toMatchObject({ room: 8, limit: 8, by: 'room' }); expect(e.hire('chef')).toBeNull();
     buyFurniture(e, 'table'); home.level = 3; // a full main room (20 seats) can use 10; homes now allow 9
     expect(e.crewLimits()).toMatchObject({ homes: 9, room: 10, limit: 9, by: 'homes' });
     while (s.staff.length < 9) e.hire('server');
-    expect(e.hire('chef')).toBe('Your crew is limited to 9 Mareen. Build Mareen homes for more.');
+    expect(e.hire('chef')).toBe('Your crew is full at 9. Build or upgrade Mareen homes in Town for more crew.');
   });
+});
+
+it('points to the east grotto once the main dining room has no space for another table', () => {
+  const e = new RestaurantEngine(), s = e.state; s.cash = 1e6; put(s.town, 'homes', C, C + 1, 5);
+  while (buyFurniture(e, 'table') === null) { /* fill the floor */ }
+  expect(e.roomForSeats()).toBe(false); expect(e.crewLimits()).toMatchObject({ room: 10, by: 'room' });
+  expect(e.crewGrowth().kind).toBe('grotto'); while (s.staff.length < 10) e.hire('server');
+  expect(e.hire('chef')).toMatch(/full at 10\. The dining room is full\. Open the east grotto/);
+  s.expanded = true; expect(e.roomForSeats()).toBe(true); expect(e.crewGrowth().kind).toBe('tables');
 });

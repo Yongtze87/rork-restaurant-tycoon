@@ -1,6 +1,6 @@
 import { accessPoints, findPath, inBounds, layoutError, occupied, placementError, seatPoint } from './layout';
 import { localDateKey, dateNumber } from './calendar';
-import { BOOTH, CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, INGREDIENT_IDS, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, isSeating, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type DishId, type Furniture, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
+import { BOOTH, CATALOG, DAY_LENGTH, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, MAX_PRICE, MIN_PRICE, SAVE_KEY, capacity, comfort, INGREDIENT_IDS, createRestaurant, entrance, freshDayTotals, freshTotals, furnitureUpgradeCost, guestPatienceSeconds, isSeating, restaurantSchema, staffWage, stationSpeedup, tableTipBonus, width, type Dish, type DishId, type Furniture, type FurnitureKind, type Guest, type Placement, type Point, type RestaurantState, type Role, type Staff } from './types';
 
 import { advanceDailyChallenges, createDailyChallenges, isSpecialGuest, challengeTitle } from './daily-challenges';
 import type { CashReceipt } from './cash-feedback';
@@ -291,7 +291,7 @@ export class RestaurantEngine {
     this.changed(`${CATALOG[item.kind].name} is now level ${item.level}.${lookFor(item.level) > lookFor(item.level - 1) ? ' A whole new look!' : ''}`); return null;
   }
   hire(role: Role): string | null {
-    const crew = this.crewLimits(); if (this.state.staff.length >= crew.limit) return crew.by === 'room' ? `Your dining room can use ${crew.limit} crew. Add tables first.` : `Your crew is limited to ${crew.limit} Mareen. Build Mareen homes for more.`;
+    const crew = this.crewLimits(); if (this.state.staff.length >= crew.limit) return `Your crew is full at ${crew.limit}. ${this.crewGrowth().text}`;
     if (this.state.cash < 150) return 'Recruitment costs $150.';
     const names = role === 'chef' ? ['Marlo', 'Nerin', 'Coralie', 'Kai', 'Delphine', 'Ondine'] : ['Pearl', 'Tidus', 'Maris', 'Shelly', 'Reef', 'Calyx'];
     const name = names.find(n => !this.state.staff.some(s => s.name === n)) ?? names[0];
@@ -534,7 +534,13 @@ export class RestaurantEngine {
   efficiency(): Efficiency & { advice: Advice } {
     const s = this.state, e = summarize(this.samples, this.lost.filter(l => l.full).length, this.lost.filter(l => !l.full).length);
     const stations = s.furniture.filter(f => f.kind === 'prep' || f.kind === 'grill').length, chefs = s.staff.filter(m => m.role === 'chef').length;
-    return { ...e, advice: advise(e, { crewFull: s.staff.length >= this.crewLimit(), crewBy: this.crewLimits().by, stationsShort: chefs >= stations, limitBy: this.seatLimit().by }) };
+    let advice = advise(e, { crewFull: s.staff.length >= this.crewLimit(), crewBy: this.crewLimits().by, stationsShort: chefs >= stations, limitBy: this.seatLimit().by });
+    // "Add tables" only helps while tables still fit: otherwise the grotto is the way to grow.
+    if (advice.kind === 'tables' && !this.roomForSeats()) {
+      advice = this.state.expanded ? { kind: 'smooth', title: 'At full size', text: 'Every seat is in use and the dining room is at its biggest. Raise prices a little, or grow branches in other regions.' }
+        : { kind: 'tables', title: 'Open the east grotto', text: 'The dining room is full. The east grotto (in Build) adds 40 tiles for more tables, VIP booths and crew.' };
+    }
+    return { ...e, advice };
   }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
@@ -626,6 +632,20 @@ export class RestaurantEngine {
     return { homes, room, limit: Math.min(homes, room), by: room < homes ? 'room' : 'homes' };
   }
   crewLimit(): number { return this.crewLimits().limit; }
+  /** Whether another table (or, in the grotto, a booth) still fits on the floor. */
+  roomForSeats(): boolean {
+    const s = this.state, kinds: FurnitureKind[] = s.expanded ? ['table', 'booth'] : ['table'];
+    for (const kind of kinds) for (let z = 0; z < 10; z++) for (let x = 0; x < width(s); x++) for (let rotation = 0; rotation < 4; rotation++) if (!placementError(s, { id: -1, kind, x, z, rotation, level: 1 })) return true;
+    return false;
+  }
+  /** What to do for more crew: build homes, add tables, open the grotto, or nothing more (the room is at its biggest). */
+  crewGrowth(): { kind: 'homes' | 'tables' | 'grotto' | 'max'; text: string } {
+    const c = this.crewLimits();
+    if (c.by === 'homes') return { kind: 'homes', text: 'Build or upgrade Mareen homes in Town for more crew.' };
+    if (this.roomForSeats()) return { kind: 'tables', text: 'Add tables: every 4½ seats make room for 2 more crew.' };
+    if (!this.state.expanded) return { kind: 'grotto', text: 'The dining room is full. Open the east grotto (in Build) for more seats, and more crew.' };
+    return { kind: 'max', text: 'Your dining room is at its biggest, and so is its crew.' };
+  }
   /** Exact ingredient cost per dish, to the cent; charges carry the fraction so every discount counts. */
   dishCost(dish: Dish): number { const kelp = DISHES[dish].ingredient === 'kelp', town = this.townEffects(), tide = this.tideEffects(); return Math.max(1, Math.round(DISHES[dish].cost * (kelp ? town.kelpCost * tide.kelpCost : town.fishCost * tide.fishCost) * 100) / 100); }
   /** Permanent fame bonuses (capped), cached until fame changes. */

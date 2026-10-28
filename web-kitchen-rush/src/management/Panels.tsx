@@ -53,7 +53,7 @@ export function TeamPanel({ state, action }: { state: RestaurantState; action: A
     })}</ul>
     <div className="mb-2 mt-4 flex items-center justify-between"><h3 className="font-display text-base">Hire</h3><Info>Chefs cook at a free kelp counter or vent grill, so add stations before more chefs. Servers deliver dishes and clear tables. Training makes them faster and adds $12 to their wage per shift. Mareen homes in Town raise the crew limit.</Info></div>
     <div className="grid grid-cols-2 gap-2">{(['chef', 'server'] as const).map(role => <SmallButton key={role} disabled={full || state.cash < 150} onClick={() => guardSpend(`Hiring a ${role}`, 150, () => action(restaurant.hire(role)), HIRE_WAGE[role])} className="flex-col gap-0.5 py-2"><UserPlus size={18} /><span>Hire {role}</span><span className="text-[10px] font-bold text-ink/50">$150 · +{money(HIRE_WAGE[role])}/shift</span></SmallButton>)}</div>
-    {full && <p data-testid="crew-full" className="mt-2 text-[11px] text-ink/60">{restaurant.crewLimits().by === 'room' ? 'Crew is as big as this dining room can use. Add tables for more.' : 'Crew is full. Build Mareen homes in Town for more.'}</p>}
+    {(() => { const c = restaurant.crewLimits(); return <p data-testid="crew-limit" className={cn('mt-2 text-[11px]', full ? 'font-bold text-ink/80' : 'text-ink/60')}>Homes allow {c.homes} · dining room allows {c.room}{full ? `. ${restaurant.crewGrowth().text}` : ''}</p>; })()}
   </>;
 }
 
