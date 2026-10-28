@@ -114,3 +114,15 @@ export function drawScaffold(ctx: Ctx): void {
   for (const [x, y] of [[-22, 0], [0, 11], [22, 0], [0, -11]]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 34); ctx.stroke(); }
   for (const h of [-12, -24, -34]) { ctx.beginPath(); ctx.moveTo(-22, h); ctx.lineTo(0, h + 11); ctx.lineTo(22, h); ctx.lineTo(0, h - 11); ctx.closePath(); ctx.stroke(); }
 }
+
+/** The restaurant's east grotto seen from town: a rock outcrop with a glowing cave mouth and crystals. */
+export function drawGrottoAnnex(ctx: Ctx, t: number): void {
+  ctx.save(); ctx.scale(.55, .55);
+  shadow(ctx, 30, 13, .25);
+  ctx.fillStyle = '#3A3550'; ctx.beginPath(); ctx.moveTo(-30, 2); ctx.quadraticCurveTo(-28, -30, -6, -38); ctx.quadraticCurveTo(18, -42, 28, -16); ctx.lineTo(30, 4); ctx.quadraticCurveTo(0, 16, -30, 2); ctx.fill();
+  ctx.fillStyle = '#4C4668'; ctx.beginPath(); ctx.moveTo(-22, -6); ctx.quadraticCurveTo(-16, -30, 2, -34); ctx.quadraticCurveTo(-4, -18, -22, -6); ctx.fill();
+  glow(ctx, 0, -8, 22, 'rgba(165,123,255,A)', .45 + Math.sin(t * 1.6) * .1);
+  ctx.fillStyle = '#1A1630'; ctx.beginPath(); ctx.ellipse(2, -4, 9, 11, 0, Math.PI, 0); ctx.lineTo(11, 4); ctx.lineTo(-7, 4); ctx.closePath(); ctx.fill();
+  for (const [x, y, h] of [[-18, -2, 14], [16, -6, 18], [22, 0, 10]] as const) { ctx.fillStyle = 'rgba(120,240,255,.9)'; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x, y - h); ctx.lineTo(x + 3, y); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}

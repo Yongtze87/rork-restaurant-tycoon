@@ -6,7 +6,7 @@ import { REGION_PITCH, regionBlock, regionId, type Block } from '../world';
 import { depthOf, toGrid, toScreen, type View } from './projection';
 import { at, drawDecor, drawNight, drawParticles, drawWater, floorPolygon, type Decor, type Glow } from './render';
 import { drawSprite } from './sprites';
-import { drawBuilding, drawScaffold } from './town-art';
+import { drawBuilding, drawGrottoAnnex, drawScaffold } from './town-art';
 
 export interface TownFrame {
   town: Town; ocean: Pick<Ocean, 'regions'>; cash: number; view: View; width: number; height: number; windowTop: number; windowHeight: number;
@@ -132,7 +132,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
     const b = regionBlock(c.x, c.y);
     for (let z = b.z0; z < b.z0 + b.size; z++) for (let x = b.x0; x < b.x0 + b.size; x++) { const p = plotAt(town, x, z); if (p) plots.push(p); }
   }
-  const openPlots = new Set(plots.filter(p => canUnlock(town, p))), taken = occupancy(town), roads = roadSet(town), grid = f.roadMode || Boolean(f.draft) || s >= 1.3;
+  const openPlots = new Set(plots.filter(p => canUnlock(town, p))), taken = occupancy(town), roads = roadSet(town), grid = f.roadMode || Boolean(f.draft) || s >= .8;
   const usedPlots = new Set<string>(); for (const key of taken.keys()) { const [x, z] = key.split(',').map(Number), p = parcelOf(x, z); usedPlots.add(`${p.x},${p.z}`); }
   for (const plot of plots) {
     const open = openPlots.has(plot), x0 = plot.x - .5 + GAP / 2, z0 = plot.z - .5 + GAP / 2, x1 = plot.x + .5 - GAP / 2, z1 = plot.z + .5 - GAP / 2;
@@ -147,7 +147,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
       if (s >= .8) { floorPolygon(ctx, view, tileEdge(tx) + .07, tileEdge(tz) + .07, tileEdge(tx + 1) - .07, tileEdge(tz + 1) - .07); ctx.strokeStyle = 'rgba(233,230,255,.22)'; ctx.lineWidth = 1; ctx.stroke(); }
     }
     if (grid) {
-      ctx.strokeStyle = f.roadMode ? 'rgba(77,240,255,.45)' : 'rgba(18,15,46,.14)'; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.strokeStyle = f.roadMode || f.draft ? 'rgba(77,240,255,.45)' : 'rgba(18,15,46,.12)'; ctx.lineWidth = 1; ctx.beginPath();
       for (let i = 1; i < PARCEL; i++) {
         const a = toScreen(view, plot.x - .5 + i / PARCEL, plot.z - .5), b = toScreen(view, plot.x - .5 + i / PARCEL, plot.z + .5), c = toScreen(view, plot.x - .5, plot.z - .5 + i / PARCEL), d = toScreen(view, plot.x + .5, plot.z - .5 + i / PARCEL);
         ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y);
@@ -169,19 +169,32 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
     const palette = PALETTES[regionAt(c.x, c.y).biome];
     for (const d of regionDecor(c.x, c.y, c.status === 'claimable')) items.push({ depth: depthOf(d.x, d.z), draw: () => at(ctx, view, d.x, d.z, 0, () => drawDecor(ctx, d, t, palette), c.status === 'claimable' ? .7 : 1) });
   }
-  const drawPiece = (kind: Building['kind'], level: number, job: Building['job'], r: Rect, alpha = 1) => {
-    const { w, d } = { w: r.x1 - r.x0 + 1, d: r.z1 - r.z0 + 1 }, centre = rectCentre(r), k = artScale(w, d), look = lookFor(level);
-    rectPolygon(ctx, view, r, .02); ctx.globalAlpha = alpha; ctx.fillStyle = PAD[kind]; ctx.fill(); ctx.globalAlpha = 1;
-    at(ctx, view, centre.x, centre.z, 0, () => {
-      ctx.scale(k, k);
-      if (job?.kind === 'build') { ctx.fillStyle = 'rgba(122,90,62,.8)'; ctx.beginPath(); ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2); ctx.fill(); }
-      else if (!drawSprite(ctx, `building.${kind}.${look}`)) drawBuilding(ctx, kind, look, t);
-      if (job) drawScaffold(ctx);
-    }, alpha);
+  const drawPiece = (kind: Building['kind'], level: number, job: Building['job'], r: Rect, alpha = 1, wide = false, turned = false) => {
+    const look = lookFor(level);
+    rectPolygon(ctx, view, r, .03); ctx.globalAlpha = alpha; ctx.fillStyle = PAD[kind]; ctx.fill(); ctx.strokeStyle = 'rgba(18,15,46,.35)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1;
+    // The restaurant's grotto row is a rock annex; the hall stands on the other 3×3.
+    let body = r;
+    if (wide) {
+      const annex: Rect = turned ? { ...r, z0: r.z1 } : { ...r, x0: r.x1 }; body = turned ? { ...r, z1: r.z1 - 1 } : { ...r, x1: r.x1 - 1 };
+      const c = rectCentre(annex);
+      at(ctx, view, c.x, c.z, 0, () => drawGrottoAnnex(ctx, t), alpha);
+    }
+    // A long footprint repeats its art along the long side, so a 3×2 farm reads as a long field, not a square.
+    const w = body.x1 - body.x0 + 1, d = body.z1 - body.z0 + 1, along = w >= d, n = job?.kind === 'build' ? 1 : Math.max(1, Math.round(Math.max(w, d) / Math.min(w, d)));
+    for (let i = 0; i < n; i++) {
+      const part: Rect = along ? { ...body, x0: body.x0 + w * i / n, x1: body.x0 + w * (i + 1) / n - 1 } : { ...body, z0: body.z0 + d * i / n, z1: body.z0 + d * (i + 1) / n - 1 };
+      const c = rectCentre(part), k = artScale(part.x1 - part.x0 + 1, part.z1 - part.z0 + 1) * (n > 1 ? .95 : 1);
+      at(ctx, view, c.x, c.z, 0, () => {
+        ctx.scale(k, k);
+        if (job?.kind === 'build') { ctx.fillStyle = 'rgba(122,90,62,.8)'; ctx.beginPath(); ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2); ctx.fill(); }
+        else if (!drawSprite(ctx, `building.${kind}.${look}`)) drawBuilding(ctx, kind, look, t);
+        if (job) drawScaffold(ctx);
+      }, alpha);
+    }
   };
   for (const b of visible) {
-    const r = rectOf(b), centre = rectCentre(r), { w, d } = footprint(b.kind, b.turned), k = artScale(w, d), depth = depthOf(centre.x, centre.z);
-    items.push({ depth, draw: () => drawPiece(b.kind, b.level, b.job, r) });
+    const r = rectOf(b), centre = rectCentre(r), { w, d } = footprint(b.kind, b.turned, b.wide), k = artScale(w, d), depth = depthOf(centre.x, centre.z);
+    items.push({ depth, draw: () => drawPiece(b.kind, b.level, b.job, r, 1, b.wide, b.turned) });
     const p = toScreen(view, centre.x, centre.z);
     boxes.push({ id: b.id, left: p.x - 30 * k * s, right: p.x + 30 * k * s, top: p.y - 60 * k * s, bottom: p.y + 10 * k * s, depth });
   }
@@ -189,7 +202,7 @@ export function renderTown(ctx: Ctx, f: TownFrame): { labels: RegionLabel[]; bui
   if (draft) {
     const r = rectOf(draft.spot), centre = rectCentre(r);
     items.push({ depth: depthOf(centre.x, centre.z) + .01, draw: () => {
-      drawPiece(draft.spot.kind, 1, null, r, .7);
+      drawPiece(draft.spot.kind, 1, null, r, .7, draft.spot.wide, draft.spot.turned);
       rectPolygon(ctx, view, r); ctx.fillStyle = draft.ok ? 'rgba(77,240,255,.28)' : 'rgba(255,92,108,.35)'; ctx.fill();
       ctx.setLineDash([6, 4]); ctx.strokeStyle = draft.ok ? '#4DF0FF' : '#FF5C6C'; ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
     } });

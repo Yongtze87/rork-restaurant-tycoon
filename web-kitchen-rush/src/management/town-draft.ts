@@ -22,4 +22,4 @@ export function draftAt(town: Town, kind: BuildingKind, tile: TileRef): TownDraf
   const p = parcelOf(tile.x, tile.z); return siteIn(town, kind, p.x, p.z) ?? { kind, x: tile.x, z: tile.z, turned: false };
 }
 /** A draft centred on a tapped tile. */
-export const centreDraft = (draft: TownDraft, tile: TileRef): TownDraft => { const { w, d } = footprint(draft.kind, draft.turned); return { ...draft, x: tile.x - Math.floor((w - 1) / 2), z: tile.z - Math.floor((d - 1) / 2) }; };
+export const centreDraft = (draft: TownDraft, tile: TileRef): TownDraft => { const { w, d } = footprint(draft.kind, draft.turned, draft.wide); return { ...draft, x: tile.x - Math.floor((w - 1) / 2), z: tile.z - Math.floor((d - 1) / 2) }; };

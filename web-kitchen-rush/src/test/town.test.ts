@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RestaurantEngine } from '@/management/engine';
 import { BUILDINGS, MAX_LEVEL, PARCEL, TOWN_BALANCE, baseSeconds, buildingAt, connected, createTown, finishCost, jobSeconds, lookFor, migrateTown, network, plotAt, restaurantOf, streetTiles, townEffects, townSchema, unlockCost, upgradeCost, type Town } from '@/management/town';
 import { C, joinRoads, on, put } from './town-helpers';
-import { restaurantSchema } from '@/management/types';
+import { createRestaurant, restaurantSchema } from '@/management/types';
 
 function harness() {
   let now = 1_800_000_000_000, raw = '';
@@ -18,7 +18,7 @@ describe('town plots', () => {
   it('starts with the restaurant plot, its streets and neutral effects', () => {
     const town = createTown();
     expect(town.plots.filter(p => p.owned)).toEqual([{ x: C, z: C, owned: true }]);
-    expect(town.buildings).toEqual([{ id: 1, kind: 'restaurant', x: T, z: T, turned: false, level: 1, job: null }]);
+    expect(town.buildings).toEqual([{ id: 1, kind: 'restaurant', x: T, z: T, turned: false, wide: false, level: 1, job: null }]);
     expect(town.roads).toEqual(streetTiles(C, C)); expect(network(town).size).toBe(7);
     expect(townEffects(town)).toEqual({ kelpCost: 1, fishCost: 1, extraCrew: 0, arrivalBonus: 0, crewSpeed: 1 });
   });
@@ -218,5 +218,34 @@ describe('exact ingredient costs and the closing reserve', () => {
     const price = unlockCost(e.state.town); e.state.cash = price + e.billsTonight() - 1;
     expect(e.spendCheck(price)).toEqual({ after: e.billsTonight() - 1, reserve: e.billsTonight() + 30 });
     expect(e.unlockPlot(C + 1, C)).toBeNull(); expect(e.state.cash).toBe(e.billsTonight() - 1);
+  });
+});
+
+describe('the east grotto takes room in town', () => {
+  const ready = () => { const { e, h } = rich(); e.state.history = Array.from({ length: 3 }, () => structuredClone(e.state.totals) as never); return { e, h }; };
+  it('grows the restaurant from 3×3 to 4×3, lifting the street in the way; buildings beside it keep working', () => {
+    const { e, h } = ready(), town = e.state.town; e.unlockPlot(C + 1, C);
+    expect(e.build('kelpFarm', T + 4, T)).toBeNull(); h.advance(3600); e.update(.1);
+    const farm = town.buildings[1]; expect(connected(town, farm)).toBe(true);
+    const cash = e.state.cash; expect(e.expand()).toBeNull(); expect(e.state.cash).toBe(cash - 900);
+    expect(hall(town).wide).toBe(true); expect(buildingAt(town, T + 3, T + 2)?.kind).toBe('restaurant');
+    expect(town.roads).not.toContain(`${T + 3},${T}`); expect(e.event).toContain('3 road tiles made way');
+    // The kelp farm now stands right against the restaurant: still working, still near it.
+    expect(connected(town, farm)).toBe(true); expect(e.townEffects().kelpCost).toBeCloseTo(.91);
+    // Moving the restaurant keeps its grotto row.
+    expect(e.placeError('restaurant', T, T, false, hall(town).id)).toBeNull();
+    expect(townSchema.parse(structuredClone(town))).toMatchObject({ buildings: [{ kind: 'restaurant', wide: true }, { kind: 'kelpFarm' }] });
+  });
+  it('waits while a building stands in that row, and says which one', () => {
+    const { e } = ready(), town = e.state.town; e.unlockPlot(C + 1, C);
+    town.roads = town.roads.filter(k => !k.startsWith(`${T + 3},`) || k === `${T + 3},${T + 3}`); e.placeRoad(T + 4, T + 3);
+    expect(e.build('homes', T + 3, T + 1)).toBeNull();
+    expect(e.expand()).toBe('The grotto needs the row of tiles beside the restaurant in town. Move the mareen homes there first.');
+    expect(e.state.expanded).toBe(false); expect(hall(town).wide).toBe(false);
+  });
+  it('widens a grotto bought before tiles when its old save loads', () => {
+    const h = harness(), s = createRestaurant(); s.expanded = true; hall(s.town).wide = false;
+    h.storage.setItem('vast-ocean-restaurant-v1', JSON.stringify(s));
+    const e = new RestaurantEngine(h.storage, h.now); expect(e.loadWarning).toBe(''); expect(hall(e.state.town).wide).toBe(true);
   });
 });

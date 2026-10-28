@@ -174,7 +174,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
   const streets = (px: number, pz: number, className = 'w-full', then?: () => void) => { const s = restaurant.streetsFor(px, pz); return s.tiles.length > 0 && <SmallButton className={className} disabled={state.cash < s.price} onClick={() => act(restaurant.layStreets(px, pz), then)}><Route size={14} />Lay this plot’s streets · {s.tiles.length} tiles · {money(s.price)}</SmallButton>; };
 
   if (draft) {
-    const info = BUILDINGS[draft.kind], plot = parcelOf(draft.x, draft.z), error = restaurant.placeError(draft.kind, draft.x, draft.z, draft.turned, draft.id), { w, d } = footprint(draft.kind, draft.turned);
+    const info = BUILDINGS[draft.kind], plot = parcelOf(draft.x, draft.z), error = restaurant.placeError(draft.kind, draft.x, draft.z, draft.turned, draft.id), { w, d } = footprint(draft.kind, draft.turned, draft.wide);
     const price = restaurant.buildPrice(draft.kind, plot.x, plot.z), moving = draft.id !== undefined, ready = !error && (moving || (!busy && state.cash >= price));
     const needsRoad = error === 'Buildings need a road along one side.' && plotAt(town, plot.x, plot.z)?.owned;
     return <section aria-label={moving ? `Move ${info.name.toLowerCase()}` : `Place ${info.name.toLowerCase()}`}>
@@ -241,7 +241,7 @@ export function TownPanel({ selected, onSelect, region, onRegion, draft, onDraft
   }
   const kind = building.kind, info = BUILDINGS[kind], job = building.job, next = building.level + 1, home = buildingPlot(building), cost = restaurant.upgradePrice(kind, next, home.x, home.z), special = boostNote(home, kind), works = connected(town, building), spot: Spot = building;
   return <section aria-label={info.name}>{head(info.name, `Lv ${building.level}/${MAX_LEVEL} · ${info.looks[lookFor(building.level) - 1]}`, <>
-    <SmallButton label={`Move ${info.name.toLowerCase()}`} className="shrink-0 px-2.5" onClick={() => onDraft({ kind, x: building.x, z: building.z, turned: building.turned, id: building.id })}><Move size={14} /></SmallButton>
+    <SmallButton label={`Move ${info.name.toLowerCase()}`} className="shrink-0 px-2.5" onClick={() => onDraft({ kind, x: building.x, z: building.z, turned: building.turned, wide: building.wide, id: building.id })}><Move size={14} /></SmallButton>
     {kind === 'restaurant' ? <SmallButton className="shrink-0" onClick={onEnterRestaurant}><Store size={14} />Enter</SmallButton> : <Info>{info.description}{info.adjacency ? ` ${info.adjacency}` : ''} “Near” means touching it or one tile away, for example across a road.{kind === 'branch' ? ' Branch income is paid at every closing, also while you are away.' : ''}</Info>}</>)}
     {!works && <div data-testid="no-road" className="mt-1.5 rounded-xl border border-danger/40 bg-danger/10 p-2 text-[11px] font-bold text-danger">No road joins this building to your {inHome(home) ? 'restaurant' : 'branch'}, so it does nothing yet.{' '}<button type="button" className="font-extrabold underline" onClick={() => onRoadMode(true)}>Lay a road</button></div>}
     <p className="mt-1 text-[11px] font-bold text-teal">{kind === 'branch' && <span data-testid="branch-income" className="mr-1 text-gold">{job?.kind === 'build' ? `Opens when built: ${money(restaurant.branchIncomeAt(building, 1))} per shift.` : `Earns ${money(restaurant.branchIncomeAt(building))} per shift.`}</span>}{job?.kind === 'build' ? 'Ready when built: ' : 'Now: '}{effectText(town, spot, building.level, fame.branch)}{special && <span className="text-gold"> · {special}</span>}</p>

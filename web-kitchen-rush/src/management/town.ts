@@ -30,7 +30,7 @@ const tile = z.number().int().min(-WORLD_LIMIT * PARCEL).max(WORLD_LIMIT * PARCE
 const plotSchema = z.object({ x: coordinate, z: coordinate, owned: z.boolean() });
 export type Plot = Validated<z.infer<typeof plotSchema>>;
 /** A building on the tile grid: (x, z) is its corner tile; `turned` swaps its width and depth. */
-const buildingSchema = z.object({ id: z.number().int().nonnegative(), kind: buildingKind, x: tile, z: tile, turned: z.boolean().default(false), level: z.number().int().min(0).max(MAX_LEVEL), job: jobSchema.nullable() });
+const buildingSchema = z.object({ id: z.number().int().nonnegative(), kind: buildingKind, x: tile, z: tile, turned: z.boolean().default(false), /** The restaurant with its east grotto: one tile wider. */ wide: z.boolean().default(false), level: z.number().int().min(0).max(MAX_LEVEL), job: jobSchema.nullable() });
 export type Building = Validated<z.infer<typeof buildingSchema>>;
 const ROAD_KEY = /^-?\d{1,7},-?\d{1,7}$/;
 const center = Math.floor(TOWN_SIZE / 2);
@@ -112,7 +112,7 @@ export const PEARL_PACKS = [{ pearls: 60, price: '$0.99' }, { pearls: 330, price
 export function createTown(): Town {
   const plots: Plot[] = [];
   for (let z = 0; z < TOWN_SIZE; z++) for (let x = 0; x < TOWN_SIZE; x++) plots.push({ ...emptyPlot(x, z), owned: x === center && z === center });
-  const restaurant: Building = { id: 1, kind: 'restaurant', x: center * PARCEL, z: center * PARCEL, turned: false, level: 1, job: null };
+  const restaurant: Building = { id: 1, kind: 'restaurant', x: center * PARCEL, z: center * PARCEL, turned: false, wide: false, level: 1, job: null };
   return { plots, buildings: [restaurant], roads: streetTiles(center, center), nextBuildingId: 2, builders: 1, pearls: 5, charms: { current: 1, tide: 0 }, lastGiftDay: '', zones: ['shallows'] };
 }
 /** The depth zone a plot belongs to, by its ring around the restaurant. */
@@ -133,9 +133,9 @@ export const plotOfTile = (town: Pick<Town, 'plots'>, x: number, z: number): Plo
 
 /** A building's tiles as an inclusive rectangle. */
 export interface Rect { x0: number; z0: number; x1: number; z1: number; }
-export interface Spot { kind: BuildingKind; x: number; z: number; turned: boolean; }
-export const footprint = (kind: BuildingKind, turned: boolean): { w: number; d: number } => { const [w, d] = BUILDINGS[kind].size; return turned ? { w: d, d: w } : { w, d }; };
-export const rectOf = (s: Pick<Spot, 'kind' | 'x' | 'z' | 'turned'>): Rect => { const { w, d } = footprint(s.kind, s.turned); return { x0: s.x, z0: s.z, x1: s.x + w - 1, z1: s.z + d - 1 }; };
+export interface Spot { kind: BuildingKind; x: number; z: number; turned: boolean; wide?: boolean; }
+export const footprint = (kind: BuildingKind, turned: boolean, wide = false): { w: number; d: number } => { const [w0, d] = BUILDINGS[kind].size, w = w0 + (wide ? 1 : 0); return turned ? { w: d, d: w } : { w, d }; };
+export const rectOf = (s: Pick<Spot, 'kind' | 'x' | 'z' | 'turned' | 'wide'>): Rect => { const { w, d } = footprint(s.kind, s.turned, s.wide); return { x0: s.x, z0: s.z, x1: s.x + w - 1, z1: s.z + d - 1 }; };
 export function rectTiles(r: Rect): [number, number][] { const list: [number, number][] = []; for (let z = r.z0; z <= r.z1; z++) for (let x = r.x0; x <= r.x1; x++) list.push([x, z]); return list; }
 /** The tiles along a rectangle's four sides (not its corners): where a road must be for the building to reach it. */
 export function rectEdge(r: Rect): [number, number][] {
@@ -154,7 +154,7 @@ export function roadSet(town: Pick<Town, 'roads'>): Set<string> {
   let hit = roadCache.get(town.roads); if (!hit) { hit = new Set(town.roads); roadCache.set(town.roads, hit); } return hit;
 }
 export const isRoad = (town: Pick<Town, 'roads'>, x: number, z: number): boolean => roadSet(town).has(tileKey(x, z));
-const signature = (list: Building[]) => list.map(b => `${b.id}:${b.kind}:${b.x}:${b.z}:${b.turned ? 1 : 0}`).join('|');
+const signature = (list: Building[]) => list.map(b => `${b.id}:${b.kind}:${b.x}:${b.z}:${b.turned ? 1 : 0}${b.wide ? 'w' : ''}`).join('|');
 const occupancyCache = new WeakMap<Building[], { sig: string; map: Map<string, Building> }>();
 /** Which building covers each tile. */
 export function occupancy(town: Pick<Town, 'buildings'>): Map<string, Building> {
@@ -180,8 +180,26 @@ export function network(town: Pick<Town, 'roads' | 'buildings'>): Set<string> {
   networkCache.set(town.roads, { sig, set }); return set;
 }
 const touches = (r: Rect, tiles: Set<string>) => rectEdge(r).some(([x, z]) => tiles.has(tileKey(x, z)));
-/** A building works once a road joins it to the restaurant or a branch (those two always work). */
-export const connected = (town: Pick<Town, 'roads' | 'buildings'>, b: Building): boolean => isHub(b) || touches(rectOf(b), network(town));
+/** A building works once a road joins it to the restaurant or a branch, or it stands right against one (those two always work). */
+export function connected(town: Pick<Town, 'roads' | 'buildings'>, b: Building): boolean {
+  const r = rectOf(b); return isHub(b) || touches(r, network(town)) || town.buildings.some(h => isHub(h) && gap(r, rectOf(h)) === 0);
+}
+/** Why the restaurant can't grow by a row of tiles for the east grotto, or null. Roads in the way are lifted, buildings are not. */
+export function grottoSpaceError(town: Town): string | null {
+  const hall = restaurantOf(town); if (hall.wide) return null;
+  const old = rectOf(hall), taken = occupancy(town);
+  for (const [x, z] of rectTiles(rectOf({ ...hall, wide: true }))) {
+    if (x >= old.x0 && x <= old.x1 && z >= old.z0 && z <= old.z1) continue;
+    if (!plotOfTile(town, x, z)?.owned) return 'The grotto needs a row of your own land beside the restaurant in town. Unlock that plot first.';
+    const other = taken.get(tileKey(x, z)); if (other) return `The grotto needs the row of tiles beside the restaurant in town. Move the ${BUILDINGS[other.kind].name.toLowerCase()} there first.`;
+  }
+  return null;
+}
+/** Grow the restaurant by its grotto row, lifting roads in the way. Returns how many road tiles were lifted. */
+export function widenRestaurant(town: Town): number {
+  const hall = restaurantOf(town), keys = new Set(rectTiles(rectOf({ ...hall, wide: true })).map(([x, z]) => tileKey(x, z))), before = town.roads.length;
+  town.roads = town.roads.filter(k => !keys.has(k)); hall.wide = true; return before - town.roads.length;
+}
 
 /** The region a plot belongs to ("0,0" for the home town). */
 export const plotRegion = (plot: Pick<Plot, 'x' | 'z'>): string => regionOfPlot(plot.x, plot.z) ?? HOME_ID;

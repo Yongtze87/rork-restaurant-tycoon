@@ -9,7 +9,7 @@ import { ZONES, hasZone, zoneError, type ZoneId } from './zones';
 import { TIDES, rollTide, type TideEffects } from './tides';
 import { achievement, claimableAchievements, isClaimable, recordDay, recordServed, rewardText, seedCollections } from './collections';
 import { HOME_ID, claimGate, claimPrice, fameBonuses, isClaimable as regionClaimable, isClaimed, masteryFame, masteryKey, regionAt, regionById, regionPlotCost, type FameBonuses, type MasteryKind, type Region, type RegionModifiers } from './ocean';
-import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_BALANCE, activeLevel, addRegion, addRoads, branchIn, branchIncome, buildingById, buildingPlot, buildingRegion, busyBuilders, completeJobs, ensureRegionPlots, finishCost, isRoad, jobSeconds, lookFor, ownedCount, parcelOf, placementError as sitingError, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, roadError, streetTiles, tileKey, townEffects, unlockCost, upgradeCost, type Building, type BuildingKind, type CharmKind, type TownEffects } from './town';
+import { BUILDINGS, CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_BALANCE, activeLevel, addRegion, addRoads, branchIn, branchIncome, buildingById, buildingPlot, buildingRegion, busyBuilders, completeJobs, ensureRegionPlots, finishCost, grottoSpaceError, isRoad, jobSeconds, lookFor, ownedCount, parcelOf, placementError as sitingError, plotAt, plotLockReason, plotModifiers, plotRegion, plotsIn, roadError, streetTiles, tileKey, townEffects, unlockCost, upgradeCost, widenRestaurant, type Building, type BuildingKind, type CharmKind, type TownEffects } from './town';
 import { inHome, regionCenter } from './world';
 
 export const GOALS = [
@@ -95,6 +95,8 @@ export class RestaurantEngine {
         if (layoutError(restored.furniture, width(restored))) throw new Error('Invalid layout');
         // Regions claimed in the colony build have no plots yet: they load as claimed, empty regions.
         ensureRegionPlots(restored.town, restored.ocean.regions);
+        // Grottos bought before the town had tiles: the restaurant takes its extra row when there is room.
+        if (restored.expanded && !grottoSpaceError(restored.town)) widenRestaurant(restored.town);
         // Saves from before real calendar days: their per-shift board is dropped; today's board rolls on the next tick.
         if (!parsed.calendar) restored.dailyChallenges = [];
         if (restored.dailyChallenges.some(c => c.day !== restored.calendar.index)) throw new Error('Invalid challenge day');
@@ -331,7 +333,9 @@ export class RestaurantEngine {
     if (this.state.expanded) return 'Your east grotto is already open.';
     if (this.state.history.length < 3) return 'Finish 3 shifts to unlock the east grotto.';
     if (this.state.cash < 900) return 'The east grotto costs $900.';
-    this.state.cash -= 900; this.state.expanded = true; this.changed('The east grotto is yours. Forty new tiles and room for VIP booths.'); return null;
+    const space = grottoSpaceError(this.state.town); if (space) return space;
+    const lifted = widenRestaurant(this.state.town);
+    this.state.cash -= 900; this.state.expanded = true; this.changed(`The east grotto is yours. Forty new tiles and room for VIP booths; your restaurant in town grew by a row${lifted ? ` (${lifted} road tiles made way)` : ''}.`); return null;
   }
   claim(id: string): string | null {
     const goal = GOALS.find(g => g.id === id);
@@ -518,7 +522,7 @@ export class RestaurantEngine {
   }
   /** Town effects, cached until a building changes. */
   townEffects(): TownEffects {
-    const town = this.state.town; let key = town.zones.join(); for (const b of town.buildings) key += `|${b.x},${b.z},${b.turned ? 1 : 0},${b.kind},${b.level},${b.job?.kind ?? ''}`;
+    const town = this.state.town; let key = town.zones.join(); for (const b of town.buildings) key += `|${b.x},${b.z},${b.turned ? 1 : 0}${b.wide ? 'w' : ''},${b.kind},${b.level},${b.job?.kind ?? ''}`;
     if (!this.effects || key !== this.effectsKey || town.roads !== this.effectsRoads) { this.effects = townEffects(town); this.effectsKey = key; this.effectsRoads = town.roads; }
     return this.effects;
   }
@@ -651,7 +655,7 @@ export class RestaurantEngine {
     if (kind === 'branch' && region === HOME_ID) return 'Branches open in other regions. Claim a region first.';
     if (moving && kind === 'branch' && region !== buildingRegion(moving)) return 'A branch stays in its own region.';
     if (kind === 'branch' && !moving && branchIn(town, region)) return 'This region already has a branch.';
-    return sitingError(town, { kind, x, z, turned }, id);
+    return sitingError(town, { kind, x, z, turned, wide: moving?.wide }, id);
   }
   /** Start a building with its corner on tile (x, z); `turned` swaps width and depth. */
   build(kind: BuildingKind, x: number, z: number, turned = false): string | null {
@@ -660,7 +664,7 @@ export class RestaurantEngine {
     const info = BUILDINGS[kind], price = this.buildPrice(kind, plot.x, plot.z); if (this.state.cash < price) return `${info.name} costs $${price}.`;
     const reserve = this.reserveError(price); if (reserve) return reserve;
     const now = this.now(), seconds = this.jobSeconds(kind, 1, plot.x, plot.z);
-    this.state.cash -= price; town.buildings.push({ id: town.nextBuildingId++, kind, x, z, turned, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
+    this.state.cash -= price; town.buildings.push({ id: town.nextBuildingId++, kind, x, z, turned, wide: false, level: 1, job: { kind: 'build', startedAt: now, endsAt: now + seconds * 1000 } });
     this.changed(`Building a ${info.name.toLowerCase()}.`); return null;
   }
   /** Move or turn a building: free and instant, levels and timers stay. */

@@ -16,7 +16,7 @@ const hubPlot = (px: number, pz: number) => { if (inHome({ x: px, z: pz })) retu
 /** Put a finished building on a plot's corner (tests only): the plot is owned and roads join it to the restaurant (or its region's branch site). */
 export function put(town: Town, kind: BuildingKind, px: number, pz: number, level = 1, extra: Partial<Building> = {}): Building {
   plotAt(town, px, pz)!.owned = true; joinRoads(town, { x: px, z: pz }, hubPlot(px, pz));
-  const b: Building = { id: town.nextBuildingId++, kind, x: px * PARCEL, z: pz * PARCEL, turned: false, level, job: null, ...extra };
+  const b: Building = { id: town.nextBuildingId++, kind, x: px * PARCEL, z: pz * PARCEL, turned: false, wide: false, level, job: null, ...extra };
   town.buildings.push(b); return b;
 }
 /** The building whose corner is on a plot. */

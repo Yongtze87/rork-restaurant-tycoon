@@ -200,7 +200,7 @@ export class Simulation {
   /** A spot in an owned plot that a road already joins to the restaurant or a branch. */
   private site(kind: BuildingKind, plot: Pick<Plot, 'x' | 'z'>): Spot | null {
     const spot = siteIn(this.s.town, kind, plot.x, plot.z); if (!spot) return null;
-    return connected(this.s.town, { ...spot, id: -1, level: 1, job: null }) ? spot : null;
+    return connected(this.s.town, { ...spot, wide: false, id: -1, level: 1, job: null }) ? spot : null;
   }
   /** Unlock a plot and lay its streets, the way most owners grow a town. */
   private unlockWithStreets(plot: Pick<Plot, 'x' | 'z'>): boolean {
@@ -490,7 +490,7 @@ export function buyFurniture(e: RestaurantEngine, kind: FurnitureKind): string |
 }
 /** Unlock (if needed, with its streets) a plot near the restaurant or away from it, and build there on a spot a road reaches. */
 export function buildNear(e: RestaurantEngine, kind: BuildingKind, nearRestaurant: boolean): string | null {
-  const town = e.state.town, joined = (spot: Spot) => connected(town, { ...spot, id: -1, level: 1, job: null });
+  const town = e.state.town, joined = (spot: Spot) => connected(town, { ...spot, wide: false, id: -1, level: 1, job: null });
   const spotIn = (p: Plot) => { const spot = siteIn(town, kind, p.x, p.z); return spot && joined(spot) && nearSpot(town, spot, 'restaurant') === nearRestaurant ? spot : null; };
   let plot = town.plots.find(p => p.owned && spotIn(p));
   if (!plot) {
