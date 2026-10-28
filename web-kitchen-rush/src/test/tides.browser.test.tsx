@@ -29,7 +29,7 @@ it.each([320, 1280])('shows today’s tide next to the daily challenges at %spx'
 });
 
 it('names the day’s tide on its receipt', async () => {
-  const report: Report = { challenges: [], day: 4, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, rating: 4, tide: 'shoal', branch: 0 };
+  const report: Report = { challenges: [], day: 4, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, full: 0, rating: 4, tide: 'shoal', branch: 0 };
   const screen = await render(<DailyReport report={report} restaurantName="Little Reef" closing={false} onContinue={() => undefined} onClose={() => undefined} />);
   await expect.element(screen.getByTestId('report-tide')).toHaveTextContent('Shoal run · Fish 30% cheaper');
 });

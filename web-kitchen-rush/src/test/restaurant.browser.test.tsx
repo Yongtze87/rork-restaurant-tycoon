@@ -98,7 +98,7 @@ it.each([320, 1280])('keeps the ocean soundtrack and view controls on screen wit
   expect(JSON.stringify(restaurant.state)).toBe(before);
 });
 
-const sampleReport: Report = { challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, rating: 4, tide: 'calm', branch: 0 };
+const sampleReport: Report = { challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, full: 0, rating: 4, tide: 'calm', branch: 0 };
 const openDay = async (screen: Awaited<ReturnType<typeof render>>, name: string) => { await screen.getByRole('button', { name: 'Ledger', exact: true }).click(); await screen.getByRole('button', { name: `View ${name} summary` }).click(); };
 it('reopens a saved daily summary without changing money, wages or the current day', async () => {
   restaurant.train(10); const names = onDay(2, [{ ...sampleReport }]);

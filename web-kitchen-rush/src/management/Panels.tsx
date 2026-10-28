@@ -35,6 +35,7 @@ export function Notice({ children }: { children: ReactNode }) { return <div clas
 export function TeamPanel({ state, action }: { state: RestaurantState; action: Action }) {
   const wages = state.staff.reduce((sum, staff) => sum + staffWage(staff), 0), limit = restaurant.crewLimit(), full = state.staff.length >= limit;
   return <>
+    {(() => { const l = restaurant.seatLimit(); return <div data-testid="seat-limit" className={cn('mb-2 rounded-xl px-2.5 py-1.5 text-[11px] font-bold', l.by === 'seats' ? 'bg-teal/10 text-teal' : 'bg-gold/15 text-ink/80')}>Crew can serve {Math.floor(l.servable)} of {l.seats} seats{l.by === 'seats' ? ' · every seat covered' : ` · ${{ servers: 'hire a server', chefs: 'hire a chef', stations: 'add a kitchen station' }[l.by]} to fill more`}</div>; })()}
     <div className="mb-3 grid grid-cols-3 gap-2"><Stat label="Crew" value={`${state.staff.length}/${limit}`} /><Stat label="Wages per shift" value={money(wages)} /><Stat label="Safe to spend" testId="safe-to-spend" value={money(restaurant.safeToSpend())} tone={restaurant.safeToSpend() > 0 ? undefined : 'danger'} /></div>
     <ul className="grid gap-2 sm:grid-cols-2">{state.staff.map(member => {
       const chef = member.role === 'chef', cost = member.level * 180, onlyOne = state.staff.filter(s => s.role === member.role).length === 1;

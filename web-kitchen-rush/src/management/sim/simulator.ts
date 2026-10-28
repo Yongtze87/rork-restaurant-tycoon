@@ -8,7 +8,7 @@
 import { GOALS, OFFLINE_SERVICE_DAYS, OFFLINE_SERVICE_HOURS, RestaurantEngine } from '../engine';
 import { placementError } from '../layout';
 import { CATALOG, DAY_LENGTH, width, DISHES, DISH_IDS, FURNITURE_MAX_LEVEL, capacity, comfort, furnitureUpgradeCost, isSeating, type FurnitureKind, type Furniture, type RestaurantState } from '../types';
-import { CHARMS, MAX_BUILDERS, MAX_LEVEL, SHOP, TOWN_SIZE, activeLevel, branchIn, buildingPlot, busyBuilders, connected, nearSpot, neighbours, plotLockReason, plotsIn, restaurantOf, siteIn, type Building, type BuildingKind, type Plot, type Spot } from '../town';
+import { CHARMS, MAX_BUILDERS, MAX_LEVEL, PARCEL, SHOP, TOWN_SIZE, placementError as townPlacementError, activeLevel, branchIn, buildingPlot, busyBuilders, connected, nearSpot, neighbours, plotLockReason, plotsIn, restaurantOf, siteIn, type Building, type BuildingKind, type Plot, type Spot } from '../town';
 import { claimGate, claimableRegions, regionById, type BoostKind, type Region } from '../ocean';
 import { inHome, regionCenter } from '../world';
 import { ZONE_IDS, ZONES, hasZone, zoneError, zoneRequirements, type ZoneId } from '../zones';
@@ -84,7 +84,7 @@ export class Simulation {
   private activeSeconds = 0;
   private pressure: Pressure[] = [];
   private live: Pressure = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 };
-  private lastMissed = 0;
+  private lastMissed = 0; private lastFull = 0;
   private p: Params;
   readonly result: SimResult;
   private lastCharms = { current: 0, tide: 0 };
@@ -155,14 +155,15 @@ export class Simulation {
     this.live.waiting += s.guests.filter(g => g.stage === 'waiting').length;
     this.live.ready += s.guests.filter(g => g.stage === 'ready').length + s.dirty.length * .5;
   }
-  /** Why guests were lost today, read from the engine's own event line at the moment it happened. */
+  /** Why guests were lost today: turned away by a full room (the engine counts these), or out of patience (its event line). */
   private classifyMisses(): void {
-    const missed = this.s.totals.missed;
+    const missed = this.s.totals.missed, full = this.s.totals.full;
     if (missed > this.lastMissed && this.s.phase === 'service') {
-      if (this.engine.event.includes('no free seat')) this.live.noSeat += missed - this.lastMissed;
-      else if (this.engine.event.includes('waited too long')) this.live.impatient += missed - this.lastMissed;
+      // Turned away by a full room: counted by the engine itself.
+      const turned = Math.max(0, full - this.lastFull); this.live.noSeat += turned;
+      if (missed - this.lastMissed > turned && this.engine.event.includes('waited too long')) this.live.impatient += missed - this.lastMissed - turned;
     }
-    this.lastMissed = missed;
+    this.lastMissed = missed; this.lastFull = full;
   }
   private recent(): Pressure {
     const list = this.pressure.slice(-2), sum = { samples: 0, full: 0, waiting: 0, ready: 0, noSeat: 0, impatient: 0, dirty: 0 };
@@ -491,7 +492,13 @@ export function buyFurniture(e: RestaurantEngine, kind: FurnitureKind): string |
 /** Unlock (if needed, with its streets) a plot near the restaurant or away from it, and build there on a spot a road reaches. */
 export function buildNear(e: RestaurantEngine, kind: BuildingKind, nearRestaurant: boolean): string | null {
   const town = e.state.town, joined = (spot: Spot) => connected(town, { ...spot, wide: false, id: -1, level: 1, job: null });
-  const spotIn = (p: Plot) => { const spot = siteIn(town, kind, p.x, p.z); return spot && joined(spot) && nearSpot(town, spot, 'restaurant') === nearRestaurant ? spot : null; };
+  const spotIn = (p: Plot): Spot | null => {
+    for (const turned of [false, true]) for (let lz = 0; lz < PARCEL; lz++) for (let lx = 0; lx < PARCEL; lx++) {
+      const spot: Spot = { kind, x: p.x * PARCEL + lx, z: p.z * PARCEL + lz, turned };
+      if (townPlacementError(town, spot) === null && joined(spot) && nearSpot(town, spot, 'restaurant') === nearRestaurant) return spot;
+    }
+    return null;
+  };
   let plot = town.plots.find(p => p.owned && spotIn(p));
   if (!plot) {
     const hall = buildingPlot(restaurantOf(town)), ring = (p: Plot) => Math.max(Math.abs(p.x - hall.x), Math.abs(p.z - hall.z));

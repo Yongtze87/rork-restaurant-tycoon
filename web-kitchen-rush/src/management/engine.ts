@@ -30,6 +30,13 @@ export const WARM_UP_SECONDS = 150;
 export const PRICE_CHANGES_PER_DAY = 2;
 /** Debt each pearl clears. */
 export const DEBT_PER_PEARL = 25;
+/** A guest's usual visit, door to door (seconds), and how full a room of average reputation stays: together they set demand per seat. */
+export const GUEST_STAY = 38;
+export const SEAT_FILL = .9;
+/** Seats one server, or one chef at a station, looks after: more seats than the crew can reach draw no extra guests. */
+export const SEATS_PER_CREW = 4.5;
+/** Guests in the restaurant at once, at most. */
+const MAX_GUESTS = 80;
 /** Share of what was spent on a town building that demolishing it returns (furniture returns 70%). */
 export const DEMOLISH_REFUND = .5;
 /** Bargains earn bigger tips, steep prices smaller ones. */
@@ -445,13 +452,13 @@ export class RestaurantEngine {
   nextDay(): void { if (this.state.phase === 'report') { this.beginNextDay(); this.changed(); } }
   private arrive(): void {
     const s = this.state;
-    if (s.guests.length >= 20) return;
+    if (s.guests.length >= MAX_GUESTS) return;
     let selected: { table: Furniture; seat: number } | undefined;
     // VIP booths fill first.
     for (const table of s.furniture.filter(f => f.kind === 'booth').concat(s.furniture.filter(f => f.kind === 'table'))) for (let seat = 0; seat < 2; seat++) {
       if (!selected && !s.dirty.includes(`${table.id}:${seat}`) && !s.guests.some(g => g.tableId === table.id && g.seat === seat && g.stage !== 'leaving')) selected = { table, seat };
     }
-    if (!selected) { s.totals.missed++; this.event = 'A guest found no free seat. More tables or faster clearing would help.'; return; }
+    if (!selected) { s.totals.missed++; s.totals.full++; this.event = 'Every seat is taken: a guest was turned away. More tables would seat them.'; return; }
     const dishes = DISH_IDS.filter(dish => s.menu[dish].enabled && s.furniture.some(f => f.kind === DISHES[dish].station));
     if (!dishes.length) { s.totals.missed++; this.event = 'A guest found nothing on the menu your kitchen can make.'; return; }
     // Guests lean towards popular, in-season and well-priced dishes.
@@ -506,7 +513,7 @@ export class RestaurantEngine {
   }
   private step(dt: number): void {
     const s = this.state; s.clock += dt; s.elapsed += dt;
-    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + (Math.max(5.5, 9.5 - s.reputation * .6 - Math.min(s.day, 10) * .12) + this.random() * 2) / ((1 + this.townEffects().arrivalBonus) * this.tideEffects().arrival * (1 + this.fameBonuses().arrival)); }
+    if (s.elapsed < DAY_LENGTH && s.elapsed >= s.nextArrival) { this.arrive(); s.nextArrival = s.elapsed + this.arrivalGap(); }
     for (const guest of s.guests) {
       if (guest.stage === 'arriving' && walk(guest, dt, 1.7)) {
         guest.stage = 'waiting'; const table = s.furniture.find(f => f.id === guest.tableId); guest.yaw = Math.PI - (table?.rotation ?? 0) * Math.PI / 2;
@@ -559,6 +566,26 @@ export class RestaurantEngine {
       }
     }
     if (s.elapsed >= DAY_LENGTH && (s.guests.length === 0 && s.dirty.length === 0 || s.elapsed >= DAY_LENGTH + 90)) this.finish();
+  }
+  /**
+   * Seconds until the next guest. Demand follows the dining room: each seat the crew can look after draws guests often
+   * enough to keep it about 90% full at an average reputation, so more tables (with the crew to serve them) bring more
+   * guests. Reputation, town buildings, the tide and fame raise demand beyond that; guests who then find every seat
+   * taken are turned away (no reputation lost).
+   */
+  arrivalGap(): number {
+    const s = this.state, seats = Math.max(2, this.servableSeats());
+    const appeal = (.7 + s.reputation * .1) * (1 + this.townEffects().arrivalBonus) * this.tideEffects().arrival * (1 + this.fameBonuses().arrival);
+    return GUEST_STAY / (seats * SEAT_FILL) / appeal * (.8 + this.random() * .4);
+  }
+  /** Seats the dining room can fill well: its seats, or what its servers and working chefs (one per station) can look after, whichever is fewer. */
+  servableSeats(): number { return this.seatLimit().servable; }
+  /** What caps the guests the room draws: its seats, its servers, its chefs, or its kitchen stations. */
+  seatLimit(): { servable: number; seats: number; by: 'seats' | 'servers' | 'chefs' | 'stations' } {
+    const s = this.state, seats = capacity(s), servers = s.staff.filter(m => m.role === 'server').length, chefs = s.staff.filter(m => m.role === 'chef').length;
+    const stations = s.furniture.filter(f => f.kind === 'prep' || f.kind === 'grill').length, cooks = Math.min(chefs, stations);
+    const bySeats = seats, byServers = Math.max(1, servers) * SEATS_PER_CREW, byCooks = Math.max(1, cooks) * SEATS_PER_CREW, servable = Math.min(bySeats, byServers, byCooks);
+    return { servable, seats, by: servable === bySeats ? 'seats' : servable === byServers ? 'servers' : chefs <= stations ? 'chefs' : 'stations' };
   }
   /** Town effects, cached until a building changes. */
   townEffects(): TownEffects {
@@ -644,7 +671,7 @@ export class RestaurantEngine {
     if (dateNumber(key) < dateNumber(c.date)) return;
     if (c.totals.shifts > 0 || s.dailyChallenges.length) {
       const t = c.totals;
-      s.days = [...s.days, { revenue: t.revenue, tips: t.tips, ingredients: t.ingredients, served: t.served, missed: t.missed, wages: t.wages, rent: t.rent, debtPayment: t.debtPayment, branch: t.branch, profit: t.profit, shifts: t.shifts, rating: t.shifts ? Math.round(t.ratingSum / t.shifts * 100) / 100 : s.reputation, challenges: s.dailyChallenges.map(ch => ({ ...ch })), day: c.index, date: c.date, tide: s.tide }].slice(-30);
+      s.days = [...s.days, { revenue: t.revenue, tips: t.tips, ingredients: t.ingredients, served: t.served, missed: t.missed, full: t.full, wages: t.wages, rent: t.rent, debtPayment: t.debtPayment, branch: t.branch, profit: t.profit, shifts: t.shifts, rating: t.shifts ? Math.round(t.ratingSum / t.shifts * 100) / 100 : s.reputation, challenges: s.dailyChallenges.map(ch => ({ ...ch })), day: c.index, date: c.date, tide: s.tide }].slice(-30);
     }
     Object.assign(c, { date: key, index: Math.max(c.index + 1, dateNumber(key) - dateNumber(c.start) + 1), totals: freshDayTotals() });
     this.rollTide(); this.checkSeason(); s.pricing.changes = {}; s.dailyChallenges = []; if (s.phase === 'service') this.startChallenges();
@@ -772,11 +799,12 @@ export class RestaurantEngine {
     s.cash -= wages + rent + debtPayment; s.debt -= debtPayment;
     // Short at closing: the bank covers the bills and the shortfall is repaid like a loan, $30 a day.
     const covered = s.cash < 0; if (covered) { s.debt += -s.cash; s.cash = 0; }
-    const rating = Math.max(1, Math.min(5, 3 + (s.totals.served / Math.max(1, s.totals.served + s.totals.missed)) * 1.5 + comfort(s) * .005 - s.totals.missed * .06));
+    // Guests turned away by a full room don't count against the rating: a packed restaurant is a popular one.
+    const unhappy = s.totals.missed - s.totals.full, rating = Math.max(1, Math.min(5, 3 + (s.totals.served / Math.max(1, s.totals.served + unhappy)) * 1.5 + comfort(s) * .005 - unhappy * .06));
     s.reputation = Math.round((s.reputation * .65 + rating * .35) * 100) / 100;
     recordDay(s.collections, { ...s.totals, rating, tide: s.tide });
     const today = s.calendar.totals, shiftProfit = s.totals.revenue + s.totals.tips + branch - s.totals.ingredients - wages - rent - debtPayment;
-    for (const key of ['revenue', 'tips', 'ingredients', 'served', 'missed'] as const) today[key] += s.totals[key];
+    for (const key of ['revenue', 'tips', 'ingredients', 'served', 'missed', 'full'] as const) today[key] += s.totals[key];
     Object.assign(today, { wages: today.wages + wages, rent: today.rent + rent, debtPayment: today.debtPayment + debtPayment, branch: today.branch + branch, profit: today.profit + shiftProfit, shifts: today.shifts + 1, ratingSum: today.ratingSum + rating });
     s.history.push({ ...s.totals, challenges: s.dailyChallenges.map(c => ({ ...c })), day: s.day, wages, rent, debtPayment, profit: s.totals.revenue + s.totals.tips + branch - s.totals.ingredients - wages - rent - debtPayment, rating, tide: s.tide, branch }); s.history = s.history.slice(-20);
     // Regulars notice a price that keeps moving: more than PRICE_CHANGES_PER_DAY changes a day cost reputation.

@@ -62,6 +62,12 @@ There is **no separate map screen and no restart**. The Town view *is* the world
 - **Short cards.** Building choices are a picture, a name, a price and a size; the description and exact effect sit behind ⓘ. Effects on cards use `shortEffect` ("+5% guests", "Kelp −6%").
 - **Taps on overlapping art** pick the building whose picture is nearest the finger.
 
+## Guests follow the dining room
+
+- **Demand comes from servable seats.** Each seat the crew can look after draws guests often enough to keep it about 90% full at an average reputation (`arrivalGap`, `GUEST_STAY`, `SEAT_FILL`). A server, or a chef at a kitchen station, looks after about 4½ seats (`SEATS_PER_CREW`); demand uses the smaller of seats, servers and working chefs (`seatLimit`). More tables bring more guests once the crew and kitchen can cover them; tables beyond that draw nobody, so an under-staffed room never drowns.
+- **Appeal** (reputation, town buildings, the tide, fame) pushes demand past the room. Guests who then find every seat taken are turned away: counted as missed and as `full`, but they don't lower the rating.
+- **What the player sees:** Team shows "Crew can serve N of M seats" and what to add next; the atmosphere popover repeats it; receipts show "(N full)" beside missed guests.
+
 ## Debt and ways out
 
 - The restaurant never closes for good. A short register at closing becomes debt, repaid $30 a shift; the $600 recovery loan is offered below $200 with no debt.

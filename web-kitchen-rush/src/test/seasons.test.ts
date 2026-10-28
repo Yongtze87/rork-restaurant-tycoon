@@ -37,8 +37,10 @@ describe('dish seasons', () => {
     const cheap = engine(); cheap.setDish('burger', false, 38); cheap.setDish(dish, true, Math.round(cheap.fairPrice(dish) * .8));
     for (let i = 0; i < 200 && !cheap.state.guests.length; i++) cheap.update(.1);
     expect(cheap.state.guests[0].reaction).toBe('bargain');
-    const fair = engine(); fair.setDish('burger', false, 38); shift(fair); shift(cheap);
-    expect(cheap.state.history[0].tips / cheap.state.history[0].revenue).toBeGreaterThan(fair.state.history[0].tips / fair.state.history[0].revenue);
+    // Tips are whole dollars, so compare over a few shifts.
+    const fair = engine(); fair.setDish('burger', false, 38); for (let i = 0; i < 4; i++) { shift(fair); shift(cheap); }
+    const rate = (e: RestaurantEngine) => e.state.history.reduce((a, r) => a + r.tips, 0) / e.state.history.reduce((a, r) => a + r.revenue, 0);
+    expect(rate(cheap)).toBeGreaterThan(rate(fair));
   });
   it('costs reputation when a dish’s price keeps changing, and forgives at midnight', () => {
     let now = at(12); const e = engine(() => now); e.state.reputation = 4;

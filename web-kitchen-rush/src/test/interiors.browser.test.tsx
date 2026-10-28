@@ -119,7 +119,7 @@ it('buys and places while guests are in, without pausing or closing', async () =
 });
 
 it('opens Interiors from a real daily receipt without spending or rewriting profit', async () => {
-  const names = onDay(2, [{ challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, rating: 4, tide: 'calm', branch: 0 }]);
+  const names = onDay(2, [{ challenges: [], day: 1, revenue: 300, tips: 20, ingredients: 90, wages: 60, rent: 30, debtPayment: 0, profit: 140, served: 10, missed: 2, full: 0, rating: 4, tide: 'calm', branch: 0 }]);
   const screen = await render(<ManagementGame />); restaurant.open();
   await screen.getByRole('button', { name: 'Ledger', exact: true }).click();
   await screen.getByRole('button', { name: `View ${names.label(1)} summary` }).click();

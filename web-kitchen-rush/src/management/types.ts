@@ -45,7 +45,7 @@ const staffSchema = agentSchema.extend({ id: z.number().int(), name: z.string().
 export type Staff = Validated<z.infer<typeof staffSchema>>;
 const guestSchema = agentSchema.extend({ /** How the price felt against what the guest expected (shown on their meter, changes the tip). */ reaction: z.enum(['bargain', 'fair', 'pricey']).default('fair'), id: z.number().int(), look: z.enum(['coral', 'pearl', 'lagoon', 'dusk']), tableId: z.number().int(), seat: z.number().int().min(0).max(1), dish: dishId, price: z.number().min(MIN_PRICE).max(MAX_PRICE), stage: z.enum(['arriving', 'waiting', 'cooking', 'ready', 'delivering', 'eating', 'leaving']), waiting: z.number().nonnegative(), timer: z.number().nonnegative(), happy: z.boolean(), stationId: z.number().int().nullable(), paid: z.boolean(), special: z.boolean().default(false) });
 export type Guest = Validated<z.infer<typeof guestSchema>>;
-const totalsSchema = z.object({ revenue: z.number().nonnegative(), ingredients: z.number().nonnegative(), served: z.number().int().nonnegative(), missed: z.number().int().nonnegative(), tips: z.number().nonnegative() });
+const totalsSchema = z.object({ revenue: z.number().nonnegative(), ingredients: z.number().nonnegative(), served: z.number().int().nonnegative(), missed: z.number().int().nonnegative(), tips: z.number().nonnegative(), /** Of the missed guests, those turned away because every seat was taken. */ full: z.number().int().nonnegative().default(0) });
 export type Totals = Validated<z.infer<typeof totalsSchema>>;
 /** Older boards had one kind per dish ('salad' / 'burger'); they load as a 'dish' challenge naming that dish. */
 const legacyChallenge = (raw: unknown): unknown => {
@@ -143,7 +143,7 @@ export const HEIGHT = 10;
 export const GROTTO_X = 10, GROTTO_END = 14;
 export const width = (state: Pick<RestaurantState, 'expanded'>): number => state.expanded ? GROTTO_END : GROTTO_X;
 export const entrance: Point = { x: 4, z: 9 };
-export const freshTotals = (): Totals => ({ revenue: 0, ingredients: 0, served: 0, missed: 0, tips: 0 });
+export const freshTotals = (): Totals => ({ revenue: 0, ingredients: 0, served: 0, missed: 0, tips: 0, full: 0 });
 export const staffWage = (staff: Staff): number => (staff.role === 'chef' ? 34 : 26) + (staff.level - 1) * 12;
 /** Furniture upgrades: 15 levels, 3 looks (1–5, 6–10, 11–15). Upgrades are instant and planning-only. */
 export const FURNITURE_MAX_LEVEL = MAX_LEVEL;
