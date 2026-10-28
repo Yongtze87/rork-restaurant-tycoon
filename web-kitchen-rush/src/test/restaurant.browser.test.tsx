@@ -38,7 +38,9 @@ it('charges only confirmed placements and supports keyboard cancellation', async
 it('stays open after the first opening, edits work while open, and there are no speed or pause controls', async () => {
   const screen = await render(<ManagementGame />);
   await screen.getByRole('button', { name: /Open restaurant/ }).click();
-  await expect.element(screen.getByText('0 today')).toBeVisible();
+  // Open status lives in the Ledger, not the bottom bar.
+  await screen.getByRole('button', { name: 'Ledger' }).click(); await expect.element(screen.getByTestId('open-status')).toHaveTextContent('Open · 0 served');
+  await screen.getByRole('button', { name: 'Close', exact: true }).click();
   await expect.element(screen.getByRole('button', { name: /Open restaurant/ })).not.toBeInTheDocument();
   expect(document.querySelector('[aria-label="3x speed"],[aria-label="Pause service"]')).toBeNull(); expect(restaurant.speed).toBe(1);
   await screen.getByRole('button', { name: 'Menu', exact: true }).click();
